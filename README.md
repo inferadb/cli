@@ -1,4 +1,4 @@
-# Infera CLI
+# InferaDB CLI
 
 __Developer tooling for managing schemas, policies, and modules.__
 
