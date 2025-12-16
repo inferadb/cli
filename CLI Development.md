@@ -2,13 +2,96 @@
 
 An ideal InferaDB CLI should feel familiar to people who use `kubectl`, `git`, `aws`, and `fga`—composable subcommands, great `--help`, clear resources, and safe defaults.
 
+---
+
+## Table of Contents
+
+### Part 1: Getting Started
+
+- [Core Design Principles](#core-design-principles)
+- [Command Hierarchy](#command-hierarchy)
+- [Getting Started](#getting-started)
+- [Understanding Profiles](#understanding-profiles) *(start here if new)*
+
+### Part 2: Configuration & Authentication
+
+- [Name Resolution](#name-resolution)
+- [Configuration](#configuration)
+- [Configuration File](#configuration-file)
+- [Environment Variables](#environment-variables)
+- [Authentication](#authentication)
+
+### Part 3: Identity & Diagnostics
+
+- [Identity & Diagnostics](#identity--diagnostics) (whoami, status, ping, doctor, health, stats)
+- [What Changed](#what-changed)
+
+### Part 4: Account & Organization Management
+
+- [Account Management](#account-management)
+- [Organization Management](#organization-management)
+- [Organization Members](#organization-members)
+- [Organization Invitations](#organization-invitations)
+- [Teams](#teams)
+- [Organization Roles](#organization-roles)
+
+### Part 5: Vault & Client Management
+
+- [Vault Management](#vault-management)
+- [Client Management](#client-management)
+- [Audit Logs](#audit-logs)
+
+### Part 6: Schema Development
+
+- [Schema Management](#schema-management)
+- [JWKS (JSON Web Key Sets)](#jwks-json-web-key-sets)
+
+### Part 7: Authorization & Relationships
+
+- [Authorization Queries](#authorization-queries) (check, simulate, expand, explain-permission)
+- [Relationship Management](#relationship-management)
+- [Stream](#stream)
+- [Token Management](#token-management)
+- [Bulk Operations](#bulk-operations) (export, import)
+
+### Part 8: CLI Reference
+
+- [Global Flags](#global-flags)
+- [Value Formats](#value-formats)
+- [Tuple Format](#tuple-format)
+- [Exit Codes](#exit-codes)
+- [Error Handling & Diagnostics](#error-handling--diagnostics)
+
+### Part 9: Developer Experience
+
+- [Shell Completion](#shell-completion)
+- [Output Formatting](#output-formatting)
+- [Security](#security) (token protection, credential storage, credential rotation)
+- [Built-in Help & Examples](#built-in-help--examples)
+- [Interactive Mode](#interactive-mode)
+
+### Part 10: Appendix
+
+- [Planned Features](#planned-features)
+- [Troubleshooting](#troubleshooting)
+- [Examples](#examples)
+- [Sources](#sources)
+
+---
+
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 1: GETTING STARTED
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Core Design Principles
 
 - Nouns and verbs: `inferadb vaults list`, `inferadb check`.
 - Idempotent commands: `apply` and `sync` should be safe to re-run.
-- First-class environments: `--profile`, `--endpoint`, profiles in config file.
+- First-class environments: `@profile` shorthand, profiles in config file.
 - Human-friendly by default, machine-friendly via `-o json|yaml|table`.
-- Context-aware defaults: set org/vault once, use everywhere.
+- Profile-based defaults: each profile is a complete target (URL + org + vault).
 - Destructive operations require `--yes` or interactive confirmation.
 - Name resolution: use names or IDs interchangeably where practical.
 
@@ -18,7 +101,7 @@ An ideal InferaDB CLI should feel familiar to people who use `kubectl`, `git`, `
 inferadb
 ├── init                          # First-run setup wizard
 ├── login / logout / register     # Authentication
-├── whoami                        # Current user and context info
+├── whoami                        # Current user and profile info
 ├── status                        # Service health
 ├── ping                          # Latency measurement
 ├── doctor                        # Connectivity diagnostics
@@ -33,11 +116,7 @@ inferadb
 ├── guide                         # Opinionated workflow guides
 │
 ├── profiles                      # Multi-environment management
-│   ├── create / list / delete / update / rename / default
-│
-├── context                       # Active defaults within a profile
-│   ├── org / vault / show / clear
-│   ├── save / list / use / delete  # Named contexts
+│   ├── create / list / show / update / rename / delete / default
 │
 ├── account                       # Current user management
 │   ├── show / update / delete
@@ -142,243 +221,266 @@ Password requirements: minimum 12 characters.
 
 ---
 
-## CLI Profiles
+## Understanding Profiles
 
-Users can configure multiple profiles to switch between different environments. Profiles are stored in `~/.inferadb/profiles.yaml`.
+A **profile** is a complete, ready-to-use target environment. Each profile contains everything needed to run commands: the server URL, authentication, organization, and vault.
 
-### Create a Profile
+### The Mental Model
 
-```bash
-# Production operations configuration
-inferadb profiles create prod --url https://api.inferadb.com
-
-# Local development configuration (set as default)
-inferadb profiles create dev --url http://localhost:3000 --default
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Your CLI Configuration                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  PROFILE "prod"                      PROFILE "staging"              │
+│  ┌────────────────────────┐          ┌────────────────────────┐     │
+│  │ URL: api.inferadb.com  │          │ URL: api.inferadb.com  │     │
+│  │ Org: 123456789012345678│          │ Org: 123456789012345678│     │
+│  │ Vault: 987654321098765 │          │ Vault: 876543210987654 │     │
+│  │ Auth: (in keychain)    │          │ Auth: (in keychain)    │     │
+│  └────────────────────────┘          └────────────────────────┘     │
+│                                                                     │
+│  PROFILE "prod-analytics"            PROFILE "dev"                  │
+│  ┌────────────────────────┐          ┌────────────────────────┐     │
+│  │ URL: api.inferadb.com  │          │ URL: localhost:3000    │     │
+│  │ Org: 123456789012345678│          │ Org: 111222333444555666│     │
+│  │ Vault: 555666777888999 │          │ Vault: 222333444555666 │     │
+│  │ Auth: (in keychain)    │          │ Auth: (in keychain)    │     │
+│  └────────────────────────┘          └────────────────────────┘     │
+│                                                                     │
+│  Default profile: prod                                              │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### List Profiles
+**One profile = one complete target.** No separate "context" to manage. This matches how the AWS CLI works.
+
+> **Note on "context" terminology:** The CLI uses profiles (not contexts) for targeting environments. The `--context` flag you may see in commands like `check` is for ABAC (Attribute-Based Access Control) - passing runtime attributes like IP address or time for policy evaluation. These are unrelated concepts.
+
+### Beginner: Just Get Started
+
+For most users, you only need this:
 
 ```bash
-inferadb profiles list
+# 1. Run the setup wizard (creates your first profile)
+inferadb init
+
+# 2. You're done! Commands now "just work"
+inferadb check user:alice can_view document:readme
+inferadb relationships list
 ```
 
-### Delete a Profile
+The wizard creates a profile with your server, org, and vault already configured.
+
+### Working with Multiple Environments
+
+Create a profile for each environment you work with:
 
 ```bash
-inferadb profiles delete prod
-```
+# Production vault
+inferadb profiles create prod \
+  --url https://api.inferadb.com \
+  --org 123456789012345678 \
+  --vault 987654321098765432
 
-### Update a Profile
+# Staging vault (same server, different vault)
+inferadb profiles create staging \
+  --url https://api.inferadb.com \
+  --org 123456789012345678 \
+  --vault 876543210987654321
 
-```bash
-inferadb profiles update prod --url https://api.inferadb.com
-```
+# Analytics vault (same server, different vault)
+inferadb profiles create prod-analytics \
+  --url https://api.inferadb.com \
+  --org 123456789012345678 \
+  --vault 555666777888999000
 
-### Rename a Profile
+# Local development
+inferadb profiles create dev \
+  --url http://localhost:3000 \
+  --org 111222333444555666 \
+  --vault 222333444555666777
 
-```bash
-inferadb profiles rename prod production
-```
+# Log into each (authenticates and stores token in keychain)
+inferadb @prod login
+inferadb @staging login
+inferadb @dev login
 
-### Set Default Profile
-
-```bash
+# Set your default
 inferadb profiles default prod
 ```
 
----
-
-## Context Management
-
-Set default org/vault within a profile to avoid repetitive flags.
-
-### Set Context
+### Using Profiles
 
 ```bash
-# Set default organization
-inferadb context org 123456789012345678
-
-# Set default vault
-inferadb context vault 987654321098765432
-```
-
-### Show Current Context
-
-```bash
-inferadb context show
-# Profile: prod
-# Organization: 123456789012345678 (Acme Corp)
-# Vault: 987654321098765432 (Production)
-```
-
-### Clear Context
-
-```bash
-# Clear vault context only
-inferadb context clear vault
-
-# Clear org context only
-inferadb context clear org
-
-# Clear all context
-inferadb context clear
-```
-
-### Named Contexts
-
-Save and switch between frequently used org/vault combinations:
-
-```bash
-# Save current context with a name
-inferadb context save prod-main
-
-# Save a specific org/vault combination
-inferadb context save staging --org 111222333444555666 --vault 222333444555666777
-
-# List saved contexts
-inferadb context list
-# NAME         ORG                   VAULT                 PROFILE
-# prod-main    123456789012345678    987654321098765432    prod
-# staging      111222333444555666    222333444555666777    prod
-# dev-local    333444555666777888    444555666777888999    dev
-
-# Switch to a named context
-inferadb context use staging
-
-# Delete a named context
-inferadb context delete staging
-```
-
-This is useful for workflows that span multiple vaults:
-
-```bash
-# Quick context switching
-inferadb context use prod-main
+# Commands use your default profile
 inferadb check user:alice can_view document:readme
 
-inferadb context use staging
-inferadb schemas push schema.ipl --activate
-```
-
-### Inline Context Override
-
-For one-off commands in a different context without switching, use the `@context:` prefix:
-
-```bash
-# Run a single command in staging context without switching
+# Use a different profile for one command
 inferadb @staging check user:alice can_view document:readme
 
-# Run in a specific vault without switching
-inferadb @prod-main relationships list --subject user:alice
-
-# Multiple commands with inline context
-inferadb @staging schemas push schema.ipl
-inferadb @staging schemas test
-inferadb @staging schemas activate 777888999000111222
+# Switch your default
+inferadb profiles default staging
 ```
 
-The inline context takes precedence over the active context but doesn't change it:
+### Quick Reference
 
 ```bash
-inferadb context show
-# Vault: Production
+# Create a profile (complete target environment)
+inferadb profiles create <name> \
+  --url <server-url> \
+  --org <org-id> \
+  --vault <vault-id>
 
-inferadb @staging check user:alice can_view document:readme
-# (runs against staging)
+# List all profiles
+inferadb profiles list
 
-inferadb context show
-# Vault: Production (unchanged)
+# Show profile details
+inferadb profiles show <name>
+
+# Set default profile
+inferadb profiles default <name>
+
+# Update a profile
+inferadb profiles update <name> --vault <new-vault-id>
+
+# Delete a profile
+inferadb profiles delete <name>
+
+# Use a profile for one command
+inferadb @<name> <command>
 ```
 
-You can also specify org and vault inline:
+### Common Patterns
+
+#### Compare prod vs staging
 
 ```bash
-# Specify vault directly (by name or ID)
-inferadb @vault:Staging check user:alice can_view document:readme
-
-# Specify org and vault
-inferadb @org:Acme@vault:Staging relationships list
-
-# Use saved context name
-inferadb @prod-main schemas test
+inferadb @prod check user:alice can_edit document:readme
+inferadb @staging check user:alice can_edit document:readme
 ```
+
+#### Copy data between environments
+
+```bash
+inferadb @prod export --output backup.json
+inferadb @staging import backup.json --yes
+```
+
+#### CI/CD with environment variables
+
+```bash
+# In CI, use environment variables instead of profiles
+export INFERADB_URL="https://api.inferadb.com"
+export INFERADB_ORG="123456789012345678"
+export INFERADB_VAULT="987654321098765432"
+export INFERADB_TOKEN="$PROD_TOKEN"
+inferadb check user:alice can_view document:readme
+```
+
+### Why This Design?
+
+- **Simple mental model**: One profile = one target. No layered concepts.
+- **Explicit**: Each profile clearly shows where commands will run.
+- **Familiar**: Works like AWS CLI profiles that many developers already know.
+- **Flexible**: Create as many profiles as you need for different vaults/environments.
 
 ---
+
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 2: CONFIGURATION & AUTHENTICATION
+     ═══════════════════════════════════════════════════════════════════════════ -->
 
 ## Name Resolution
 
-The CLI supports **name-based references** in addition to Snowflake IDs, making commands more readable and easier to type.
+The CLI supports **name-based references** for resources where names are unique within their scope.
 
-### Using Names Instead of IDs
+### What Supports Name Resolution
+
+Names can be used for resources that are **unique within their parent scope**:
 
 ```bash
-# These are equivalent:
-inferadb context vault 987654321098765432
-inferadb context vault "Production"
-
-# Organization by name
-inferadb context org "Acme Corp"
-
-# Vault operations by name
-inferadb orgs vaults get "Production"
-inferadb orgs vaults delete "Staging" --yes
-
-# Team operations by name
+# Team names (unique within an organization)
 inferadb orgs teams get "Engineering"
+inferadb orgs teams delete "Legacy Team" --yes
 
-# Client operations by name
+# Client names (unique within an organization)
 inferadb orgs clients get "API Server"
+inferadb orgs clients update "Web Dashboard" --name "Web Portal"
+
+# Schema names (unique within a vault)
+inferadb schemas get "user-permissions"
 ```
 
-### Resolution Rules
+### What Requires Snowflake IDs
 
-1. **Numeric strings** are treated as Snowflake IDs
-2. **Non-numeric strings** are resolved by name within the current context
-3. **Ambiguous names** prompt for clarification or require `--id` flag
+**Organizations and vaults require Snowflake IDs** because their names are not unique:
 
 ```bash
-# If multiple vaults named "Production" exist in different orgs:
-inferadb orgs vaults get "Production"
-# Error: Multiple vaults named "Production" found:
-#   987654321098765432 (org: Acme Corp)
-#   876543210987654321 (org: Beta Inc)
-# Use --id to specify, or set org context first.
+# Creating a profile - use Snowflake IDs for org and vault
+inferadb profiles create prod \
+  --url https://api.inferadb.com \
+  --org 123456789012345678 \
+  --vault 987654321098765432
 
-# Resolve ambiguity with org context:
-inferadb context org "Acme Corp"
-inferadb orgs vaults get "Production"  # Now unambiguous
-
-# Or use explicit ID:
-inferadb orgs vaults get --id 987654321098765432
+# Getting resources - use Snowflake IDs
+inferadb orgs get 123456789012345678
+inferadb orgs vaults get 987654321098765432
+inferadb orgs vaults delete 876543210987654321 --yes
 ```
 
-### @ Prefix for Named References
+Why? Multiple organizations can have the same name (e.g., "Production"), and multiple vaults across different orgs can share names. Snowflake IDs guarantee uniqueness.
 
-Use `@` prefix to explicitly indicate a name (useful when names look like numbers):
+### Finding IDs
 
 ```bash
-# Vault named "2025" (not ID 2025)
-inferadb context vault @2025
+# List organizations to find IDs
+inferadb orgs list
+# ID                   NAME         TIER
+# 123456789012345678   Acme Corp    pro
+# 234567890123456789   Beta Inc     starter
 
-# Context by saved name
-inferadb context use @prod-main
+# List vaults to find IDs
+inferadb orgs vaults list --org 123456789012345678
+# ID                   NAME         RELATIONSHIPS
+# 987654321098765432   Production   15,432
+# 876543210987654321   Staging      1,234
+```
+
+### @ Prefix for Profiles
+
+The `@` prefix selects which profile to use for a command:
+
+```bash
+inferadb @staging check user:alice can_view document:readme
+inferadb @prod schemas list
+inferadb @dev relationships add user:alice viewer document:readme
 ```
 
 ### Limitations
 
 Name resolution is not available for:
 
+- **Organizations and vaults** (use Snowflake IDs)
 - Authorization subjects/resources (e.g., `user:alice`, `document:readme`)
 - Relationship tuples (these use your application's identifiers)
 - Batch operations (use IDs for reliability)
 
 ---
 
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 3: IDENTITY & DIAGNOSTICS
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Identity & Diagnostics
 
 ### Who Am I
 
-Display current authenticated user and context:
+Display current authenticated user and profile:
 
 ```bash
 inferadb whoami
@@ -406,7 +508,7 @@ inferadb whoami -o json
 
 ```bash
 inferadb status
-inferadb status --profile prod
+inferadb @prod status
 ```
 
 Displays:
@@ -414,7 +516,7 @@ Displays:
 - Control plane health
 - Engine health
 - Current profile authentication status
-- Active organization and vault context
+- Active organization and vault from profile
 
 ### Ping
 
@@ -448,7 +550,7 @@ Runs comprehensive connectivity diagnostics:
 - DNS resolution
 - TLS certificate validation
 - Authentication token validity and age
-- Permission checks for current context
+- Permission checks for current profile
 - Latency measurements
 - Proxy configuration verification
 - Credential rotation recommendations
@@ -479,7 +581,7 @@ InferaDB Diagnostics
     Token age: 89 days
     Issued: 2024-10-18T10:30:00Z
     Recommendation: Consider rotating credentials
-    Run: inferadb login --profile prod
+    Run: inferadb @prod login
 ✓ Organization access verified (Acme Corp)
 ✓ Vault access verified (Production)
 ✓ Engine connectivity (12ms latency)
@@ -489,7 +591,7 @@ InferaDB Diagnostics
 Recommendations:
   ⚠ Token for profile 'prod' is 89 days old
     Long-lived tokens increase security risk if compromised.
-    Rotate with: inferadb login --profile prod
+    Rotate with: inferadb @prod login
 ```
 
 Security checks include:
@@ -497,7 +599,7 @@ Security checks include:
 - **Token age**: Warns if token is older than 30 days
 - **Token expiry**: Warns if token expires within 24 hours
 - **Unused profiles**: Identifies profiles not used in 90+ days
-- **Stale contexts**: Warns about saved contexts pointing to deleted resources
+- **Stale profiles**: Warns about profiles pointing to deleted orgs/vaults
 
 ### Version
 
@@ -735,12 +837,12 @@ Schema Engine      ✓ up      2ms
 
 Exit codes for CI/CD:
 
-| Exit Code | Meaning |
-|-----------|---------|
-| 0 | All components healthy |
-| 1 | One or more components degraded |
-| 2 | One or more components down |
-| 3 | Unable to reach InferaDB (network/auth issue) |
+| Exit Code | Meaning                                       |
+| --------- | --------------------------------------------- |
+| 0         | All components healthy                        |
+| 1         | One or more components degraded               |
+| 2         | One or more components down                   |
+| 3         | Unable to reach InferaDB (network/auth issue) |
 
 ```bash
 # CI/CD health gate
@@ -861,6 +963,14 @@ hotfix-1   deploy    2025-01-12T16:30:00Z     3d
 
 ## Configuration
 
+The CLI follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/):
+
+| Purpose | Path | XDG Variable |
+|---------|------|--------------|
+| Configuration | `~/.config/inferadb/cli.yaml` | `XDG_CONFIG_HOME` |
+| State/Logs | `~/.local/state/inferadb/` | `XDG_STATE_HOME` |
+| Project config | `.inferadb-cli.yaml` | (current directory) |
+
 ### Show Configuration
 
 Display resolved configuration from all sources:
@@ -881,17 +991,16 @@ Output:
 ```text
 Configuration sources:
   1. Environment variables
-  2. ~/.inferadb/profiles.yaml
-  3. .inferadb.yaml (project)
+  2. ~/.config/inferadb/cli.yaml (user)
+  3. .inferadb-cli.yaml (project)
 
 Resolved configuration:
   default_profile: prod
   profiles:
     prod:
       url: https://api.inferadb.com
-      context:
-        org_id: 123456789012345678
-        vault_id: 987654321098765432
+      org: 123456789012345678
+      vault: 987654321098765432
     dev:
       url: http://localhost:3000
 ```
@@ -914,10 +1023,10 @@ Show path to configuration file:
 
 ```bash
 inferadb config path
-# /Users/alice/.inferadb/profiles.yaml
+# /Users/alice/.config/inferadb/cli.yaml
 
 inferadb config path --dir
-# /Users/alice/.inferadb/
+# /Users/alice/.config/inferadb/
 ```
 
 ---
@@ -932,17 +1041,23 @@ Uses OAuth PKCE flow (opens browser):
 
 ```bash
 inferadb login
-inferadb login --profile prod
+inferadb @prod login
 ```
 
 ### Logout
 
 ```bash
 inferadb logout
-inferadb logout --profile prod
+inferadb @prod logout
 ```
 
 ---
+
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 4: ACCOUNT & ORGANIZATION MANAGEMENT
+     ═══════════════════════════════════════════════════════════════════════════ -->
 
 ## Account Management
 
@@ -1037,14 +1152,14 @@ Returns the Snowflake ID of the new organization.
 
 ```bash
 inferadb orgs get 123456789012345678
-inferadb orgs get  # Uses context org
+inferadb orgs get  # Uses org from current profile
 ```
 
 ### Update Organization
 
 ```bash
 inferadb orgs update 123456789012345678 --name "Acme Corporation"
-inferadb orgs update --name "Acme Corporation"  # Uses context org
+inferadb orgs update --name "Acme Corporation"  # Uses org from current profile
 ```
 
 ### Delete Organization
@@ -1260,6 +1375,12 @@ Org roles: `owner`, `admin`, `member`
 
 ---
 
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 5: VAULT & CLIENT MANAGEMENT
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Vault Management
 
 ### List Vaults
@@ -1285,7 +1406,7 @@ Returns the Snowflake ID of the new vault.
 
 ```bash
 inferadb orgs vaults get 987654321098765432
-inferadb orgs vaults get  # Uses context vault
+inferadb orgs vaults get  # Uses vault from current profile
 ```
 
 ### Update Vault
@@ -1465,6 +1586,12 @@ inferadb orgs audit-logs --page 2 --per-page 100
 
 ---
 
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 6: SCHEMA DEVELOPMENT
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Schema Management
 
 Manage IPL authorization schemas with full lifecycle support: validate, test, diff, and deploy.
@@ -1492,7 +1619,7 @@ Creates:
 ├── schema.ipl              # Main schema file
 ├── tests/
 │   └── schema.test.yaml    # Authorization test cases
-└── .inferadb.yaml          # Project configuration
+└── .inferadb-cli.yaml      # Project configuration
 ```
 
 ### List Schema Versions
@@ -2674,7 +2801,7 @@ inferadb jwks -o json
 # Get organization-specific JWKS (for vault tokens)
 inferadb jwks --org 123456789012345678
 
-# Using context org
+# Using org from current profile
 inferadb jwks --org
 ```
 
@@ -2696,20 +2823,26 @@ Output:
 
 ---
 
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 7: AUTHORIZATION & RELATIONSHIPS
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Authorization Queries
 
-All authorization commands use the context vault by default, or accept `--vault` flag.
+All authorization commands use the vault from your current profile by default, or accept `--vault` flag to override.
 
 ### Understanding Argument Order
 
 Authorization commands use different argument orders depending on the *question being asked*:
 
-| Question                        | Command                                      | Order                     |
-| ------------------------------- | -------------------------------------------- | ------------------------- |
-| "Can Alice view this document?" | `check user:alice can_view document:readme`  | subject permission resource |
-| "Who can view this document?"   | `list-subjects document:readme viewer`       | resource relation         |
-| "What can Alice view?"          | `list-resources user:alice can_view document`| subject permission type   |
-| "Show all viewers"              | `expand document:readme viewer`              | resource relation         |
+| Question                        | Command                                       | Order                       |
+| ------------------------------- | --------------------------------------------- | --------------------------- |
+| "Can Alice view this document?" | `check user:alice can_view document:readme`   | subject permission resource |
+| "Who can view this document?"   | `list-subjects document:readme viewer`        | resource relation           |
+| "What can Alice view?"          | `list-resources user:alice can_view document` | subject permission type     |
+| "Show all viewers"              | `expand document:readme viewer`               | resource relation           |
 
 **The principle**: The *focus* of your question comes first.
 
@@ -2769,7 +2902,8 @@ inferadb check user:alice can_view document:readme --vault 987654321098765432
 # With debug trace
 inferadb check user:alice can_view document:readme --trace
 
-# With context (JSON for WASM modules)
+# With ABAC context (JSON for attribute-based conditions)
+# Note: This is authorization context (IP, time, etc.), not a CLI profile/context
 inferadb check user:alice can_view document:readme --context '{"ip_address": "192.168.1.1"}'
 
 # Output formats
@@ -3030,6 +3164,9 @@ inferadb explain-permission user:bob can_edit document:confidential-report
 
 # Show all possible paths (not just the first match)
 inferadb explain-permission user:alice can_view document:readme --all-paths
+
+# Visual graph output (ASCII tree diagram)
+inferadb explain-permission user:alice can_view document:readme --graph
 ```
 
 Output (permission granted):
@@ -3156,6 +3293,64 @@ explain> show all affected users
     ... 9 more
 
 explain> quit
+```
+
+Graph visualization mode (`--graph`):
+
+```bash
+inferadb explain-permission user:alice can_view document:readme --graph
+```
+
+```text
+ACCESS GRAPH: user:alice → can_view → document:readme
+
+user:alice
+  │
+  ├─── direct ─────────────────────────────────────────────┐
+  │    └─ viewer on document:readme ✓                      │
+  │                                                        │
+  ├─── via role ───────────────────────────────────────────┤
+  │    └─ editor on document:readme ✓                      │
+  │       └─ (editor implies viewer)                       │
+  │                                                        │
+  └─── via group ──────────────────────────────────────────┤
+       └─ member of group:engineering                      │
+          └─ viewer on folder:docs                         │
+             └─ parent of document:readme ✓                │
+                                                           │
+                                                           ▼
+                                              document:readme [can_view ✓]
+
+Legend: ✓ = grants access, ✗ = blocked, ─ = relationship path
+```
+
+For denied permissions, the graph shows where paths fail:
+
+```bash
+inferadb explain-permission user:bob can_edit document:secret --graph
+```
+
+```text
+ACCESS GRAPH: user:bob → can_edit → document:secret
+
+user:bob
+  │
+  ├─── direct ─────────────────────────────────────────────┐
+  │    └─ (no editor relationship) ✗                       │
+  │                                                        │
+  ├─── via role ───────────────────────────────────────────┤
+  │    └─ viewer on document:secret                        │
+  │       └─ (viewer does NOT imply editor) ✗              │
+  │                                                        │
+  └─── via group ──────────────────────────────────────────┤
+       └─ member of group:marketing                        │
+          └─ (no access to document:secret) ✗              │
+                                                           │
+                                                           ▼
+                                              document:secret [can_edit ✗]
+
+BLOCKED BY: No valid path grants 'editor' relationship
+SUGGESTION: inferadb relationships add user:bob editor document:secret
 ```
 
 ---
@@ -3494,7 +3689,7 @@ Generate and manage vault access tokens for use in scripts or other tools.
 ### Generate Token
 
 ```bash
-# Generate token for current context vault
+# Generate token for vault in current profile
 inferadb tokens generate
 
 # With specific role
@@ -3550,6 +3745,12 @@ inferadb tokens inspect eyJhbGciOiJFZERTQSI... -o json
 
 # Verify signature against JWKS (requires network)
 inferadb tokens inspect eyJhbGciOiJFZERTQSI... --verify
+
+# Check if token is valid (for scripts) - exit 0 if valid, 1 if expired/revoked
+inferadb tokens inspect eyJhbGciOiJFZERTQSI... --check-valid
+
+# Auto-refresh if close to expiry
+inferadb tokens inspect eyJhbGciOiJFZERTQSI... --refresh
 ```
 
 Output:
@@ -3557,27 +3758,36 @@ Output:
 ```text
 Token Inspection
 
-Header:
-  Algorithm: EdDSA
+Token Details:
+  Format: JWT (EdDSA)
   Key ID: ctrl-2025-01
-  Type: JWT
-
-Payload:
-  Subject: user:alice@acme.com (222333444555666777)
+  Subject: user:222333444555666777
+  Issued: 2025-01-15T08:30:00Z (5 hours ago)
+  Expires: 2025-01-16T08:30:00Z (in 19 hours)
   Issuer: https://api.inferadb.com
-  Audience: inferadb
+
+Scope:
   Organization: 123456789012345678 (Acme Corp)
   Vault: 987654321098765432 (Production)
   Role: writer
-  Issued At: 2025-01-15T08:30:00Z
-  Expires At: 2025-01-16T08:30:00Z (in 22 hours)
 
-Status:
+Permissions:
+  • read relationships
+  • write relationships
+  • read schemas
+
+Claimed Identity:
+  User: alice@acme.com
+  Email verified: yes
+
+Security:
   ✓ Token is not expired
-  ✓ Token is valid for current vault context
+  ✓ Token is valid for vault in current profile
+  ✓ Not revoked
+  ⚠ Token age: 5 hours (rotate recommended after 24h)
 ```
 
-With `--verify`:
+With `--verify` (requires network):
 
 ```text
 Token Inspection
@@ -3588,6 +3798,12 @@ Signature Verification:
   ✓ Signature valid
   ✓ Signed by: ctrl-2025-01 (Control Plane)
   ✓ Key not revoked
+  ✓ Certificate chain valid
+
+Usage Statistics:
+  Last used: 2025-01-15T13:25:00Z (5 minutes ago)
+  Requests: 147
+  First seen: 2025-01-15T08:32:00Z
 ```
 
 On expired/invalid token:
@@ -3597,12 +3813,28 @@ Token Inspection
 
 ...
 
-Status:
+Security:
   ✗ Token expired at 2025-01-14T08:30:00Z (2 days ago)
 
 Suggestions:
   • Generate a new token: inferadb tokens generate
   • Re-authenticate: inferadb login
+```
+
+On token expiring soon:
+
+```text
+Token Inspection
+
+...
+
+Security:
+  ⚠ Token expires in 25 minutes
+  ✓ Not revoked
+
+Suggestions:
+  • Refresh now: inferadb tokens refresh
+  • Or re-run with --refresh to auto-refresh
 ```
 
 ---
@@ -3653,9 +3885,10 @@ inferadb import relationships.json --on-conflict skip    # Skip conflicts (defau
 inferadb import relationships.json --on-conflict error   # Fail on first conflict
 inferadb import relationships.json --on-conflict report  # Continue but report all conflicts
 
-# Transaction behavior
+# Transaction behavior (see Atomicity Guarantees below)
 inferadb import relationships.json --atomic --yes        # All-or-nothing (rollback on error)
 inferadb import relationships.json --continue-on-error   # Import as many as possible
+inferadb import relationships.json --skip-duplicates     # Treat duplicates as success (idempotent)
 
 # Progress and reporting
 inferadb import relationships.json --yes --progress      # Show progress bar
@@ -3828,8 +4061,8 @@ Relationships processed: 1,247
   Skipped: 354 (347 unchanged + 7 conflicts)
   Failed: 0
 
-Conflict resolution log saved to: ~/.inferadb/import-2025-01-15-143022.log
-Replay this import with: inferadb import relationships.json --resolution-file ~/.inferadb/import-2025-01-15-143022.log
+Conflict resolution log saved to: ~/.local/state/inferadb/import-2025-01-15-143022.log
+Replay this import with: inferadb import relationships.json --resolution-file ~/.local/state/inferadb/import-2025-01-15-143022.log
 ```
 
 ### Saved Resolution Strategies
@@ -3919,15 +4152,69 @@ Conflict report output:
 
 ---
 
+### Atomicity Guarantees
+
+Understanding transaction behavior is critical for production use:
+
+| Flag                | Behavior                                   | Use When                              |
+| ------------------- | ------------------------------------------ | ------------------------------------- |
+| (default)           | Best-effort: apply what you can            | One-off imports, duplicates expected  |
+| `--atomic`          | All-or-nothing: rollback on any failure    | Critical data sync, migrations        |
+| `--continue-on-error` | Apply as many as possible, report failures | Large migrations with known issues  |
+| `--skip-duplicates` | Treat duplicates as success (idempotent)   | Re-running operations safely          |
+
+**Examples by use case:**
+
+```bash
+# Production import (atomic - safest)
+# If anything fails, nothing is applied
+inferadb import data.json --atomic --yes
+
+# Migration from legacy system (best-effort)
+# Import what you can, report what failed
+inferadb import legacy.json --continue-on-error --report --yes
+
+# Idempotent operation (safe to re-run)
+# Won't error on duplicates, won't create duplicates
+inferadb relationships add --file tuples.json --skip-duplicates --yes
+
+# Atomic with duplicate handling
+# All-or-nothing, but duplicates don't count as failures
+inferadb import data.json --atomic --skip-duplicates --yes
+```
+
+**Rollback behavior with `--atomic`:**
+
+```text
+Importing relationships.json (atomic mode)...
+[████████████████░░░░░░░░░░░░░░] 54% (675/1247)
+
+Error at relationship 676:
+  Invalid relation 'superadmin' for entity Document
+
+Rolling back 675 applied relationships...
+✓ Rollback complete - vault unchanged
+
+No changes were made. Fix the error and retry:
+  Line 676: "user:bob superadmin document:secret"
+  Available relations for Document: owner, editor, viewer
+```
+
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 8: CLI REFERENCE
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Global Flags
 
 These flags are available on all commands:
 
 | Flag        | Short | Description                                    |
 | ----------- | ----- | ---------------------------------------------- |
-| `--profile` | `-p`  | Use specific profile                           |
-| `--org`     |       | Override organization context                  |
-| `--vault`   | `-v`  | Override vault context                         |
+| `@<name>`   |       | Use specific profile (e.g., `@prod`)           |
+| `--org`     |       | Override organization from profile             |
+| `--vault`   | `-v`  | Override vault from profile                    |
 | `--output`  | `-o`  | Output format: `json`, `yaml`, `table`, `tree` |
 | `--quiet`   | `-q`  | Suppress non-essential output                  |
 | `--verbose` |       | Enable verbose output                          |
@@ -3979,22 +4266,22 @@ Quick reference for which commands support common flags:
 
 | Command                  | `--dry-run` | `--yes` | `--if-exists` | `--if-not-exists` | `--wait` |
 | ------------------------ | :---------: | :-----: | :-----------: | :---------------: | :------: |
-| `relationships add`      |             |         |               | ✓                 |          |
-| `relationships delete`   | ✓           | ✓       | ✓             |                   |          |
-| `schemas push`           | ✓           |         |               |                   |          |
-| `schemas activate`       |             | ✓       |               |                   | ✓        |
-| `schemas canary promote` |             | ✓       |               |                   | ✓        |
-| `schemas rollback`       | ✓           | ✓       |               |                   |          |
-| `schemas copy`           | ✓           |         |               |                   |          |
-| `import`                 | (default)   | ✓       |               |                   | ✓        |
-| `orgs delete`            |             | ✓       |               |                   |          |
-| `orgs vaults delete`     |             | ✓       |               |                   |          |
-| `orgs teams delete`      |             | ✓       |               |                   |          |
-| `orgs clients delete`    |             | ✓       |               |                   |          |
-| `account delete`         |             | ✓       |               |                   |          |
-| `profiles delete`        |             | ✓       |               |                   |          |
-| `tokens revoke-all`      |             | ✓       |               |                   |          |
-| `upgrade`                | ✓           |         |               |                   |          |
+| `relationships add`      |             |         |               |         ✓         |          |
+| `relationships delete`   |      ✓      |    ✓    |       ✓       |                   |          |
+| `schemas push`           |      ✓      |         |               |                   |          |
+| `schemas activate`       |             |    ✓    |               |                   |    ✓     |
+| `schemas canary promote` |             |    ✓    |               |                   |    ✓     |
+| `schemas rollback`       |      ✓      |    ✓    |               |                   |          |
+| `schemas copy`           |      ✓      |         |               |                   |          |
+| `import`                 |  (default)  |    ✓    |               |                   |    ✓     |
+| `orgs delete`            |             |    ✓    |               |                   |          |
+| `orgs vaults delete`     |             |    ✓    |               |                   |          |
+| `orgs teams delete`      |             |    ✓    |               |                   |          |
+| `orgs clients delete`    |             |    ✓    |               |                   |          |
+| `account delete`         |             |    ✓    |               |                   |          |
+| `profiles delete`        |             |    ✓    |               |                   |          |
+| `tokens revoke-all`      |             |    ✓    |               |                   |          |
+| `upgrade`                |      ✓      |         |               |                   |          |
 
 Notes:
 
@@ -4008,7 +4295,7 @@ Notes:
 
 ## Configuration File
 
-Profiles and context are stored in `~/.inferadb/profiles.yaml`:
+Profiles are stored in `~/.config/inferadb/cli.yaml`:
 
 ```yaml
 default_profile: prod
@@ -4016,16 +4303,19 @@ default_profile: prod
 profiles:
   prod:
     url: https://api.inferadb.com
-    context:
-      org_id: "123456789012345678"
-      vault_id: "987654321098765432"
+    org: "123456789012345678"
+    vault: "987654321098765432"
     # Auth tokens stored separately in OS keychain
+
+  staging:
+    url: https://api.inferadb.com
+    org: "123456789012345678"
+    vault: "876543210987654321"
 
   dev:
     url: http://localhost:3000
-    context:
-      org_id: "111222333444555666"
-      vault_id: "666555444333222111"
+    org: "111222333444555666"
+    vault: "666555444333222111"
 ```
 
 ---
@@ -4163,12 +4453,12 @@ This grants `viewer` access to `document:readme` for anyone who is a `member` of
 
 ### Valid Characters
 
-| Component       | Allowed Characters                  | Max Length |
-| --------------- | ----------------------------------- | ---------- |
-| Type name       | `a-z`, `A-Z`, `0-9`, `_`            | 64         |
-| ID              | `a-z`, `A-Z`, `0-9`, `_`, `-`, `.`  | 256        |
-| Relation name   | `a-z`, `A-Z`, `0-9`, `_`            | 64         |
-| Permission name | `a-z`, `A-Z`, `0-9`, `_`            | 64         |
+| Component       | Allowed Characters                 | Max Length |
+| --------------- | ---------------------------------- | ---------- |
+| Type name       | `a-z`, `A-Z`, `0-9`, `_`           | 64         |
+| ID              | `a-z`, `A-Z`, `0-9`, `_`, `-`, `.` | 256        |
+| Relation name   | `a-z`, `A-Z`, `0-9`, `_`           | 64         |
+| Permission name | `a-z`, `A-Z`, `0-9`, `_`           | 64         |
 
 Notes:
 
@@ -4217,18 +4507,91 @@ inferadb relationships add \
 
 ## Exit Codes
 
-| Code | Meaning                    |
-| ---- | -------------------------- |
-| 0    | Success                    |
-| 1    | General error              |
-| 2    | Invalid arguments          |
-| 3    | Authentication required    |
-| 4    | Permission denied          |
-| 5    | Resource not found         |
-| 6    | Conflict (e.g., duplicate) |
-| 7    | Rate limited               |
-| 10   | Network error              |
-| 11   | Server error               |
+| Code | Meaning                    | Examples                                    | Next Steps                                       |
+| ---- | -------------------------- | ------------------------------------------- | ------------------------------------------------ |
+| 0    | Success                    | Command completed                           | None                                             |
+| 1    | General error              | Missing required arg                        | Check `--help`                                   |
+| 2    | Invalid arguments          | `--vault invalid-id`                        | Use `--vault` with Snowflake ID                  |
+| 3    | Authentication required    | Token expired, not logged in                | `inferadb @prod login`                           |
+| 4    | Permission denied          | User lacks vault access                     | Contact org admin                                |
+| 5    | Resource not found         | Vault doesn't exist, schema version missing | Check resource ID with `list` commands           |
+| 6    | Conflict                   | Profile name already exists                 | Use `--force` or `delete` first                  |
+| 7    | Rate limited               | Too many requests                           | Back off and retry with exponential delay        |
+| 10   | Network error              | Connection refused, DNS failure             | Run `inferadb doctor`                            |
+| 11   | Server error               | 5xx response                                | Check [status page](https://status.inferadb.com) |
+
+### Scripting with Exit Codes
+
+Use exit codes to build robust automation scripts with proper error handling:
+
+```bash
+#!/bin/bash
+# Script pattern: retry on transient errors, fail fast on permanent errors
+
+set +e  # Don't exit on error, we'll handle it
+
+for i in {1..3}; do
+  inferadb check user:alice can_view document:readme --quiet --exit-code
+  CODE=$?
+
+  case $CODE in
+    0)
+      echo "Access granted"
+      exit 0
+      ;;
+    3)
+      echo "Auth error - re-authenticating..."
+      inferadb @prod login
+      ;;
+    4)
+      echo "Permission denied - not retrying"
+      exit 4
+      ;;
+    7)
+      echo "Rate limited - backing off ${i}s..."
+      sleep $((2**i))
+      ;;
+    10)
+      echo "Network error - retrying in 1s..."
+      sleep 1
+      ;;
+    11)
+      echo "Server error - retrying in ${i}s..."
+      sleep $i
+      ;;
+    *)
+      echo "Unexpected error: $CODE"
+      exit $CODE
+      ;;
+  esac
+done
+
+echo "Failed after 3 attempts"
+exit 1
+```
+
+Common patterns:
+
+```bash
+# Simple check with fallback
+if inferadb check user:alice can_view document:readme --quiet --exit-code; then
+  echo "Allowed"
+else
+  echo "Denied or error"
+fi
+
+# Distinguish between denial and error
+inferadb check user:alice can_view document:readme --quiet --exit-code
+case $? in
+  0)  echo "Allowed" ;;
+  4)  echo "Denied" ;;       # Permission denied = authorization decision
+  *)  echo "Error" ;;        # Everything else = infrastructure issue
+esac
+
+# CI/CD gate with timeout
+timeout 30s inferadb check user:$CI_USER can_deploy app:$APP_NAME --exit-code \
+  || { echo "Authorization check failed"; exit 1; }
+```
 
 ### Error Code Lookup
 
@@ -4371,7 +4734,7 @@ Details:
   Token type: user (OAuth)
 
 Quick fix:
-  $ inferadb login --profile prod
+  $ inferadb @prod login
 
 Alternative (for CI/CD):
   # Generate a new service token
@@ -4439,9 +4802,9 @@ Troubleshooting:
   1. List available vaults:
      $ inferadb orgs vaults list
 
-  2. Check your organization context:
-     $ inferadb context show
-     # Currently: Acme Corp (123456789012345678)
+  2. Check your current profile:
+     $ inferadb whoami
+     # Profile: prod, Org: Acme Corp (123456789012345678)
 
   3. Search across organizations:
      $ inferadb orgs list
@@ -4655,6 +5018,12 @@ Request-ID: req_xyz789ghi012
 
 ---
 
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 9: DEVELOPER EXPERIENCE
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
 ## Shell Completion
 
 Generate shell completion scripts for tab completion of commands, flags, and arguments.
@@ -4681,8 +5050,8 @@ Completions include:
 
 - All commands and subcommands
 - Flag names and values
-- Profile names from `~/.inferadb/profiles.yaml`
-- Organization and vault IDs from current context
+- Profile names from `~/.config/inferadb/cli.yaml`
+- Organization and vault IDs from current profile
 - Resource types from active schema
 - Common permission names
 
@@ -4716,6 +5085,37 @@ inferadb orgs list --columns name,id,tier
 
 # Available columns vary by resource type
 inferadb orgs vaults list --columns name,id,created_at,relationship_count
+```
+
+### Table Display Options
+
+Control table appearance for different use cases:
+
+```bash
+# Use full terminal width (wraps long content)
+inferadb relationships list -o table --wide
+
+# No headers (useful for piping to other tools)
+inferadb relationships list -o table --no-headers
+
+# Combine for scripting
+inferadb relationships list --columns subject,relation,resource --no-headers | while read s r o; do
+  echo "Subject $s has $r on $o"
+done
+
+# Control column alignment
+inferadb orgs list -o table --align left      # Left-align all columns
+inferadb orgs list -o table --align right     # Right-align all columns
+
+# Truncate long values (default: 40 chars)
+inferadb relationships list -o table --truncate 80
+
+# No truncation (show full values)
+inferadb relationships list -o table --no-truncate
+
+# Sort output
+inferadb relationships list -o table --sort created_at
+inferadb relationships list -o table --sort created_at --desc
 ```
 
 ### Field Filtering with JSONPath
@@ -4869,7 +5269,14 @@ inferadb check user:alice can_edit document:readme -o json --compact
 ```
 
 ```json
-{"decision":"allow","subject":"user:alice","relation":"can_edit","resource":"document:readme","via":"editor","ms":2.1}
+{
+  "decision": "allow",
+  "subject": "user:alice",
+  "relation": "can_edit",
+  "resource": "document:readme",
+  "via": "editor",
+  "ms": 2.1
+}
 ```
 
 ---
@@ -4945,7 +5352,7 @@ Track CLI operations locally for security review:
 ```bash
 # Enable local audit logging
 inferadb config set audit.enabled true
-inferadb config set audit.path ~/.inferadb/audit.log
+inferadb config set audit.path ~/.local/state/inferadb/audit.log
 
 # View local audit log
 inferadb audit local
@@ -4962,6 +5369,74 @@ Local audit log format:
 2025-01-15T10:30:15Z relationships add user:bob viewer document:readme [OK]
 2025-01-15T10:31:00Z schemas push schema.ipl [OK] schema_id=777888999000111222
 2025-01-15T10:32:00Z schemas activate 777888999000111222 [OK]
+```
+
+### Credential Rotation
+
+**When to Rotate:**
+
+- Token age > 30 days (recommended every 7-30 days depending on sensitivity)
+- After suspected compromise
+- After team member leaves the organization
+- Per compliance policy (SOC2, HIPAA, etc.)
+- When `inferadb doctor` or `tokens inspect` shows rotation warnings
+
+**Rotating Personal Tokens (CLI Auth):**
+
+```bash
+# Re-authenticate to get a fresh token
+inferadb @prod login
+
+# Check current token age
+inferadb tokens inspect --verify
+# Shows: ⚠ Token age: 25 days (rotate recommended after 24h)
+```
+
+**Rotating Vault Tokens (CI/CD Integrations):**
+
+```bash
+# 1. Generate new token
+NEW_TOKEN=$(inferadb tokens generate --ttl 30d --raw)
+
+# 2. Update CI/CD secrets
+# GitHub Actions: gh secret set INFERADB_TOKEN --body "$NEW_TOKEN"
+# GitLab: Update variable in CI/CD settings
+# AWS: aws secretsmanager put-secret-value --secret-id inferadb-token --secret-string "$NEW_TOKEN"
+
+# 3. List existing tokens to find old one
+inferadb tokens list
+# TOKEN_ID          DESCRIPTION      CREATED              LAST_USED
+# 888999000111222   CI/CD Pipeline   2024-12-15T10:00:00Z 2025-01-14T23:45:00Z
+# 999000111222333   CI/CD Pipeline   2025-01-15T10:00:00Z never
+
+# 4. Revoke old token after confirming new one works
+inferadb tokens revoke 888999000111222
+```
+
+**Rotating Client Certificates:**
+
+```bash
+# 1. Generate new certificate for client
+inferadb orgs clients certificates create 444555666777888999 \
+  --name "Production Cert 2025-Q1" \
+  --ttl 90d
+
+# 2. Deploy new certificate to application
+# ... update app configuration with new cert ...
+
+# 3. Verify new cert is working
+inferadb orgs clients certificates list 444555666777888999
+
+# 4. Revoke old certificate
+inferadb orgs clients certificates revoke 444555666777888999 OLD_CERT_ID
+```
+
+**Automated Rotation Reminder:**
+
+```bash
+# Add to cron or CI pipeline to check credential age
+inferadb doctor --check credentials
+# Exit code 1 if any credentials need rotation
 ```
 
 ### Sensitive Data Handling
@@ -5036,8 +5511,8 @@ inferadb cheatsheet --role developer     # Schema dev, testing, debugging
 inferadb cheatsheet --role devops        # Deployment, monitoring, tokens
 inferadb cheatsheet --role admin         # User management, audit, security
 
-# Context-aware (shows commands for current vault)
-inferadb cheatsheet --context
+# Profile-aware (shows commands for current profile's vault)
+inferadb cheatsheet --show-profile
 
 # Export formats
 inferadb cheatsheet --format markdown > CLI-QUICKSTART.md
@@ -5053,12 +5528,13 @@ InferaDB CLI Cheatsheet
 SETUP & AUTH
   inferadb init                              First-run setup wizard
   inferadb login                             Authenticate with browser
-  inferadb whoami                            Show current user and context
+  inferadb whoami                            Show current user and profile
 
-CONTEXT
-  inferadb context org <id|name>             Set default organization
-  inferadb context vault <id|name>           Set default vault
-  inferadb context show                      Show current context
+PROFILES
+  inferadb profiles list                     List all profiles
+  inferadb profiles create <name> --url ...  Create new profile
+  inferadb profiles default <name>           Set default profile
+  inferadb @<profile> <command>              Use profile for one command
 
 AUTHORIZATION CHECKS  (subject permission resource)
   inferadb check user:X can_Y resource:Z     Check permission
@@ -5078,8 +5554,8 @@ SCHEMAS
 
 COMMON FLAGS
   -o json|yaml|table                         Output format
-  --profile <name>                           Use specific profile
-  --vault <id|name>                          Override vault
+  @<name>                                    Use specific profile
+  --vault <id>                               Override vault
   --yes                                      Skip confirmations
   --debug                                    Enable debug output
 
@@ -5530,27 +6006,26 @@ SUBJECT      RELATION   RESOURCE
 user:alice   owner      document:readme
 user:alice   viewer     document:secret
 
-inferadb> .context vault Staging
-Switched to vault: Staging (111222333444555666)
+inferadb> .profile staging
+Switched to profile: staging (vault: 111222333444555666)
 
 inferadb> .history
   1  check user:alice can_view document:readme
   2  relationships list --subject user:alice
-  3  .context vault Staging
+  3  .profile staging
 
 inferadb> exit
 ```
 
 Shell commands (prefixed with `.`):
 
-| Command              | Description          |
-| -------------------- | -------------------- |
-| `.context org/vault` | Switch context       |
-| `.profile`           | Switch profile       |
-| `.history`           | Show command history |
-| `.clear`             | Clear screen         |
-| `.help`              | Show shell help      |
-| `.exit` / `exit`     | Exit shell           |
+| Command      | Description            |
+| ------------ | ---------------------- |
+| `.profile`   | Switch profile         |
+| `.history`   | Show command history   |
+| `.clear`     | Clear screen           |
+| `.help`      | Show shell help        |
+| `.exit`      | Exit shell             |
 
 #### Smart Auto-Correction
 
@@ -5620,6 +6095,12 @@ Suggestions are context-aware and based on:
 - Recent command history
 
 ---
+
+---
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PART 10: APPENDIX
+     ═══════════════════════════════════════════════════════════════════════════ -->
 
 ## Planned Features
 
@@ -5696,6 +6177,132 @@ inferadb c user:alice document:readme can_view  # Expands to: inferadb check ...
 
 ---
 
+## Troubleshooting
+
+Quick fixes for common issues. For more details, run `inferadb help error <code>`.
+
+### "No such profile: prod"
+
+```bash
+# Check available profiles
+inferadb profiles list
+
+# Create the missing profile
+inferadb profiles create prod \
+  --url https://api.inferadb.com \
+  --org 123456789012345678 \
+  --vault 987654321098765432
+
+# Or set as default after creating
+inferadb profiles default prod
+```
+
+### "Permission denied" (Exit Code 4)
+
+```bash
+# Check your current identity and role
+inferadb whoami
+
+# Check who has admin access to request help
+inferadb orgs members list --role admin
+
+# Verify you're using the right profile/vault
+inferadb profiles show
+```
+
+### "Authentication required" (Exit Code 3)
+
+```bash
+# Re-authenticate
+inferadb @prod login
+
+# Or generate a new vault token
+inferadb tokens generate --ttl 7d
+
+# Check token status
+inferadb tokens inspect --verify
+```
+
+### "Timeout waiting for response"
+
+```bash
+# Run diagnostics
+inferadb doctor
+
+# Try with explicit timeout
+inferadb --timeout 30s check user:alice can_view document:readme
+
+# Check service health
+inferadb health --verbose
+```
+
+### "Network error" (Exit Code 10)
+
+```bash
+# Full network diagnostics
+inferadb doctor --check network
+
+# Test connectivity
+inferadb ping --count 5
+
+# Check DNS and TLS
+inferadb doctor --verbose
+```
+
+### "Schema activate failed: breaking changes"
+
+```bash
+# Review what would break
+inferadb schemas pre-flight SCHEMA_ID
+
+# Use canary deployment for safer rollout
+inferadb schemas activate SCHEMA_ID --canary 10
+
+# Or force (dangerous!)
+inferadb schemas activate SCHEMA_ID --force --yes
+```
+
+### "Rate limited" (Exit Code 7)
+
+```bash
+# Check current rate limit status
+inferadb whoami --show-limits
+
+# Wait and retry with backoff
+sleep 60 && inferadb check user:alice can_view document:readme
+
+# For batch operations, use slower throughput
+inferadb import data.json --rate-limit 10/s
+```
+
+### "Resource not found" (Exit Code 5)
+
+```bash
+# Verify the resource exists
+inferadb relationships list --resource document:readme
+
+# Check you're in the right vault
+inferadb profiles show
+
+# List available resources of that type
+inferadb list-resources document --limit 10
+```
+
+### Debug mode for any issue
+
+```bash
+# Maximum verbosity
+inferadb --debug check user:alice can_view document:readme
+
+# Save debug output to file
+inferadb --debug check user:alice can_view document:readme 2> debug.log
+
+# Include timing information
+inferadb --debug --timing check user:alice can_view document:readme
+```
+
+---
+
 ## Examples
 
 ### Common Workflows
@@ -5708,9 +6315,10 @@ inferadb init
 
 # Create a vault for the project
 inferadb orgs vaults create "My Project" --description "Authorization for my app"
+# Returns: Vault ID 987654321098765432
 
-# Set as default
-inferadb context vault 987654321098765432
+# Update profile to use the new vault
+inferadb profiles update dev --vault 987654321098765432
 
 # Push initial schema
 inferadb schemas push schema.ipl --activate
@@ -5774,6 +6382,101 @@ inferadb export --output backup-$(date +%Y%m%d).json
 
 # Deploy new schema
 inferadb schemas push schema.ipl --activate
+```
+
+#### Cross-environment comparison
+
+```bash
+# Compare schema differences
+inferadb @prod schemas show --active -o yaml > prod-schema.yaml
+inferadb @staging schemas show --active -o yaml > staging-schema.yaml
+diff prod-schema.yaml staging-schema.yaml
+
+# Compare stats
+echo "=== Production ===" && inferadb @prod stats
+echo "=== Staging ===" && inferadb @staging stats
+
+# Check if a permission works the same in both environments
+inferadb @prod check user:alice can_view document:readme
+inferadb @staging check user:alice can_view document:readme
+```
+
+#### Audit who has access to a resource
+
+```bash
+# Who can view this document?
+inferadb list-subjects document:secret viewer
+
+# Get full access tree with inheritance
+inferadb expand document:secret viewer --show-paths
+
+# Understand why a specific user has access
+inferadb explain-permission user:alice can_view document:secret --graph
+
+# Find all users with a specific permission (across all resources)
+inferadb relationships list --relation owner -o table --columns subject,resource
+```
+
+#### Safe schema deployment workflow
+
+```bash
+# Step 1: Preview changes
+inferadb schemas diff schema.ipl --active
+
+# Step 2: Check for breaking changes
+inferadb schemas preview schema.ipl --impact
+
+# Step 3: Push as draft (doesn't activate)
+SCHEMA_ID=$(inferadb schemas push schema.ipl -o json | jq -r '.id')
+
+# Step 4: Run pre-flight checks
+inferadb schemas pre-flight $SCHEMA_ID
+
+# Step 5: Canary deployment (10% traffic)
+inferadb schemas activate $SCHEMA_ID --canary 10
+
+# Step 6: Monitor and promote
+inferadb schemas canary status
+inferadb schemas canary promote  # When ready for 100%
+```
+
+#### Migrate relationships from legacy system
+
+```bash
+# Export from legacy system (adapt to your format)
+legacy-export > legacy-data.json
+
+# Transform to InferaDB format
+jq '[.[] | {subject: .user_id, relation: .role, resource: .resource_id}]' \
+  legacy-data.json > relationships.json
+
+# Preview import
+inferadb import relationships.json --dry-run
+
+# Import atomically
+inferadb import relationships.json --atomic --yes
+
+# Verify migration
+inferadb stats
+inferadb relationships list --limit 10
+```
+
+#### Multi-environment development
+
+```bash
+# Set up profiles for each environment
+inferadb profiles create local --url http://localhost:3000 --org DEV_ORG --vault DEV_VAULT
+inferadb profiles create staging --url https://staging.inferadb.com --org ORG --vault STAGING_VAULT
+inferadb profiles create prod --url https://api.inferadb.com --org ORG --vault PROD_VAULT
+
+# Use @profile shorthand
+inferadb @local schemas push schema.ipl --activate
+inferadb @staging check user:alice can_view document:readme
+inferadb @prod health
+
+# Or set default
+inferadb profiles default staging
+inferadb check user:alice can_view document:readme  # Uses staging
 ```
 
 ---
