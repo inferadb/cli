@@ -88,7 +88,7 @@ An ideal InferaDB CLI should feel familiar to people who use `kubectl`, `git`, `
 ## Core Design Principles
 
 - Nouns and verbs: `inferadb vaults list`, `inferadb check`.
-- Idempotent commands: `apply` and `sync` should be safe to re-run.
+- Idempotent commands: operations with `--if-exists` / `--if-not-exists` are safe to re-run.
 - First-class environments: `@profile` shorthand, profiles in config file.
 - Human-friendly by default, machine-friendly via `-o json|yaml|table`.
 - Profile-based defaults: each profile is a complete target (URL + org + vault).
@@ -984,16 +984,14 @@ inferadb config show default_profile
 
 # Show as JSON
 inferadb config show -o json
+
+# Show effective config with sources (debug "why is it talking to prod?" issues)
+inferadb config explain
 ```
 
-Output:
+Output for `config show`:
 
 ```text
-Configuration sources:
-  1. Environment variables
-  2. ~/.config/inferadb/cli.yaml (user)
-  3. .inferadb-cli.yaml (project)
-
 Resolved configuration:
   default_profile: prod
   profiles:
@@ -1003,6 +1001,32 @@ Resolved configuration:
       vault: 987654321098765432
     dev:
       url: http://localhost:3000
+```
+
+Output for `config explain`:
+
+```text
+Configuration Resolution (highest to lowest precedence):
+
+  1. CLI flags           (e.g., @prod, --vault)
+  2. Environment vars    (INFERADB_*, INFERADB_CTRL_*)
+  3. Project config      (.inferadb-cli.yaml in current directory)
+  4. User config         (~/.config/inferadb/cli.yaml)
+  5. Defaults
+
+Effective values:
+
+  KEY              VALUE                        SOURCE
+  ─────────────────────────────────────────────────────────────────
+  url              https://api.inferadb.com     profile:prod (user config)
+  org              123456789012345678           profile:prod (user config)
+  vault            987654321098765432           INFERADB_VAULT (env var)
+  default_profile  prod                         user config
+  timeout          30s                          default
+
+Active profile: prod
+  Loaded from: ~/.config/inferadb/cli.yaml
+  Vault override: INFERADB_VAULT environment variable
 ```
 
 ### Edit Configuration
@@ -2915,7 +2939,7 @@ inferadb check user:alice can_view,can_edit,can_delete document:readme
 
 # Silent mode with exit code (useful for scripts)
 inferadb check user:alice can_view document:readme --quiet --exit-code
-# Exit 0 = allowed, Exit 1 = denied
+# Exit 0 = allowed, Exit 20 = denied, Exit 21 = indeterminate
 
 # Explain why access was denied (human-friendly)
 inferadb check user:alice can_view document:readme --explain
@@ -4237,6 +4261,48 @@ Additional flags for automation and scripting:
 | `--exit-code`      | Return meaningful exit codes (for check commands)           |
 | `--wait-for-ready` | Wait for service to be available before running             |
 
+### Network & TLS Flags
+
+For enterprise environments, private PKI, and local development:
+
+| Flag              | Env Variable           | Description                                    |
+| ----------------- | ---------------------- | ---------------------------------------------- |
+| `--ca-cert`       | `INFERADB_CA_CERT`     | Path to custom CA certificate bundle           |
+| `--client-cert`   | `INFERADB_CLIENT_CERT` | Path to client certificate (mTLS)              |
+| `--client-key`    | `INFERADB_CLIENT_KEY`  | Path to client private key (mTLS)              |
+| `--insecure`      | `INFERADB_INSECURE`    | Skip TLS verification (local dev only)         |
+|                   | `HTTPS_PROXY`          | Proxy for HTTPS connections                    |
+|                   | `NO_PROXY`             | Hosts to bypass proxy                          |
+
+```bash
+# Use custom CA (private PKI / corporate proxy)
+inferadb --ca-cert /path/to/ca-bundle.crt check user:alice can_view document:readme
+
+# Local development with self-signed cert (shows warning)
+inferadb --insecure --url https://localhost:3000 check user:alice can_view document:readme
+# ⚠ WARNING: TLS verification disabled. Do not use in production.
+
+# mTLS authentication
+inferadb --client-cert /path/to/client.crt --client-key /path/to/client.key ...
+
+# Via environment (useful for CI/CD)
+export INFERADB_CA_CERT=/etc/ssl/certs/corporate-ca.crt
+export HTTPS_PROXY=http://proxy.corp.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,.internal.example.com
+inferadb check user:alice can_view document:readme
+```
+
+The `doctor` command validates TLS and proxy configuration:
+
+```bash
+inferadb doctor --check network
+# ✓ DNS resolution for api.inferadb.com
+# ✓ TLS handshake successful
+# ✓ Certificate chain valid (expires in 89 days)
+# ✓ Proxy connection via proxy.corp.example.com:8080
+# ⚠ Custom CA bundle in use: /etc/ssl/certs/corporate-ca.crt
+```
+
 ### Scripting Examples
 
 ```bash
@@ -4507,18 +4573,44 @@ inferadb relationships add \
 
 ## Exit Codes
 
-| Code | Meaning                    | Examples                                    | Next Steps                                       |
-| ---- | -------------------------- | ------------------------------------------- | ------------------------------------------------ |
-| 0    | Success                    | Command completed                           | None                                             |
-| 1    | General error              | Missing required arg                        | Check `--help`                                   |
-| 2    | Invalid arguments          | `--vault invalid-id`                        | Use `--vault` with Snowflake ID                  |
-| 3    | Authentication required    | Token expired, not logged in                | `inferadb @prod login`                           |
-| 4    | Permission denied          | User lacks vault access                     | Contact org admin                                |
-| 5    | Resource not found         | Vault doesn't exist, schema version missing | Check resource ID with `list` commands           |
-| 6    | Conflict                   | Profile name already exists                 | Use `--force` or `delete` first                  |
-| 7    | Rate limited               | Too many requests                           | Back off and retry with exponential delay        |
-| 10   | Network error              | Connection refused, DNS failure             | Run `inferadb doctor`                            |
-| 11   | Server error               | 5xx response                                | Check [status page](https://status.inferadb.com) |
+### General Exit Codes
+
+| Code | Meaning                 | Examples                                    | Next Steps                                       |
+| ---- | ----------------------- | ------------------------------------------- | ------------------------------------------------ |
+| 0    | Success                 | Command completed                           | None                                             |
+| 1    | General error           | Missing required arg                        | Check `--help`                                   |
+| 2    | Invalid arguments       | `--vault invalid-id`                        | Use `--vault` with Snowflake ID                  |
+| 3    | Authentication required | Token expired, not logged in                | `inferadb @prod login`                           |
+| 4    | Permission denied       | User lacks vault access                     | Contact org admin                                |
+| 5    | Resource not found      | Vault doesn't exist, schema version missing | Check resource ID with `list` commands           |
+| 6    | Conflict                | Profile name already exists                 | Use `--force` or `delete` first                  |
+| 7    | Rate limited            | Too many requests                           | Back off and retry with exponential delay        |
+| 10   | Network error           | Connection refused, DNS failure             | Run `inferadb doctor`                            |
+| 11   | Server error            | 5xx response                                | Check [status page](https://status.inferadb.com) |
+
+### Authorization Decision Exit Codes
+
+The `check` command uses a dedicated exit code range to distinguish authorization decisions from errors:
+
+| Code | Meaning       | Description                                          |
+| ---- | ------------- | ---------------------------------------------------- |
+| 0    | Allowed       | Authorization granted                                |
+| 20   | Denied        | Authorization denied (policy decision, not an error) |
+| 21   | Indeterminate | Could not determine (missing data, policy error)     |
+
+This separation ensures scripts can reliably distinguish "access denied" (a valid policy decision) from "something went wrong" (an infrastructure error):
+
+```bash
+inferadb check user:alice can_view document:readme --exit-code
+case $? in
+  0)  echo "Allowed" ;;
+  20) echo "Denied by policy" ;;      # Authorization decision
+  21) echo "Could not determine" ;;   # Incomplete evaluation
+  *)  echo "Error occurred" ;;        # Infrastructure issue (3-11)
+esac
+```
+
+> **Note:** Exit codes 3-11 can still occur with `check --exit-code` if there's an authentication, network, or server error. Code 4 (Permission denied) means the *CLI user* lacks vault access, not that the authorization check returned "deny".
 
 ### Scripting with Exit Codes
 
@@ -4526,7 +4618,7 @@ Use exit codes to build robust automation scripts with proper error handling:
 
 ```bash
 #!/bin/bash
-# Script pattern: retry on transient errors, fail fast on permanent errors
+# Script pattern: retry on transient errors, fail fast on authorization decisions
 
 set +e  # Don't exit on error, we'll handle it
 
@@ -4539,12 +4631,20 @@ for i in {1..3}; do
       echo "Access granted"
       exit 0
       ;;
+    20)
+      echo "Access denied by policy"
+      exit 20
+      ;;
+    21)
+      echo "Could not determine access"
+      exit 21
+      ;;
     3)
       echo "Auth error - re-authenticating..."
       inferadb @prod login
       ;;
     4)
-      echo "Permission denied - not retrying"
+      echo "CLI permission denied (vault access) - not retrying"
       exit 4
       ;;
     7)
@@ -4573,24 +4673,25 @@ exit 1
 Common patterns:
 
 ```bash
-# Simple check with fallback
+# Simple check - exit 0 means allowed
 if inferadb check user:alice can_view document:readme --quiet --exit-code; then
   echo "Allowed"
 else
   echo "Denied or error"
 fi
 
-# Distinguish between denial and error
+# Distinguish authorization decisions from errors
 inferadb check user:alice can_view document:readme --quiet --exit-code
 case $? in
   0)  echo "Allowed" ;;
-  4)  echo "Denied" ;;       # Permission denied = authorization decision
-  *)  echo "Error" ;;        # Everything else = infrastructure issue
+  20) echo "Denied by policy" ;;   # Authorization decision (not an error)
+  21) echo "Indeterminate" ;;      # Could not evaluate
+  *)  echo "Error occurred" ;;     # Infrastructure issue (codes 1-11)
 esac
 
-# CI/CD gate with timeout
-timeout 30s inferadb check user:$CI_USER can_deploy app:$APP_NAME --exit-code \
-  || { echo "Authorization check failed"; exit 1; }
+# CI/CD gate - fail on deny OR error
+inferadb check user:$CI_USER can_deploy app:$APP_NAME --exit-code
+[[ $? -eq 0 ]] || { echo "Authorization check failed or denied"; exit 1; }
 ```
 
 ### Error Code Lookup
@@ -5029,22 +5130,49 @@ Request-ID: req_xyz789ghi012
 Generate shell completion scripts for tab completion of commands, flags, and arguments.
 
 ```bash
-# Bash
-inferadb --generate-completion bash > ~/.local/share/bash-completion/completions/inferadb
-# Or add to ~/.bashrc:
-# eval "$(inferadb --generate-completion bash)"
-
-# Zsh
-inferadb --generate-completion zsh > ~/.zfunc/_inferadb
-# Or add to ~/.zshrc:
-# eval "$(inferadb --generate-completion zsh)"
-
-# Fish
-inferadb --generate-completion fish > ~/.config/fish/completions/inferadb.fish
-
-# PowerShell
-inferadb --generate-completion powershell >> $PROFILE
+inferadb completion bash > ~/.local/share/bash-completion/completions/inferadb
+inferadb completion zsh > ~/.zfunc/_inferadb
+inferadb completion fish > ~/.config/fish/completions/inferadb.fish
+inferadb completion powershell >> $PROFILE
 ```
+
+### Installation by Shell
+
+**Bash:**
+
+```bash
+# Option 1: Persistent (recommended)
+inferadb completion bash > ~/.local/share/bash-completion/completions/inferadb
+
+# Option 2: In .bashrc (loads every session)
+echo 'eval "$(inferadb completion bash)"' >> ~/.bashrc
+```
+
+**Zsh:**
+
+```bash
+# Ensure completions directory exists
+mkdir -p ~/.zfunc
+echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+
+# Install completion
+inferadb completion zsh > ~/.zfunc/_inferadb
+```
+
+**Fish:**
+
+```bash
+inferadb completion fish > ~/.config/fish/completions/inferadb.fish
+```
+
+**PowerShell:**
+
+```powershell
+inferadb completion powershell >> $PROFILE
+```
+
+### Dynamic Completions
 
 Completions include:
 
@@ -5054,6 +5182,27 @@ Completions include:
 - Organization and vault IDs from current profile
 - Resource types from active schema
 - Common permission names
+
+### Completion Caching
+
+Dynamic completions (profiles, schema data) are cached to avoid network latency during tab completion:
+
+| Data Type          | Cache TTL | Fallback on Network Failure     |
+| ------------------ | --------- | ------------------------------- |
+| Profile names      | 5 min     | Use cached / show none          |
+| Resource types     | 10 min    | Use cached / show common types  |
+| Permission names   | 10 min    | Use cached / show common perms  |
+| Entity names       | 10 min    | Use cached / show none          |
+
+```bash
+# Force refresh completion cache
+inferadb completion --refresh-cache
+
+# Disable dynamic completions (use static only)
+inferadb completion bash --static-only
+```
+
+> **Performance:** Completion requests have a 100ms timeout. If the server doesn't respond in time, cached or static completions are used.
 
 ---
 
@@ -5072,7 +5221,7 @@ inferadb orgs get 123456789012345678 -o json
 inferadb relationships list -o yaml
 
 # Compact JSON (single line, for piping)
-inferadb check user:alice document:readme can_view -o json --compact
+inferadb check user:alice can_view document:readme -o json --compact
 ```
 
 ### Column Selection
@@ -5175,6 +5324,41 @@ inferadb orgs list -o csv
 
 # JSON Lines (one object per line)
 inferadb stream -o jsonl
+```
+
+### Machine Mode Guarantees
+
+When using structured output formats (`-o json`, `-o jsonl`, `-o yaml`, `-o csv`, `-o tsv`), the CLI provides clean separation between data and diagnostics:
+
+| Stream   | Contains                                         |
+| -------- | ------------------------------------------------ |
+| `stdout` | **Only** the requested structured data           |
+| `stderr` | Warnings, progress bars, hints, debug output     |
+
+This guarantees reliable piping and parsing:
+
+```bash
+# Safe to pipe - warnings go to stderr, data to stdout
+inferadb relationships list -o json | jq '.[] | .subject'
+
+# Capture data separately from diagnostics
+DATA=$(inferadb export -o json 2>/dev/null)
+
+# Show warnings but still get clean JSON
+inferadb check user:alice can_view document:readme -o json 2>&1 | tee output.log | jq .
+```
+
+**JSON error output:** When a command fails with `-o json`, a structured error is written to stdout (with non-zero exit code) so scripts can parse failures:
+
+```json
+{
+  "error": {
+    "code": "authentication_required",
+    "message": "Token expired",
+    "exit_code": 3,
+    "suggestion": "Run: inferadb @prod login"
+  }
+}
 ```
 
 ### Compact Output Mode
@@ -5989,6 +6173,9 @@ For extended sessions with persistent context:
 
 ```bash
 inferadb shell
+
+# Disable command history persistence (for sensitive sessions)
+inferadb shell --no-history
 ```
 
 Opens a REPL with command history and shortcuts:
@@ -6019,13 +6206,22 @@ inferadb> exit
 
 Shell commands (prefixed with `.`):
 
-| Command      | Description            |
-| ------------ | ---------------------- |
-| `.profile`   | Switch profile         |
-| `.history`   | Show command history   |
-| `.clear`     | Clear screen           |
-| `.help`      | Show shell help        |
-| `.exit`      | Exit shell             |
+| Command      | Description                                      |
+| ------------ | ------------------------------------------------ |
+| `.profile`   | Switch profile                                   |
+| `.history`   | Show command history                             |
+| `.clear`     | Clear screen                                     |
+| `.help`      | Show shell help                                  |
+| `.exit`      | Exit shell                                       |
+
+Shell flags:
+
+| Flag           | Description                                        |
+| -------------- | -------------------------------------------------- |
+| `--no-history` | Don't persist command history to disk              |
+| `--no-save`    | Don't save sensitive values (tokens, secrets)      |
+
+> **Security:** By default, commands containing tokens or secrets are automatically excluded from history. Use `--no-history` to disable all history persistence for highly sensitive sessions.
 
 #### Smart Auto-Correction
 
