@@ -1,5 +1,7 @@
 //! Integration tests for the InferaDB CLI.
 
+#![allow(deprecated)] // Command::cargo_bin is deprecated but still works
+
 mod common;
 
 use assert_cmd::Command;

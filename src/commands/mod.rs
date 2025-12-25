@@ -7,6 +7,7 @@ mod check;
 mod identity;
 mod profiles;
 mod relationships;
+mod schemas;
 
 pub use auth::{login, logout};
 pub use check::check;
@@ -226,9 +227,44 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
 
 // Placeholder implementations for commands not yet implemented
 
-async fn schemas_dispatch(_ctx: &Context, _sub: &crate::cli::SchemasCommands) -> Result<()> {
-    eprintln!("Schema commands not yet implemented");
-    Ok(())
+async fn schemas_dispatch(ctx: &Context, sub: &crate::cli::SchemasCommands) -> Result<()> {
+    use crate::cli::SchemasCommands;
+    match sub {
+        SchemasCommands::Init { path, template } => schemas::init(ctx, path, template).await,
+        SchemasCommands::List { all } => schemas::list(ctx, *all).await,
+        SchemasCommands::Get { id } => schemas::get(ctx, id).await,
+        SchemasCommands::Preview { file, base, impact } => {
+            schemas::preview(ctx, file, base.as_deref(), *impact).await
+        }
+        SchemasCommands::Push {
+            file,
+            activate,
+            message,
+            dry_run,
+        } => schemas::push(ctx, file, *activate, message.as_deref(), *dry_run).await,
+        SchemasCommands::Activate { id, diff, canary } => {
+            schemas::activate_with_options(ctx, id, *diff, *canary).await
+        }
+        SchemasCommands::Rollback { version } => schemas::rollback(ctx, version.as_deref()).await,
+        SchemasCommands::Validate { file, strict: _ } => schemas::validate(ctx, file).await,
+        SchemasCommands::Format { file, write } => schemas::format(ctx, file, *write).await,
+        SchemasCommands::Diff {
+            from,
+            to,
+            impact: _,
+        } => schemas::diff(ctx, from, to).await,
+        SchemasCommands::Test {
+            tests,
+            schema,
+            name,
+        } => schemas::test(ctx, tests.as_deref(), schema.as_deref(), name.as_deref()).await,
+        SchemasCommands::Watch {
+            file,
+            test,
+            auto_push,
+        } => schemas::watch(ctx, file, *test, *auto_push).await,
+        SchemasCommands::Canary(canary_cmd) => schemas::canary_dispatch(ctx, canary_cmd).await,
+    }
 }
 
 async fn orgs_dispatch(_ctx: &Context, _sub: &crate::cli::OrgsCommands) -> Result<()> {
