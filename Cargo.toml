@@ -1,0 +1,88 @@
+[package]
+name = "inferadb-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+authors = ["InferaDB Team"]
+description = "Command-line interface for InferaDB authorization engine"
+license = "Apache-2.0"
+repository = "https://github.com/inferadb/cli"
+readme = "README.md"
+keywords = ["cli", "authorization", "rbac", "rebac", "zanzibar"]
+categories = ["command-line-utilities", "authentication"]
+
+[[bin]]
+name = "inferadb"
+path = "src/main.rs"
+
+[lib]
+name = "inferadb_cli"
+path = "src/lib.rs"
+
+[dependencies]
+# InferaDB SDK
+inferadb = { path = "../sdks/rust", default-features = false, features = ["rest", "rustls"] }
+
+# CLI Framework
+clap = { version = "4.5", features = ["derive", "env", "wrap_help", "string", "cargo"] }
+clap_complete = "4.5"
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Error Handling
+thiserror = "2"
+anyhow = "1"
+
+# Configuration
+dirs = "5"
+
+# Terminal UI
+terminal_size = "0.4"
+unicode-width = "0.2"
+colored = "2.1"
+indicatif = "0.17"
+
+# Credential Storage
+keyring = "3"
+
+# OAuth PKCE
+oauth2 = "5"
+tiny_http = "0.12"
+
+# HTTP client (for health checks)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# Unix utilities
+libc = "0.2"
+
+# Other
+url = "2"
+chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
+http = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+webbrowser = "1"
+
+# Async utils
+async-trait = "0.1"
+futures = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+wiremock = "0.6"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[features]
+default = []
