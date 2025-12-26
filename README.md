@@ -1,6 +1,12 @@
-# InferaDB CLI
+<div align="center">
+    <p><a href="https://inferadb.com"><img src=".github/inferadb.png" width="100" /></a></p>
+    <h1>InferaDB CLI</h1>
+    <p>Complete authorization management without leaving your terminal</p>
+</div>
 
-Everything you need to build, test, and operate [InferaDB](https://github.com/inferadb) without leaving the terminal. A complete command-line interface for managing tenants, policies, and authorization. Provides real-time debugging, local development environments, and seamless CI/CD integration.
+<br />
+
+The [InferaDB](https://inferadb.com) CLI gives you instant visibility into authorization decisions, lets you test policy changes before deploying, and provides complete control over tenants, schemas, and relationships. From local development to production debugging, everything is one command away.
 
 ## Installation
 
