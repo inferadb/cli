@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
 authors = ["InferaDB Team"]
-description = "Command-line interface for InferaDB authorization engine"
+description = "Complete CLI for InferaDB—manage tenants, policies, and authorization with real-time debugging and local dev environments"
 license = "Apache-2.0"
 repository = "https://github.com/inferadb/cli"
 readme = "README.md"
@@ -72,6 +72,7 @@ webbrowser = "1"
 # Async utils
 async-trait = "0.1"
 futures = "0.3"
+base64 = "0.22.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

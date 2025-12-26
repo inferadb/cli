@@ -226,9 +226,17 @@ pub enum Commands {
     #[command(subcommand)]
     Schemas(SchemasCommands),
 
+    /// Manage your account
+    #[command(subcommand)]
+    Account(AccountCommands),
+
     /// Manage organizations
     #[command(subcommand)]
     Orgs(OrgsCommands),
+
+    /// JWKS operations (debugging)
+    #[command(subcommand)]
+    Jwks(JwksCommands),
 
     /// Manage tokens
     #[command(subcommand)]
@@ -278,6 +286,44 @@ pub enum Commands {
         relation: Option<String>,
     },
 
+    /// Vault relationship statistics
+    Stats {
+        /// Include historical trends
+        #[arg(long)]
+        trends: bool,
+
+        /// Compact single-line output
+        #[arg(long)]
+        compact: bool,
+    },
+
+    /// Recent vault changes summary
+    WhatChanged {
+        /// Time range (e.g., 1h, 1d, yesterday, or ISO timestamp)
+        #[arg(long)]
+        since: Option<String>,
+
+        /// End time for range
+        #[arg(long)]
+        until: Option<String>,
+
+        /// Focus area (schemas, relationships, permissions)
+        #[arg(long)]
+        focus: Option<String>,
+
+        /// Filter by actor
+        #[arg(long)]
+        actor: Option<String>,
+
+        /// Filter by resource
+        #[arg(long)]
+        resource: Option<String>,
+
+        /// Compact summary output
+        #[arg(long)]
+        compact: bool,
+    },
+
     /// Interactive shell (REPL)
     Shell,
 
@@ -287,6 +333,30 @@ pub enum Commands {
         #[arg(long)]
         role: Option<String>,
     },
+
+    /// Show workflow templates
+    Templates {
+        /// Template name (omit to list all)
+        name: Option<String>,
+
+        /// Subject to substitute in template
+        #[arg(long)]
+        subject: Option<String>,
+
+        /// Output format (text, script)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Show workflow guides
+    Guide {
+        /// Guide name (omit to list all)
+        name: Option<String>,
+    },
+
+    /// Local development environment
+    #[command(subcommand)]
+    Dev(DevCommands),
 
     /// Generate shell completions
     Completion {
@@ -631,6 +701,83 @@ pub enum SchemasCommands {
     /// Canary deployment management
     #[command(subcommand)]
     Canary(CanaryCommands),
+
+    /// Analyze schema for issues
+    Analyze {
+        /// Schema file or version ID
+        file: String,
+
+        /// Specific checks to run (comma-separated: unused,cycles,shadowing)
+        #[arg(long)]
+        checks: Option<String>,
+
+        /// Compare against another version
+        #[arg(long)]
+        compare: Option<String>,
+    },
+
+    /// Generate schema visualization
+    Visualize {
+        /// Schema file or version ID
+        file: String,
+
+        /// Output format (mermaid, dot, ascii)
+        #[arg(short, long, default_value = "ascii")]
+        format: String,
+
+        /// Focus on specific entity
+        #[arg(long)]
+        entity: Option<String>,
+
+        /// Show permission inheritance
+        #[arg(long)]
+        show_permissions: bool,
+    },
+
+    /// Copy schema between vaults
+    Copy {
+        /// Schema version ID (or omit for active)
+        version: Option<String>,
+
+        /// Source vault (if not current)
+        #[arg(long)]
+        from_vault: Option<String>,
+
+        /// Target vault
+        #[arg(long)]
+        to_vault: String,
+
+        /// Source organization (for cross-org copy)
+        #[arg(long)]
+        from_org: Option<String>,
+
+        /// Target organization (for cross-org copy)
+        #[arg(long)]
+        to_org: Option<String>,
+
+        /// Activate in target vault
+        #[arg(long)]
+        activate: bool,
+
+        /// Preview without copying
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Generate migration plan between versions
+    Migrate {
+        /// Source version
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Target version or file
+        #[arg(long)]
+        to: String,
+
+        /// Output format (text, json, yaml)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
 }
 
 /// Canary deployment commands.
@@ -688,9 +835,39 @@ pub enum OrgsCommands {
         id: String,
     },
 
+    /// Suspend organization
+    Suspend {
+        /// Organization ID
+        id: String,
+    },
+
+    /// Resume organization
+    Resume {
+        /// Organization ID
+        id: String,
+    },
+
+    /// Leave organization
+    Leave {
+        /// Organization ID
+        id: String,
+
+        /// Skip confirmation
+        #[arg(long)]
+        yes: bool,
+    },
+
     /// Manage organization members
     #[command(subcommand)]
     Members(MembersCommands),
+
+    /// Manage organization invitations
+    #[command(subcommand)]
+    Invitations(InvitationsCommands),
+
+    /// Manage organization roles
+    #[command(subcommand)]
+    Roles(OrgRolesCommands),
 
     /// Manage organization vaults
     #[command(subcommand)]
@@ -721,6 +898,72 @@ pub enum OrgsCommands {
         /// Time range end
         #[arg(long)]
         to: Option<String>,
+    },
+}
+
+/// Invitation management commands.
+#[derive(Subcommand, Debug)]
+pub enum InvitationsCommands {
+    /// List pending invitations
+    List,
+
+    /// Create an invitation
+    Create {
+        /// Email address to invite
+        email: String,
+
+        /// Role to assign (owner, admin, member)
+        #[arg(long, default_value = "member")]
+        role: String,
+    },
+
+    /// Delete/cancel an invitation
+    Delete {
+        /// Invitation ID
+        id: String,
+    },
+
+    /// Resend invitation email
+    Resend {
+        /// Invitation ID
+        id: String,
+    },
+
+    /// Accept an invitation (using token from email)
+    Accept {
+        /// Invitation token
+        token: String,
+    },
+}
+
+/// Organization role management commands.
+#[derive(Subcommand, Debug)]
+pub enum OrgRolesCommands {
+    /// List role assignments
+    List,
+
+    /// Grant a role to a user
+    Grant {
+        /// User ID
+        user_id: String,
+
+        /// Role (owner, admin, member)
+        role: String,
+    },
+
+    /// Update a user's role
+    Update {
+        /// User ID
+        user_id: String,
+
+        /// New role
+        role: String,
+    },
+
+    /// Revoke a user's role
+    Revoke {
+        /// User ID
+        user_id: String,
     },
 }
 
@@ -787,6 +1030,92 @@ pub enum VaultsCommands {
         /// Vault ID
         id: String,
     },
+
+    /// Manage vault user roles
+    #[command(subcommand)]
+    Roles(VaultRolesCommands),
+
+    /// Manage vault team roles
+    #[command(subcommand)]
+    TeamRoles(VaultTeamRolesCommands),
+}
+
+/// Vault user role management commands.
+#[derive(Subcommand, Debug)]
+pub enum VaultRolesCommands {
+    /// List user role assignments
+    List {
+        /// Vault ID
+        #[arg(long)]
+        vault: Option<String>,
+    },
+
+    /// Grant a role to a user
+    Grant {
+        /// User ID
+        user_id: String,
+
+        /// Role (admin, manager, editor, writer, reader)
+        role: String,
+
+        /// Vault ID
+        #[arg(long)]
+        vault: Option<String>,
+    },
+
+    /// Update a user's role
+    Update {
+        /// Role assignment ID
+        id: String,
+
+        /// New role
+        role: String,
+    },
+
+    /// Revoke a user's role
+    Revoke {
+        /// Role assignment ID
+        id: String,
+    },
+}
+
+/// Vault team role management commands.
+#[derive(Subcommand, Debug)]
+pub enum VaultTeamRolesCommands {
+    /// List team role assignments
+    List {
+        /// Vault ID
+        #[arg(long)]
+        vault: Option<String>,
+    },
+
+    /// Grant a role to a team
+    Grant {
+        /// Team ID
+        team_id: String,
+
+        /// Role (admin, manager, editor, writer, reader)
+        role: String,
+
+        /// Vault ID
+        #[arg(long)]
+        vault: Option<String>,
+    },
+
+    /// Update a team's role
+    Update {
+        /// Role assignment ID
+        id: String,
+
+        /// New role
+        role: String,
+    },
+
+    /// Revoke a team's role
+    Revoke {
+        /// Role assignment ID
+        id: String,
+    },
 }
 
 /// Team management commands.
@@ -824,6 +1153,130 @@ pub enum TeamsCommands {
     /// Delete team
     Delete {
         /// Team ID
+        id: String,
+    },
+
+    /// Manage team members
+    #[command(subcommand)]
+    Members(TeamMembersCommands),
+
+    /// Manage team permissions
+    #[command(subcommand)]
+    Permissions(TeamPermissionsCommands),
+
+    /// Manage team vault grants
+    #[command(subcommand)]
+    Grants(TeamGrantsCommands),
+}
+
+/// Team member management commands.
+#[derive(Subcommand, Debug)]
+pub enum TeamMembersCommands {
+    /// List team members
+    List {
+        /// Team ID
+        team_id: String,
+    },
+
+    /// Add member to team
+    Add {
+        /// Team ID
+        team_id: String,
+
+        /// User ID
+        user_id: String,
+
+        /// Role (maintainer, member)
+        #[arg(long, default_value = "member")]
+        role: String,
+    },
+
+    /// Update member role
+    UpdateRole {
+        /// Team ID
+        team_id: String,
+
+        /// User ID
+        user_id: String,
+
+        /// New role
+        role: String,
+    },
+
+    /// Remove member from team
+    Remove {
+        /// Team ID
+        team_id: String,
+
+        /// User ID
+        user_id: String,
+    },
+}
+
+/// Team permission management commands.
+#[derive(Subcommand, Debug)]
+pub enum TeamPermissionsCommands {
+    /// List team permissions
+    List {
+        /// Team ID
+        team_id: String,
+    },
+
+    /// Grant permission to team
+    Grant {
+        /// Team ID
+        team_id: String,
+
+        /// Permission (e.g., OrgPermVaultCreate)
+        permission: String,
+    },
+
+    /// Revoke permission from team
+    Revoke {
+        /// Team ID
+        team_id: String,
+
+        /// Permission
+        permission: String,
+    },
+}
+
+/// Team vault grant management commands.
+#[derive(Subcommand, Debug)]
+pub enum TeamGrantsCommands {
+    /// List team vault grants
+    List {
+        /// Team ID
+        team_id: String,
+    },
+
+    /// Create a vault grant for team
+    Create {
+        /// Team ID
+        team_id: String,
+
+        /// Vault ID
+        #[arg(long)]
+        vault: String,
+
+        /// Role (admin, manager, editor, writer, reader)
+        #[arg(long)]
+        role: String,
+    },
+
+    /// Update a vault grant
+    Update {
+        /// Grant ID
+        id: String,
+
+        /// New role
+        #[arg(long)]
+        role: String,
+    },
+
+    /// Delete a vault grant
+    Delete {
+        /// Grant ID
         id: String,
     },
 }
@@ -866,11 +1319,193 @@ pub enum ClientsCommands {
         id: String,
     },
 
-    /// Deactivate client (revoke all credentials)
+    /// Deactivate client (suspend, revoke all credentials)
     Deactivate {
         /// Client ID
         id: String,
     },
+
+    /// Reactivate a suspended client
+    Reactivate {
+        /// Client ID
+        id: String,
+    },
+
+    /// Manage client certificates
+    #[command(subcommand)]
+    Certificates(CertificatesCommands),
+}
+
+/// Certificate management commands.
+#[derive(Subcommand, Debug)]
+pub enum CertificatesCommands {
+    /// List certificates
+    List {
+        /// Client ID
+        client_id: String,
+    },
+
+    /// Add a certificate
+    Add {
+        /// Client ID
+        client_id: String,
+    },
+
+    /// Get certificate details
+    Get {
+        /// Certificate ID
+        id: String,
+    },
+
+    /// Rotate certificate with grace period
+    Rotate {
+        /// Certificate ID
+        id: String,
+
+        /// Grace period in hours (both certs valid during this time)
+        #[arg(long, default_value = "24")]
+        grace_period: u32,
+    },
+
+    /// Revoke certificate
+    Revoke {
+        /// Certificate ID
+        id: String,
+    },
+}
+
+/// Account management commands.
+#[derive(Subcommand, Debug)]
+pub enum AccountCommands {
+    /// Show account details
+    Show,
+
+    /// Update account
+    Update {
+        /// New name
+        #[arg(long)]
+        name: Option<String>,
+    },
+
+    /// Delete account
+    Delete {
+        /// Skip confirmation
+        #[arg(long)]
+        yes: bool,
+    },
+
+    /// Manage email addresses
+    #[command(subcommand)]
+    Emails(EmailsCommands),
+
+    /// Manage sessions
+    #[command(subcommand)]
+    Sessions(SessionsCommands),
+
+    /// Password management
+    #[command(subcommand)]
+    Password(PasswordCommands),
+}
+
+/// Email management commands.
+#[derive(Subcommand, Debug)]
+pub enum EmailsCommands {
+    /// List email addresses
+    List,
+
+    /// Add an email address
+    Add {
+        /// Email address
+        email: String,
+
+        /// Set as primary after verification
+        #[arg(long)]
+        primary: bool,
+    },
+
+    /// Verify an email address
+    Verify {
+        /// Verification token from email
+        #[arg(long)]
+        token: String,
+    },
+
+    /// Resend verification email
+    Resend {
+        /// Email address
+        email: String,
+    },
+
+    /// Remove an email address
+    Remove {
+        /// Email ID
+        id: String,
+    },
+
+    /// Set primary email address
+    SetPrimary {
+        /// Email ID
+        id: String,
+    },
+}
+
+/// Session management commands.
+#[derive(Subcommand, Debug)]
+pub enum SessionsCommands {
+    /// List active sessions
+    List,
+
+    /// Revoke a specific session
+    Revoke {
+        /// Session ID
+        id: String,
+    },
+
+    /// Revoke all other sessions (keep current)
+    RevokeOthers,
+}
+
+/// Password management commands.
+#[derive(Subcommand, Debug)]
+pub enum PasswordCommands {
+    /// Reset password
+    Reset {
+        /// Request a password reset
+        #[arg(long)]
+        request: bool,
+
+        /// Confirm password reset with token
+        #[arg(long)]
+        confirm: bool,
+
+        /// Email address (for request)
+        #[arg(long)]
+        email: Option<String>,
+
+        /// Reset token (for confirm)
+        #[arg(long)]
+        token: Option<String>,
+
+        /// New password (for confirm)
+        #[arg(long)]
+        new_password: Option<String>,
+    },
+}
+
+/// JWKS commands for debugging JWT verification.
+#[derive(Subcommand, Debug)]
+pub enum JwksCommands {
+    /// Get JSON Web Key Set
+    Get,
+
+    /// Get a specific key by ID
+    GetKey {
+        /// Key ID (kid)
+        kid: String,
+    },
+
+    /// Get JWKS from .well-known endpoint
+    WellKnown,
 }
 
 /// Token management commands.
@@ -907,6 +1542,101 @@ pub enum TokensCommands {
         /// Verify signature
         #[arg(long)]
         verify: bool,
+    },
+}
+
+/// Local development environment commands.
+#[derive(Subcommand, Debug)]
+pub enum DevCommands {
+    /// Check if host environment is ready for development
+    Doctor,
+
+    /// Install deploy repository (~/.inferadb/deploy)
+    Install {
+        /// Remove and re-clone if already present
+        #[arg(long)]
+        force: bool,
+
+        /// Clone a specific commit, tag, or branch
+        #[arg(long)]
+        commit: Option<String>,
+    },
+
+    /// Completely remove local dev environment
+    Uninstall {
+        /// Skip confirmation prompt
+        #[arg(long, short)]
+        yes: bool,
+    },
+
+    /// Start local development cluster
+    Start {
+        /// Skip building container images
+        #[arg(long)]
+        skip_build: bool,
+    },
+
+    /// Stop local development cluster (pause containers)
+    Stop {
+        /// Fully destroy the cluster instead of pausing
+        #[arg(long)]
+        destroy: bool,
+    },
+
+    /// Start local development cluster (alias for 'start')
+    #[command(hide = true)]
+    Up {
+        /// Skip building container images
+        #[arg(long)]
+        skip_build: bool,
+    },
+
+    /// Stop local development cluster (alias for 'stop')
+    #[command(hide = true)]
+    Down {
+        /// Fully destroy the cluster instead of pausing
+        #[arg(long)]
+        destroy: bool,
+    },
+
+    /// Show cluster status
+    Status,
+
+    /// View logs
+    Logs {
+        /// Follow log output
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Service to show logs for (engine, control, dashboard, fdb)
+        #[arg(short, long)]
+        service: Option<String>,
+
+        /// Number of lines to show
+        #[arg(long, default_value = "100")]
+        tail: u32,
+    },
+
+    /// Open dashboard in browser
+    Dashboard,
+
+    /// Reset all cluster data
+    Reset {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+    },
+
+    /// Import data into cluster
+    Import {
+        /// File to import
+        file: String,
+    },
+
+    /// Export data from cluster
+    Export {
+        /// Output file
+        output: String,
     },
 }
 

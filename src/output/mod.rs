@@ -5,9 +5,17 @@
 //! - `json` - Structured JSON
 //! - `yaml` - YAML format
 //! - `jsonl` - JSON Lines (one object per line)
+//!
+//! Also provides styled terminal display utilities via the `display` module.
 
+mod display;
 mod table;
 
+pub use display::{
+    colors, get_terminal_width, is_terminal, print_boxed, print_error, print_header, print_info,
+    print_kv, print_phase, print_success, print_warning, DisplayEntry, EntryStyle, ProgressBox,
+    StyledDisplay,
+};
 pub use table::TableFormatter;
 
 use crate::error::Result;

@@ -175,20 +175,95 @@ impl Config {
     }
 
     /// Get the path to the user config file.
+    ///
+    /// Follows XDG Base Directory Specification:
+    /// - Uses `XDG_CONFIG_HOME/inferadb/cli.yaml` if set
+    /// - Falls back to `~/.config/inferadb/cli.yaml`
     pub fn user_config_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|p| p.join("inferadb").join("cli.yaml"))
+        Self::config_dir().map(|p| p.join("cli.yaml"))
     }
 
     /// Get the path to the user config directory.
+    ///
+    /// Cross-platform behavior:
+    /// - If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/inferadb`
+    /// - Linux/macOS: Falls back to `~/.config/inferadb` (XDG default)
+    /// - Windows: Falls back to `%APPDATA%\inferadb`
     pub fn config_dir() -> Option<PathBuf> {
-        dirs::config_dir().map(|p| p.join("inferadb"))
+        // Check XDG_CONFIG_HOME first (works on all platforms if explicitly set)
+        if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            if !xdg_config.is_empty() {
+                return Some(PathBuf::from(xdg_config).join("inferadb"));
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // Windows: use %APPDATA%\inferadb
+            dirs::config_dir().map(|p| p.join("inferadb"))
+        }
+
+        #[cfg(not(windows))]
+        {
+            // Unix (Linux/macOS): use ~/.config/inferadb (XDG default)
+            dirs::home_dir().map(|p| p.join(".config").join("inferadb"))
+        }
     }
 
     /// Get the path to the state directory.
+    ///
+    /// Cross-platform behavior:
+    /// - If `XDG_STATE_HOME` is set, uses `$XDG_STATE_HOME/inferadb`
+    /// - Linux/macOS: Falls back to `~/.local/state/inferadb` (XDG default)
+    /// - Windows: Falls back to `%LOCALAPPDATA%\inferadb`
     pub fn state_dir() -> Option<PathBuf> {
-        dirs::state_dir()
-            .or_else(dirs::data_local_dir)
-            .map(|p| p.join("inferadb"))
+        // Check XDG_STATE_HOME first
+        if let Ok(xdg_state) = std::env::var("XDG_STATE_HOME") {
+            if !xdg_state.is_empty() {
+                return Some(PathBuf::from(xdg_state).join("inferadb"));
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // Windows: use %LOCALAPPDATA%\inferadb
+            dirs::data_local_dir().map(|p| p.join("inferadb"))
+        }
+
+        #[cfg(not(windows))]
+        {
+            // Unix (Linux/macOS): use ~/.local/state/inferadb (XDG default)
+            dirs::home_dir().map(|p| p.join(".local").join("state").join("inferadb"))
+        }
+    }
+
+    /// Get the path to the data directory.
+    ///
+    /// Cross-platform behavior:
+    /// - If `XDG_DATA_HOME` is set, uses `$XDG_DATA_HOME/inferadb`
+    /// - Linux/macOS: Falls back to `~/.local/share/inferadb` (XDG default)
+    /// - Windows: Falls back to `%APPDATA%\inferadb`
+    ///
+    /// Used for user-specific data files (e.g., deploy repository clone).
+    pub fn data_dir() -> Option<PathBuf> {
+        // Check XDG_DATA_HOME first
+        if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
+            if !xdg_data.is_empty() {
+                return Some(PathBuf::from(xdg_data).join("inferadb"));
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // Windows: use %APPDATA%\inferadb (same as config on Windows)
+            dirs::data_dir().map(|p| p.join("inferadb"))
+        }
+
+        #[cfg(not(windows))]
+        {
+            // Unix (Linux/macOS): use ~/.local/share/inferadb (XDG default)
+            dirs::home_dir().map(|p| p.join(".local").join("share").join("inferadb"))
+        }
     }
 
     /// Get a profile by name.

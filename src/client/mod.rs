@@ -9,6 +9,8 @@ pub use auth::OAuthFlow;
 
 use crate::config::{Config, CredentialStore, Credentials, Profile};
 use crate::error::{Error, Result};
+use inferadb::client::OrganizationClient;
+use inferadb::control::{AccountClient, JwksClient, OrganizationsClient};
 use inferadb::{BearerCredentialsConfig, Client, VaultClient};
 
 /// CLI client that wraps the InferaDB SDK client.
@@ -90,6 +92,26 @@ impl CliClient {
     /// Get the vault ID.
     pub fn vault_id(&self) -> &str {
         &self.vault_id
+    }
+
+    /// Get an organizations client for listing and creating organizations.
+    pub fn organizations(&self) -> OrganizationsClient {
+        self.inner.organizations()
+    }
+
+    /// Get a client for organization-level operations.
+    pub fn organization(&self, org_id: impl Into<String>) -> OrganizationClient {
+        self.inner.organization(org_id)
+    }
+
+    /// Get an account client for the current user.
+    pub fn account(&self) -> AccountClient {
+        self.inner.account()
+    }
+
+    /// Get a JWKS client for key operations.
+    pub fn jwks(&self) -> JwksClient {
+        self.inner.jwks()
     }
 
     /// Check service health.
@@ -203,6 +225,30 @@ impl Context {
             .as_deref()
             .or(self.config.default_profile.as_deref())
             .unwrap_or("default")
+    }
+
+    /// Get the organization ID from the profile.
+    pub fn profile_org_id(&self) -> Option<&str> {
+        self.profile.org.as_deref()
+    }
+
+    /// Get the vault ID from the profile.
+    pub fn profile_vault_id(&self) -> Option<&str> {
+        self.profile.vault.as_deref()
+    }
+
+    /// Require an organization ID from the profile.
+    pub fn require_org_id(&self) -> Result<String> {
+        self.profile.org.clone().ok_or_else(|| {
+            Error::config("No organization configured. Use --org or set org in your profile.")
+        })
+    }
+
+    /// Require a vault ID from the profile.
+    pub fn require_vault_id(&self) -> Result<String> {
+        self.profile.vault.clone().ok_or_else(|| {
+            Error::config("No vault configured. Use --vault or set vault in your profile.")
+        })
     }
 }
 
