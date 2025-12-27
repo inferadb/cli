@@ -3,6 +3,7 @@
 use crate::client::Context;
 use crate::error::Result;
 use crate::output::Displayable;
+use crate::tui;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -87,9 +88,8 @@ pub async fn preview(ctx: &Context, file: &str, base: Option<&str>, impact: bool
     let client = ctx.client().await?;
     let schemas = client.vault().schemas();
 
-    // Validate the schema first
-    ctx.output.info("Validating schema...");
-    let validation = schemas.validate(&content).await?;
+    // Validate the schema first with spinner
+    let validation = tui::spin("Validating schema...", schemas.validate(&content)).await?;
 
     if !validation.is_valid() {
         ctx.output.error("Schema validation failed:");
@@ -139,8 +139,8 @@ pub async fn push(
     let schemas = client.vault().schemas();
 
     if dry_run {
-        ctx.output.info("Dry run: validating schema...");
-        let validation = schemas.validate(&content).await?;
+        // Validate with spinner
+        let validation = tui::spin("Validating schema...", schemas.validate(&content)).await?;
 
         if !validation.is_valid() {
             ctx.output.error("Schema validation failed:");
@@ -160,8 +160,8 @@ pub async fn push(
         return Ok(());
     }
 
-    ctx.output.info("Pushing schema...");
-    let result = schemas.push(&content).await?;
+    // Push with spinner
+    let result = tui::spin("Pushing schema...", schemas.push(&content)).await?;
 
     if !result.validation.is_valid() {
         ctx.output.error("Schema validation failed:");
@@ -187,8 +187,8 @@ pub async fn push(
     }
 
     if activate {
-        ctx.output.info("Activating schema...");
-        schemas.activate(version).await?;
+        // Activate with spinner
+        tui::spin("Activating schema...", schemas.activate(version)).await?;
         ctx.output
             .success(&format!("Schema version {} is now active.", version));
     } else {
@@ -238,14 +238,16 @@ pub async fn rollback(ctx: &Context, version: Option<&str>) -> Result<()> {
         }
     };
 
-    if !ctx.yes && !ctx.confirm(&format!("Rollback to schema version {}?", target_version))? {
+    if !ctx.confirm_danger(&format!("Rollback to schema version {}?", target_version))? {
         ctx.output.info("Cancelled.");
         return Ok(());
     }
 
-    ctx.output
-        .info(&format!("Rolling back to version {}...", target_version));
-    schemas.activate(&target_version).await?;
+    tui::spin(
+        format!("Rolling back to version {}...", target_version),
+        schemas.activate(&target_version),
+    )
+    .await?;
     ctx.output.success(&format!(
         "Rolled back to schema version {}.",
         target_version
@@ -307,7 +309,7 @@ pub async fn validate(ctx: &Context, file: &str) -> Result<()> {
     let client = ctx.client().await?;
     let schemas = client.vault().schemas();
 
-    let validation = schemas.validate(&content).await?;
+    let validation = tui::spin("Validating schema...", schemas.validate(&content)).await?;
 
     if validation.is_valid() {
         ctx.output.success("Schema is valid!");
@@ -461,7 +463,7 @@ pub async fn delete(ctx: &Context, version: &str) -> Result<()> {
         return Ok(());
     }
 
-    if !ctx.yes && !ctx.confirm(&format!("Delete schema version {}?", version))? {
+    if !ctx.confirm_danger(&format!("Delete schema version {}?", version))? {
         ctx.output.info("Cancelled.");
         return Ok(());
     }
@@ -485,8 +487,11 @@ pub async fn activate_with_options(
 
     // Show diff if requested
     if show_diff {
-        ctx.output.info("Comparing with active schema...");
-        let diff_result = schemas.diff("active", version).await?;
+        let diff_result = tui::spin(
+            "Comparing with active schema...",
+            schemas.diff("active", version),
+        )
+        .await?;
 
         if diff_result.changes.is_empty() {
             ctx.output.info("No changes from active version.");
@@ -531,9 +536,11 @@ pub async fn activate_with_options(
         ctx.output.info("Proceeding with full activation.");
     }
 
-    ctx.output
-        .info(&format!("Activating schema version {}...", version));
-    let schema = schemas.activate(version).await?;
+    let schema = tui::spin(
+        format!("Activating schema version {}...", version),
+        schemas.activate(version),
+    )
+    .await?;
 
     ctx.output
         .success(&format!("Schema version {} is now active.", schema.version));
@@ -548,7 +555,7 @@ pub async fn format(ctx: &Context, file: &str, write: bool) -> Result<()> {
     let schemas = client.vault().schemas();
 
     // Validate first to check for syntax errors
-    let validation = schemas.validate(&content).await?;
+    let validation = tui::spin("Checking schema syntax...", schemas.validate(&content)).await?;
     if !validation.is_valid() {
         ctx.output.error("Cannot format: schema has syntax errors");
         for err in &validation.errors {
@@ -843,7 +850,8 @@ pub async fn visualize(
             println!("    end");
             println!("```");
             println!();
-            ctx.output.info("Copy the above Mermaid diagram to visualize.");
+            ctx.output
+                .info("Copy the above Mermaid diagram to visualize.");
             ctx.output
                 .info("Use mermaid.live or a Mermaid-compatible viewer.");
             ctx.output

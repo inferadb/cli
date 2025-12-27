@@ -627,8 +627,12 @@ async fn tokens_dispatch(ctx: &Context, sub: &crate::cli::TokensCommands) -> Res
 async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()> {
     use crate::cli::DevCommands;
     match sub {
-        DevCommands::Doctor => dev::doctor(ctx).await,
-        DevCommands::Install { force, commit } => dev::install(ctx, *force, commit.as_deref()).await,
+        DevCommands::Doctor { interactive } => dev::doctor(ctx, *interactive).await,
+        DevCommands::Install {
+            force,
+            commit,
+            interactive,
+        } => dev::install(ctx, *force, commit.as_deref(), *interactive).await,
         DevCommands::Uninstall { yes } => dev::uninstall(ctx, *yes).await,
         DevCommands::Start { skip_build } => dev::start(ctx, *skip_build).await,
         DevCommands::Stop { destroy } => dev::stop(ctx, *destroy).await,
@@ -640,7 +644,7 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
             eprintln!("Hint: 'dev down' is now 'dev stop'\n");
             dev::stop(ctx, *destroy).await
         }
-        DevCommands::Status => dev::dev_status(ctx).await,
+        DevCommands::Status { interactive } => dev::dev_status(ctx, *interactive).await,
         DevCommands::Logs {
             follow,
             service,

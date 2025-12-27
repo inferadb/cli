@@ -212,11 +212,16 @@ impl Context {
             return Ok(true);
         }
 
-        eprint!("{} [y/N]: ", message);
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
+        crate::tui::confirm(message)
+    }
 
-        Ok(input.trim().eq_ignore_ascii_case("y") || input.trim().eq_ignore_ascii_case("yes"))
+    /// Prompt for confirmation for dangerous operations (respects --yes flag).
+    pub fn confirm_danger(&self, message: &str) -> Result<bool> {
+        if self.yes {
+            return Ok(true);
+        }
+
+        crate::tui::confirm_danger(message)
     }
 
     /// Get the profile name being used.

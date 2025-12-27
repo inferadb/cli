@@ -1,8 +1,10 @@
 //! Command-line argument parsing and command definitions.
 //!
 //! Uses clap with derive macros for type-safe argument parsing.
+//! Help text is localized at runtime using the i18n system.
 
-use clap::{Parser, Subcommand, ValueEnum};
+use crate::t;
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 
 /// InferaDB CLI - Authorization Engine
 #[derive(Parser, Debug)]
@@ -42,6 +44,10 @@ pub struct Cli {
     /// Skip confirmations (answer yes to all prompts)
     #[arg(short, long, global = true)]
     pub yes: bool,
+
+    /// Language for CLI output (e.g., en-US)
+    #[arg(long, global = true, env = "INFERADB_LANG", default_value = "en-US")]
+    pub lang: String,
 
     /// Subcommand to execute.
     #[command(subcommand)]
@@ -1549,7 +1555,11 @@ pub enum TokensCommands {
 #[derive(Subcommand, Debug)]
 pub enum DevCommands {
     /// Check if host environment is ready for development
-    Doctor,
+    Doctor {
+        /// Run in full-screen interactive TUI mode
+        #[arg(long, short)]
+        interactive: bool,
+    },
 
     /// Install deploy repository (~/.inferadb/deploy)
     Install {
@@ -1560,6 +1570,10 @@ pub enum DevCommands {
         /// Clone a specific commit, tag, or branch
         #[arg(long)]
         commit: Option<String>,
+
+        /// Run in full-screen interactive TUI mode
+        #[arg(long, short)]
+        interactive: bool,
     },
 
     /// Completely remove local dev environment
@@ -1600,7 +1614,11 @@ pub enum DevCommands {
     },
 
     /// Show cluster status
-    Status,
+    Status {
+        /// Run in full-screen interactive TUI mode
+        #[arg(long, short)]
+        interactive: bool,
+    },
 
     /// View logs
     Logs {
@@ -1638,6 +1656,79 @@ pub enum DevCommands {
         /// Output file
         output: String,
     },
+}
+
+impl Cli {
+    /// Get the CLI command with localized help text.
+    ///
+    /// This applies translations from the i18n system to all command
+    /// and argument help text.
+    pub fn command_localized() -> clap::Command {
+        let cmd = Self::command();
+        localize_command(cmd)
+    }
+}
+
+/// Recursively localize a command and all its subcommands.
+fn localize_command(mut cmd: clap::Command) -> clap::Command {
+    let name = cmd.get_name().to_string();
+
+    // Localize command about text based on command name
+    let about_key = format!("cmd-{}-about", name);
+    if let Some(_i18n) = crate::i18n::try_get() {
+        let translated = t!(&about_key);
+        // Only apply if we got a real translation (not the key back)
+        if translated != about_key {
+            cmd = cmd.about(translated);
+        }
+    }
+
+    // Localize global options for root command
+    if name == "inferadb" {
+        cmd = localize_root_args(cmd);
+    }
+
+    // Recursively localize subcommands
+    let subcommands: Vec<clap::Command> = cmd.get_subcommands().cloned().collect();
+    for subcmd in subcommands {
+        cmd = cmd.mut_subcommand(subcmd.get_name(), |_| localize_command(subcmd.clone()));
+    }
+
+    cmd
+}
+
+/// Localize the root command arguments.
+fn localize_root_args(mut cmd: clap::Command) -> clap::Command {
+    if crate::i18n::try_get().is_none() {
+        return cmd;
+    }
+
+    // Apply translations to global arguments
+    let arg_translations = [
+        ("profile", "cli-profile-help"),
+        ("org", "cli-org-help"),
+        ("vault", "cli-vault-help"),
+        ("output", "cli-output-help"),
+        ("color", "cli-color-help"),
+        ("quiet", "cli-quiet-help"),
+        ("yes", "cli-yes-help"),
+        ("debug", "cli-debug-help"),
+    ];
+
+    for (arg_name, key) in arg_translations {
+        let translated = t!(key);
+        if translated != key {
+            cmd = cmd.mut_arg(arg_name, |arg| arg.help(translated.clone()));
+        }
+    }
+
+    // Update the about text
+    let about = t!("cli-about");
+    if about != "cli-about" {
+        cmd = cmd.about(about);
+    }
+
+    cmd
 }
 
 /// Parse the @profile prefix from command-line arguments.

@@ -134,7 +134,8 @@ mod config_tests {
 
 #[cfg(test)]
 mod output_tests {
-    use inferadb_cli::output::{OutputFormat, TableFormatter};
+    use ferment::components::{Column, Table};
+    use inferadb_cli::output::OutputFormat;
 
     #[test]
     fn test_output_format_parse() {
@@ -145,10 +146,11 @@ mod output_tests {
     }
 
     #[test]
-    fn test_table_formatter() {
-        let mut table = TableFormatter::new();
-        table.headers(["Name", "Value"]);
-        table.row(["foo", "bar"]);
+    fn test_table_render() {
+        let table = Table::new()
+            .columns(vec![Column::new("Name"), Column::new("Value")])
+            .rows(vec![vec!["foo".to_string(), "bar".to_string()]])
+            .focused(false);
 
         let output = table.render();
         assert!(output.contains("Name"));

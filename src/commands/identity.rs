@@ -503,12 +503,15 @@ pub async fn stats(ctx: &Context, trends: bool, compact: bool) -> Result<()> {
     if trends {
         println!();
         println!("Trends:");
-        ctx.output.info("Historical trends require time-series data.");
-        ctx.output.info("Use 'inferadb what-changed --since 1d' to see recent activity.");
+        ctx.output
+            .info("Historical trends require time-series data.");
+        ctx.output
+            .info("Use 'inferadb what-changed --since 1d' to see recent activity.");
     }
 
     println!();
-    ctx.output.info("For detailed stats, use the InferaDB Dashboard.");
+    ctx.output
+        .info("For detailed stats, use the InferaDB Dashboard.");
 
     Ok(())
 }
@@ -771,8 +774,10 @@ pub async fn templates(
                     show_export_backup_template(format);
                 }
                 _ => {
-                    ctx.output.error(&format!("Unknown template: {}", template_name));
-                    ctx.output.info("Run 'inferadb templates' to see available templates.");
+                    ctx.output
+                        .error(&format!("Unknown template: {}", template_name));
+                    ctx.output
+                        .info("Run 'inferadb templates' to see available templates.");
                 }
             }
         }
@@ -789,7 +794,9 @@ fn show_user_offboarding_template(subject: &str, format: &str) {
         println!("USER=\"{}\"", subject);
         println!();
         println!("# Step 1: Export current access");
-        println!("inferadb relationships list --subject \"$USER\" -o json > \"${{USER}}-access.json\"");
+        println!(
+            "inferadb relationships list --subject \"$USER\" -o json > \"${{USER}}-access.json\""
+        );
         println!();
         println!("# Step 2: Remove all relationships");
         println!("inferadb relationships list --subject \"$USER\" -o json | \\");
@@ -812,11 +819,17 @@ fn show_user_offboarding_template(subject: &str, format: &str) {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!();
         println!("# Step 1: Review what the user has access to");
-        println!("inferadb relationships list --subject {} -o json > access-backup.json", subject);
+        println!(
+            "inferadb relationships list --subject {} -o json > access-backup.json",
+            subject
+        );
         println!();
         println!("# Step 2: Remove all relationships for this user");
         println!("# (Review the backup file first!)");
-        println!("inferadb relationships list --subject {} | while read rel; do", subject);
+        println!(
+            "inferadb relationships list --subject {} | while read rel; do",
+            subject
+        );
         println!("  inferadb relationships delete $rel");
         println!("done");
         println!();
@@ -1041,19 +1054,18 @@ pub async fn guide(ctx: &Context, name: Option<&str>) -> Result<()> {
             println!();
             println!("Use 'inferadb guide <name>' for details.");
         }
-        Some(guide_name) => {
-            match guide_name {
-                "quickstart" => show_quickstart_guide(),
-                "concepts" => show_concepts_guide(),
-                "schema-deployment" => show_schema_deployment_guide(),
-                "production-checklist" => show_production_checklist_guide(),
-                "incident-response" => show_incident_response_guide(),
-                _ => {
-                    ctx.output.error(&format!("Unknown guide: {}", guide_name));
-                    ctx.output.info("Run 'inferadb guide' to see available guides.");
-                }
+        Some(guide_name) => match guide_name {
+            "quickstart" => show_quickstart_guide(),
+            "concepts" => show_concepts_guide(),
+            "schema-deployment" => show_schema_deployment_guide(),
+            "production-checklist" => show_production_checklist_guide(),
+            "incident-response" => show_incident_response_guide(),
+            _ => {
+                ctx.output.error(&format!("Unknown guide: {}", guide_name));
+                ctx.output
+                    .info("Run 'inferadb guide' to see available guides.");
             }
-        }
+        },
     }
     Ok(())
 }

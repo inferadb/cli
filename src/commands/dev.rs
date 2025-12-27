@@ -13,9 +13,10 @@ use std::time::Duration;
 use crate::client::Context;
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::output::{
-    print_error, print_header, print_info, print_phase, print_success, print_warning, DisplayEntry,
-    ProgressBox, StyledDisplay,
+use crate::tui::{ClusterStatus, RefreshResult, TabData, TableRow};
+use ferment::output::{
+    error as print_error, header as print_header, info as print_info, phase as print_phase,
+    success as print_success, warning as print_warning,
 };
 
 // Constants
@@ -338,335 +339,623 @@ fn get_install_hint(dep: &Dependency) -> &'static str {
     }
 }
 
-/// Run dev doctor - check environment readiness
-pub async fn doctor(_ctx: &Context) -> Result<()> {
-    print_header("InferaDB Development Environment Doctor");
+// ============================================================================
+// Shared helper functions
+// ============================================================================
 
-    let mut all_required_ok = true;
-    let mut entries: Vec<DisplayEntry> = Vec::new();
-    let mut warnings = Vec::new();
+/// Print a formatted header for non-interactive mode with dimmed slashes.
+fn print_styled_header(title: &str) {
+    use ferment::style::Color;
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset = "\x1b[0m";
+    println!("\n{}//{}  {}  {}//{}", dim, reset, title, dim, reset);
+    println!();
+}
 
-    // Check dependencies
-    for dep in DEPENDENCIES {
-        let exists = command_exists(dep.command);
-        let version = if exists {
-            run_command_optional(dep.command, dep.version_args)
-                .map(|v| extract_version_string(&v, dep.command))
-                .unwrap_or_else(|| "installed".to_string())
-        } else {
-            String::new()
-        };
+// ============================================================================
+// Doctor check functions (shared between interactive and non-interactive modes)
+// ============================================================================
 
-        if exists {
-            entries.push(DisplayEntry::success("Dependencies", dep.name, version));
-        } else if dep.required {
-            all_required_ok = false;
-            entries.push(DisplayEntry::error(
+use crate::tui::{CheckResult, EnvironmentStatus};
+
+/// Check a single dependency and return the result.
+fn check_dependency(dep: &Dependency) -> (CheckResult, bool) {
+    let exists = command_exists(dep.command);
+    let version = if exists {
+        run_command_optional(dep.command, dep.version_args)
+            .map(|v| extract_version_string(&v, dep.command))
+            .unwrap_or_else(|| "installed".to_string())
+    } else {
+        String::new()
+    };
+
+    if exists {
+        (
+            CheckResult::success("Dependencies", dep.name, version),
+            true,
+        )
+    } else if dep.required {
+        (
+            CheckResult::failure(
                 "Dependencies",
                 dep.name,
                 format!("NOT FOUND → {}", get_install_hint(dep)),
-            ));
-        } else {
-            warnings.push(format!(
-                "{} not found (optional, but recommended)",
-                dep.name
-            ));
-            entries.push(DisplayEntry::dimmed(
-                "Dependencies",
-                dep.name,
-                "not found (optional)",
-            ));
-        }
+            ),
+            false,
+        )
+    } else {
+        (
+            CheckResult::optional("Dependencies", dep.name, "not found (optional)"),
+            true,
+        )
+    }
+}
+
+/// Check if Docker daemon is running.
+fn check_docker_daemon() -> Option<(CheckResult, bool)> {
+    if !command_exists("docker") {
+        return None;
     }
 
-    // Check Docker daemon is running
-    if command_exists("docker") {
-        match run_command_optional("docker", &["info"]) {
-            Some(_) => {
-                entries.push(DisplayEntry::success(
+    match run_command_optional("docker", &["info"]) {
+        Some(_) => Some((
+            CheckResult::success("Services", "Docker daemon", "running"),
+            true,
+        )),
+        None => Some((
+            CheckResult::failure(
+                "Services",
+                "Docker daemon",
+                "not running → start Docker Desktop",
+            ),
+            false,
+        )),
+    }
+}
+
+/// Check Tailscale connection status.
+fn check_tailscale_connection() -> Option<CheckResult> {
+    if !command_exists("tailscale") {
+        return None;
+    }
+
+    match run_command_optional("tailscale", &["status", "--json"]) {
+        Some(output) => {
+            if output.contains("\"BackendState\"") && output.contains("\"Running\"") {
+                Some(CheckResult::success("Services", "Tailscale", "connected"))
+            } else {
+                Some(CheckResult::optional(
                     "Services",
-                    "Docker daemon",
-                    "running",
-                ));
-            }
-            None => {
-                all_required_ok = false;
-                entries.push(DisplayEntry::error(
-                    "Services",
-                    "Docker daemon",
-                    "not running → start Docker Desktop",
-                ));
+                    "Tailscale",
+                    "not connected → tailscale up",
+                ))
             }
         }
+        None => None,
     }
+}
 
-    // Check if Tailscale is connected (optional)
-    if command_exists("tailscale") {
-        match run_command_optional("tailscale", &["status", "--json"]) {
-            Some(output) => {
-                if output.contains("\"BackendState\"") && output.contains("\"Running\"") {
-                    entries.push(DisplayEntry::success("Services", "Tailscale", "connected"));
-                } else {
-                    warnings.push("Tailscale is installed but not connected".to_string());
-                    entries.push(DisplayEntry::dimmed(
-                        "Services",
-                        "Tailscale",
-                        "not connected → tailscale up",
-                    ));
-                }
-            }
-            None => {
-                warnings.push("Could not check Tailscale status".to_string());
-            }
-        }
-    }
-
-    // Check for cached Tailscale credentials
+/// Check for cached Tailscale OAuth credentials.
+fn check_tailscale_credentials() -> CheckResult {
     let creds_file = get_tailscale_creds_file();
     if creds_file.exists() {
-        entries.push(DisplayEntry::success(
-            "Configuration",
-            "Tailscale OAuth",
-            "credentials cached",
-        ));
+        CheckResult::success("Configuration", "Tailscale OAuth", "credentials cached")
     } else {
-        warnings.push("No Tailscale OAuth credentials cached".to_string());
-        entries.push(DisplayEntry::dimmed(
+        CheckResult::optional(
             "Configuration",
             "Tailscale OAuth",
             "will be prompted during dev start",
-        ));
+        )
     }
+}
 
-    // Check deploy repository
+/// Check deploy repository status.
+fn check_deploy_repository() -> CheckResult {
     let deploy_dir = get_deploy_dir();
     if deploy_dir.exists() {
-        entries.push(DisplayEntry::success(
+        CheckResult::success(
             "Configuration",
             "Deployment",
             deploy_dir.display().to_string(),
-        ));
+        )
     } else {
-        entries.push(DisplayEntry::dimmed(
-            "Configuration",
-            "Deployment",
-            "pending install",
-        ));
+        CheckResult::optional("Configuration", "Deployment", "pending install")
+    }
+}
+
+/// Extract the detail from a CheckResult status string.
+fn extract_status_detail(status: &str) -> &str {
+    status
+        .trim_start_matches("✓ ")
+        .trim_start_matches("✗ ")
+        .trim_start_matches("○ ")
+}
+
+/// Format a check result with component name for spinner output.
+fn format_check_output(component: &str, detail: &str) -> String {
+    format!("{}: {}", component, detail)
+}
+
+/// Run all doctor checks and return results.
+fn run_all_checks() -> (Vec<CheckResult>, EnvironmentStatus) {
+    let mut all_required_ok = true;
+    let mut results: Vec<CheckResult> = Vec::new();
+
+    // Check dependencies
+    for dep in DEPENDENCIES {
+        let (result, ok) = check_dependency(dep);
+        if !ok {
+            all_required_ok = false;
+        }
+        results.push(result);
     }
 
-    // Display the status table
-    StyledDisplay::new()
-        .title("Environment Status")
-        .entries(entries)
-        .display();
+    // Check Docker daemon
+    if let Some((result, ok)) = check_docker_daemon() {
+        if !ok {
+            all_required_ok = false;
+        }
+        results.push(result);
+    }
 
-    // Summary
+    // Check Tailscale connection (optional)
+    if let Some(result) = check_tailscale_connection() {
+        results.push(result);
+    }
+
+    // Check Tailscale credentials
+    results.push(check_tailscale_credentials());
+
+    // Check deploy repository
+    results.push(check_deploy_repository());
+
+    let status = if all_required_ok {
+        EnvironmentStatus::Ready
+    } else {
+        EnvironmentStatus::NotReady
+    };
+
+    (results, status)
+}
+
+/// Run dev doctor - check environment readiness
+pub async fn doctor(ctx: &Context, interactive: bool) -> Result<()> {
+    // Use full-screen TUI if explicitly requested and available
+    if interactive && crate::tui::is_interactive(ctx) {
+        return doctor_interactive();
+    }
+
+    // Default: Use spinners for each check
+    doctor_with_spinners()
+}
+
+/// Run doctor with inline spinners for each check.
+fn doctor_with_spinners() -> Result<()> {
+    use crate::tui::start_spinner;
+
+    print_styled_header("InferaDB Development Cluster Doctor");
+
+    let mut all_required_ok = true;
+
+    // Check dependencies
+    for dep in DEPENDENCIES {
+        let spin = start_spinner(format!("Check {}", dep.name));
+        let (result, ok) = check_dependency(dep);
+        if !ok {
+            all_required_ok = false;
+        }
+
+        let detail = extract_status_detail(&result.status);
+        let output = format_check_output(&result.component, detail);
+
+        if result.status.starts_with('✓') {
+            spin.success(&output);
+        } else if result.status.starts_with('✗') {
+            spin.failure(&output);
+        } else if result.status.starts_with('○') {
+            spin.warning(&output);
+        } else {
+            spin.success(&output);
+        }
+    }
+
+    // Check Docker daemon
+    if command_exists("docker") {
+        let spin = start_spinner("Check Docker daemon");
+        if let Some((result, ok)) = check_docker_daemon() {
+            if !ok {
+                all_required_ok = false;
+            }
+
+            let detail = extract_status_detail(&result.status);
+            let output = format_check_output(&result.component, detail);
+
+            if result.status.starts_with('✓') {
+                spin.success(&output);
+            } else if result.status.starts_with('✗') {
+                spin.failure(&output);
+            } else {
+                spin.success(&output);
+            }
+        } else {
+            spin.success("Docker daemon: skipped");
+        }
+    }
+
+    // Check Tailscale connection (optional)
+    if command_exists("tailscale") {
+        let spin = start_spinner("Check Tailscale");
+        if let Some(result) = check_tailscale_connection() {
+            let detail = extract_status_detail(&result.status);
+            let output = format_check_output(&result.component, detail);
+
+            if result.status.starts_with('✓') {
+                spin.success(&output);
+            } else if result.status.starts_with('○') {
+                spin.warning(&output);
+            } else {
+                spin.success(&output);
+            }
+        } else {
+            spin.warning("Tailscale: could not check status");
+        }
+    }
+
+    // Check Tailscale credentials
+    {
+        let spin = start_spinner("Check Tailscale OAuth");
+        let result = check_tailscale_credentials();
+        let detail = extract_status_detail(&result.status);
+        let output = format_check_output(&result.component, detail);
+
+        if result.status.starts_with('✓') {
+            spin.success(&output);
+        } else if result.status.starts_with('○') {
+            spin.warning(&output);
+        } else {
+            spin.success(&output);
+        }
+    }
+
+    // Check deploy repository
+    {
+        let spin = start_spinner("Check deployment repository");
+        let result = check_deploy_repository();
+        let detail = extract_status_detail(&result.status);
+        let output = format_check_output(&result.component, detail);
+
+        if result.status.starts_with('✓') {
+            spin.success(&output);
+        } else if result.status.starts_with('○') {
+            spin.warning(&output);
+        } else {
+            spin.success(&output);
+        }
+    }
+
+    // Print overall status
+    println!();
     if all_required_ok {
         print_success("Environment ready");
-        if !warnings.is_empty() {
-            println!();
-            for w in &warnings {
-                print_warning(w);
-            }
-        }
         println!();
-        print_info(TIP_START_CLUSTER);
+        print_info("Run 'inferadb dev start' to start the development cluster");
         Ok(())
     } else {
-        print_error("Environment not ready");
-        println!();
-        print_info("Please install the missing required dependencies above.");
+        print_error("Environment not ready - missing required dependencies");
         Err(Error::Other("Missing required dependencies".to_string()))
     }
 }
 
-/// Run dev install - clone deploy repository and set up dependencies
-pub async fn install(_ctx: &Context, force: bool, commit: Option<&str>) -> Result<()> {
-    let deploy_dir = get_deploy_dir();
-    let progress = ProgressBox::new("Installing InferaDB Development Environment");
+/// Run doctor with full-screen TUI.
+fn doctor_interactive() -> Result<()> {
+    use crate::tui::DoctorView;
+    use ferment::output::{terminal_height, terminal_width};
+    use ferment::runtime::{Program, ProgramOptions};
 
-    // Step 1: Clone deploy repository
-    progress.step("Clone deployment repository");
+    let width = terminal_width();
+    let height = terminal_height();
 
-    let needs_clone = if deploy_dir.exists() {
-        if force {
-            fs::remove_dir_all(&deploy_dir).map_err(|e| {
-                Error::Other(format!("Failed to remove {}: {}", deploy_dir.display(), e))
-            })?;
-            progress.info("Removed existing installation");
-            true
-        } else {
-            progress.success(&deploy_dir.display().to_string());
-            progress.info("Already installed, running setup checks");
-            false
-        }
+    let (results, status) = run_all_checks();
+
+    let view = DoctorView::new(width, height)
+        .with_status(status)
+        .with_results(results);
+
+    let is_ready = view.is_ready();
+
+    Program::new(view)
+        .with_options(ProgramOptions::fullscreen())
+        .run()
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+    if is_ready {
+        Ok(())
     } else {
-        true
-    };
+        Err(Error::Other("Missing required dependencies".to_string()))
+    }
+}
 
-    if needs_clone {
-        // Ensure parent directory exists
-        if let Some(parent) = deploy_dir.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                Error::Other(format!(
-                    "Failed to create directory {}: {}",
-                    parent.display(),
-                    e
-                ))
-            })?;
-        }
+// ============================================================================
+// Install step functions (shared between interactive and non-interactive modes)
+// ============================================================================
 
-        // Clone - use shallow clone only if no specific commit requested
-        let clone_result = if commit.is_some() {
-            run_command_optional(
-                "git",
-                &[
-                    "clone",
-                    "--quiet",
-                    DEPLOY_REPO_URL,
-                    deploy_dir.to_str().unwrap(),
-                ],
-            )
+/// Step: Clone the deployment repository.
+fn step_clone_repo(
+    deploy_dir: &std::path::Path,
+    force: bool,
+    commit: Option<&str>,
+) -> std::result::Result<Option<String>, String> {
+    if deploy_dir.exists() {
+        if force {
+            fs::remove_dir_all(deploy_dir)
+                .map_err(|e| format!("Failed to remove {}: {}", deploy_dir.display(), e))?;
         } else {
-            run_command_optional(
-                "git",
-                &[
-                    "clone",
-                    "--depth",
-                    "1",
-                    "--quiet",
-                    DEPLOY_REPO_URL,
-                    deploy_dir.to_str().unwrap(),
-                ],
-            )
-        };
-
-        if clone_result.is_none() {
-            progress.error("Failed to clone repository");
-            progress.end();
-            return Err(Error::Other(
-                "Failed to clone deploy repository".to_string(),
-            ));
+            return Ok(Some(format!(
+                "{} (already installed)",
+                deploy_dir.display()
+            )));
         }
+    }
 
-        // Checkout specific commit if requested
-        if let Some(ref_spec) = commit {
-            let checkout_result = run_command_optional(
-                "git",
-                &["-C", deploy_dir.to_str().unwrap(), "checkout", ref_spec],
-            );
+    if let Some(parent) = deploy_dir.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+    }
 
-            if checkout_result.is_some() {
-                progress.success(&format!("{} ({})", deploy_dir.display(), ref_spec));
-            } else {
-                progress.error(&format!("Failed to checkout '{}'", ref_spec));
-                progress.end();
-                return Err(Error::Other(format!("Failed to checkout '{}'", ref_spec)));
-            }
-        } else {
-            progress.success(&deploy_dir.display().to_string());
-        }
-
-        // Initialize submodules (silently, no error if none exist)
-        let _ = run_command_optional(
+    let clone_ok = if commit.is_some() {
+        run_command_optional(
             "git",
             &[
-                "-C",
-                deploy_dir.to_str().unwrap(),
-                "submodule",
-                "update",
-                "--init",
-                "--recursive",
+                "clone",
                 "--quiet",
+                DEPLOY_REPO_URL,
+                deploy_dir.to_str().unwrap(),
             ],
-        );
-    }
-    progress.blank();
+        )
+        .is_some()
+    } else {
+        run_command_optional(
+            "git",
+            &[
+                "clone",
+                "--depth",
+                "1",
+                "--quiet",
+                DEPLOY_REPO_URL,
+                deploy_dir.to_str().unwrap(),
+            ],
+        )
+        .is_some()
+    };
 
-    // Step 2: Create config directory
-    progress.step("Create configuration directory");
+    if !clone_ok {
+        return Err("Failed to clone repository".to_string());
+    }
+
+    if let Some(ref_spec) = commit {
+        if run_command_optional(
+            "git",
+            &["-C", deploy_dir.to_str().unwrap(), "checkout", ref_spec],
+        )
+        .is_none()
+        {
+            return Err(format!("Failed to checkout '{}'", ref_spec));
+        }
+    }
+
+    let _ = run_command_optional(
+        "git",
+        &[
+            "-C",
+            deploy_dir.to_str().unwrap(),
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+            "--quiet",
+        ],
+    );
+
+    Ok(Some(deploy_dir.display().to_string()))
+}
+
+/// Step: Create the configuration directory.
+fn step_create_config_dir() -> std::result::Result<Option<String>, String> {
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from(".config"))
         .join("inferadb");
 
     if !config_dir.exists() {
         fs::create_dir_all(&config_dir)
-            .map_err(|e| Error::Other(format!("Failed to create config directory: {}", e)))?;
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
-    progress.success(&config_dir.display().to_string());
-    progress.blank();
 
-    // Step 3: Set up Helm repositories
-    progress.step("Set up Helm repositories");
-    if command_exists("helm") {
-        let added_tailscale = run_command_optional(
-            "helm",
-            &[
-                "repo",
-                "add",
-                "tailscale",
-                "https://pkgs.tailscale.com/helmcharts",
-            ],
-        );
+    Ok(Some(config_dir.display().to_string()))
+}
 
-        if added_tailscale.is_none() {
-            // Repo might already exist, try to update it
-            let _ = run_command_optional("helm", &["repo", "update", "tailscale"]);
-        }
-        progress.success("Tailscale Helm repository");
+/// Step: Set up Helm repositories.
+fn step_setup_helm() -> std::result::Result<Option<String>, String> {
+    if !command_exists("helm") {
+        return Ok(Some("Helm not installed, skipping".to_string()));
+    }
 
-        let _ = run_command_optional("helm", &["repo", "update"]);
-        progress.success("Updated Helm repositories");
+    if run_command_optional(
+        "helm",
+        &[
+            "repo",
+            "add",
+            "tailscale",
+            "https://pkgs.tailscale.com/helmcharts",
+        ],
+    )
+    .is_none()
+    {
+        let _ = run_command_optional("helm", &["repo", "update", "tailscale"]);
+    }
+    let _ = run_command_optional("helm", &["repo", "update"]);
+
+    Ok(Some("Helm repositories configured".to_string()))
+}
+
+/// Step: Pull Docker images.
+fn step_pull_docker_images() -> std::result::Result<Option<String>, String> {
+    if !command_exists("docker") || run_command_optional("docker", &["info"]).is_none() {
+        return Ok(Some("Docker not available, skipping".to_string()));
+    }
+
+    if run_command_optional("docker", &["pull", "-q", "registry:2"]).is_some() {
+        Ok(Some("Registry image pulled".to_string()))
     } else {
-        progress.info("Helm not installed, skipping");
+        Ok(Some("Registry (will pull during dev start)".to_string()))
     }
-    progress.blank();
+}
 
-    // Step 4: Pre-pull Docker images
-    progress.step("Pull Docker images");
-    if command_exists("docker") && run_command_optional("docker", &["info"]).is_some() {
-        if run_command_optional("docker", &["pull", "-q", "registry:2"]).is_some() {
-            progress.success("Registry");
-        } else {
-            progress.info("Registry (will pull during dev start)");
-        }
-    } else {
-        progress.info("Docker not available, skipping");
-    }
-    progress.blank();
-
-    // Step 5: Validate installation
-    progress.step("Validate installation");
+/// Step: Validate the installation.
+fn step_validate_installation(
+    deploy_dir: &std::path::Path,
+) -> std::result::Result<Option<String>, String> {
     let validations = [
         ("flux/apps/dev", "Flux development overlay"),
         ("flux/apps/base", "Flux base manifests"),
         ("scripts", "Deployment scripts"),
     ];
 
-    let mut all_valid = true;
+    let mut missing = Vec::new();
     for (path, description) in validations {
-        let full_path = deploy_dir.join(path);
-        if full_path.exists() {
-            progress.success(description);
-        } else {
-            progress.error(&format!("{} (missing)", description));
-            all_valid = false;
+        if !deploy_dir.join(path).exists() {
+            missing.push(description);
         }
     }
 
-    progress.end();
+    if missing.is_empty() {
+        Ok(Some("All components verified".to_string()))
+    } else {
+        Err(format!("Missing: {}", missing.join(", ")))
+    }
+}
+
+/// Run dev install - clone deploy repository and set up dependencies
+pub async fn install(
+    ctx: &Context,
+    force: bool,
+    commit: Option<&str>,
+    interactive: bool,
+) -> Result<()> {
+    if interactive && crate::tui::is_interactive(ctx) {
+        return install_interactive(force, commit);
+    }
+
+    install_with_spinners(force, commit)
+}
+
+/// Run install with inline spinners for each step
+fn install_with_spinners(force: bool, commit: Option<&str>) -> Result<()> {
+    use crate::tui::start_spinner;
+
+    let deploy_dir = get_deploy_dir();
+
+    print_styled_header("InferaDB Development Cluster Setup");
+
+    // Step 1: Clone deployment repository
+    let spin = start_spinner("Clone deployment repository");
+    match step_clone_repo(&deploy_dir, force, commit) {
+        Ok(Some(msg)) => spin.success(&msg),
+        Ok(None) => spin.success(&deploy_dir.display().to_string()),
+        Err(e) => {
+            spin.error(&e);
+            return Err(Error::Other(e));
+        }
+    }
+
+    // Step 2: Create config directory
+    let spin = start_spinner("Create configuration directory");
+    match step_create_config_dir() {
+        Ok(Some(msg)) => spin.success(&msg),
+        Ok(None) => spin.success("Done"),
+        Err(e) => {
+            spin.error(&e);
+            return Err(Error::Other(e));
+        }
+    }
+
+    // Step 3: Set up Helm repositories
+    let spin = start_spinner("Set up Helm repositories");
+    match step_setup_helm() {
+        Ok(Some(msg)) if msg.contains("skipping") => spin.info(&msg),
+        Ok(Some(msg)) => spin.success(&msg),
+        Ok(None) => spin.success("Done"),
+        Err(e) => {
+            spin.error(&e);
+            return Err(Error::Other(e));
+        }
+    }
+
+    // Step 4: Pre-pull Docker images
+    let spin = start_spinner("Pull Docker images");
+    match step_pull_docker_images() {
+        Ok(Some(msg)) if msg.contains("skipping") || msg.contains("will pull") => spin.info(&msg),
+        Ok(Some(msg)) => spin.success(&msg),
+        Ok(None) => spin.success("Done"),
+        Err(e) => {
+            spin.error(&e);
+            return Err(Error::Other(e));
+        }
+    }
+
+    // Step 5: Validate installation
+    let spin = start_spinner("Validate installation");
+    let validation_result = step_validate_installation(&deploy_dir);
+    let all_valid = validation_result.is_ok();
+    match validation_result {
+        Ok(Some(msg)) => spin.success(&msg),
+        Ok(None) => spin.success("Done"),
+        Err(e) => spin.error(&e),
+    }
 
     // Summary
     println!();
     if all_valid {
         print_success("Installation complete");
         println!();
-        print_info("Run 'inferadb dev doctor' to verify environment");
+        print_info("Run 'inferadb dev start' to start the development cluster");
     } else {
-        print_warning("Installation complete with warnings");
+        print_warning("Installation complete - with warnings");
         println!();
         print_info("Some files missing. Try: inferadb dev install --force");
     }
+
+    Ok(())
+}
+
+/// Run interactive install with TUI
+fn install_interactive(force: bool, commit: Option<&str>) -> Result<()> {
+    use crate::tui::{InstallStep, InstallView};
+    use ferment::runtime::{Program, ProgramOptions};
+
+    let deploy_dir = get_deploy_dir();
+    let commit_owned = commit.map(|s| s.to_string());
+
+    let steps = vec![
+        InstallStep::with_executor("Clone deployment repository", {
+            let deploy_dir = deploy_dir.clone();
+            let commit = commit_owned.clone();
+            move || step_clone_repo(&deploy_dir, force, commit.as_deref())
+        }),
+        InstallStep::with_executor("Create configuration directory", step_create_config_dir),
+        InstallStep::with_executor("Set up Helm repositories", step_setup_helm),
+        InstallStep::with_executor("Pull Docker images", step_pull_docker_images),
+        InstallStep::with_executor("Validate installation", {
+            let deploy_dir = deploy_dir.clone();
+            move || step_validate_installation(&deploy_dir)
+        }),
+    ];
+
+    let view = InstallView::new(steps);
+
+    Program::new(view)
+        .with_options(ProgramOptions::fullscreen())
+        .run()
+        .map_err(|e| Error::Other(e.to_string()))?;
 
     Ok(())
 }
@@ -1981,7 +2270,10 @@ fn cleanup_tailscale_devices() -> Result<()> {
 
                         // Extract short name for display (remove tailnet suffix)
                         let display_name = device_name.split('.').next().unwrap_or(device_name);
-                        println!("  Removing Tailscale device: {} ({})", display_name, device_id);
+                        println!(
+                            "  Removing Tailscale device: {} ({})",
+                            display_name, device_id
+                        );
 
                         let _ = run_command_optional(
                             "curl",
@@ -2119,61 +2411,304 @@ fn cleanup_stale_contexts() {
     }
 }
 
-/// Run dev status - show cluster status
-pub async fn dev_status(_ctx: &Context) -> Result<()> {
-    print_header("InferaDB Development Cluster Status");
+// =============================================================================
+// Status Helpers
+// =============================================================================
 
-    // Check if cluster is running
+/// Get the current cluster status.
+fn get_cluster_status() -> ClusterStatus {
     if !docker_container_exists(CLUSTER_NAME) {
-        let entries = vec![DisplayEntry::error("Cluster", "Status", "not running")];
-        StyledDisplay::new().entries(entries).display();
-        print_info(TIP_START_CLUSTER);
-        return Ok(());
+        ClusterStatus::Offline
+    } else if are_containers_paused() {
+        ClusterStatus::Paused
+    } else {
+        ClusterStatus::Online
+    }
+}
+
+/// Format a column header to be human-friendly.
+/// Converts "NAME" → "Name", "CLUSTER-IP" → "Cluster IP", "EXTERNAL-IP" → "External IP"
+/// Preserves common acronyms like IP, CPU, OS, etc.
+fn format_header(header: &str) -> String {
+    // Common acronyms that should stay uppercase
+    const ACRONYMS: &[&str] = &["IP", "CPU", "OS", "ID", "URL", "API", "FDB", "URI"];
+
+    header
+        .split('-')
+        .map(|word| {
+            let upper = word.to_uppercase();
+            if ACRONYMS.contains(&upper.as_str()) {
+                upper
+            } else {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => {
+                        first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                    }
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Parse kubectl get output into TabData.
+fn parse_kubectl_output(output: &str) -> TabData {
+    let lines: Vec<&str> = output.lines().collect();
+    if lines.is_empty() {
+        return TabData::default();
     }
 
-    // Check if cluster is paused
-    if are_containers_paused() {
-        let entries = vec![
-            DisplayEntry::warning("Cluster", "Name", CLUSTER_NAME),
-            DisplayEntry::warning("Cluster", "Status", "paused"),
-        ];
-        StyledDisplay::new().entries(entries).display();
-        print_info(TIP_RESUME_CLUSTER);
-        return Ok(());
+    // First line is headers - format them to be human-friendly
+    let headers: Vec<String> = lines[0].split_whitespace().map(format_header).collect();
+
+    // Parse data rows
+    let rows: Vec<TableRow> = lines
+        .iter()
+        .skip(1)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let cells: Vec<String> = line.split_whitespace().map(String::from).collect();
+            TableRow::new(cells)
+        })
+        .collect();
+
+    TabData::new(headers, rows)
+}
+
+/// Parse kubectl get ingress output into TabData with URLs.
+fn parse_ingress_data(output: &str) -> TabData {
+    let lines: Vec<&str> = output.lines().collect();
+    if lines.is_empty() {
+        return TabData::new(vec!["Name".to_string(), "URL".to_string()], vec![]);
     }
 
-    // Build cluster info entries
-    let mut entries = vec![
-        DisplayEntry::success("Cluster", "Name", CLUSTER_NAME),
-        DisplayEntry::success("Cluster", "Status", "running"),
-    ];
+    // Find header indices - ADDRESS contains the actual hostname
+    let headers_line = lines[0];
+    let headers: Vec<&str> = headers_line.split_whitespace().collect();
+    let name_idx = headers.iter().position(|h| *h == "NAME").unwrap_or(0);
+    let address_idx = headers.iter().position(|h| *h == "ADDRESS").unwrap_or(3);
 
-    // Check kubectl context
-    if let Some(current) = run_command_optional("kubectl", &["config", "current-context"]) {
-        let context = current.trim();
-        if context == KUBE_CONTEXT {
-            entries.push(DisplayEntry::success(
-                "Cluster",
-                "Kubernetes context",
-                context,
-            ));
-        } else {
-            entries.push(DisplayEntry::warning(
-                "Cluster",
-                "Kubernetes context",
-                format!("{} (expected: {})", context, KUBE_CONTEXT),
-            ));
+    let rows: Vec<TableRow> = lines
+        .iter()
+        .skip(1)
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() > address_idx {
+                let name = parts.get(name_idx).unwrap_or(&"").to_string();
+                let address = parts.get(address_idx).unwrap_or(&"").to_string();
+                if !address.is_empty() && address != "<none>" {
+                    Some(TableRow::new(vec![name, format!("https://{}", address)]))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    TabData::new(vec!["Name".to_string(), "URL".to_string()], rows)
+}
+
+/// Format memory size from Ki to human readable.
+fn format_memory(ki_str: &str) -> String {
+    if let Ok(ki) = ki_str.trim_end_matches("Ki").parse::<u64>() {
+        let gi = ki as f64 / (1024.0 * 1024.0);
+        format!("{:.1}Gi", gi)
+    } else {
+        ki_str.to_string()
+    }
+}
+
+/// Fetch nodes with capacity information (CPU/memory).
+fn fetch_nodes_with_capacity() -> TabData {
+    // Get basic node info
+    let nodes_output = match run_command_optional("kubectl", &["get", "nodes"]) {
+        Some(out) => out,
+        None => return TabData::default(),
+    };
+
+    // Get capacity info via jsonpath
+    let capacity_output = run_command_optional(
+        "kubectl",
+        &[
+            "get",
+            "nodes",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}\\t{.status.capacity.cpu}\\t{.status.capacity.memory}\\n{end}",
+        ],
+    );
+
+    // Build capacity map
+    let mut capacity_map: std::collections::HashMap<String, (String, String)> =
+        std::collections::HashMap::new();
+    if let Some(cap) = capacity_output {
+        for line in cap.lines() {
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() >= 3 {
+                let name = parts[0].to_string();
+                let cpu = parts[1].to_string();
+                let mem = format_memory(parts[2]);
+                capacity_map.insert(name, (cpu, mem));
+            }
         }
     }
 
-    StyledDisplay::new().entries(entries).display();
+    // Parse basic node output and add capacity columns
+    let lines: Vec<&str> = nodes_output.lines().collect();
+    if lines.is_empty() {
+        return TabData::default();
+    }
 
-    // Node status
+    // Build headers with CPU and Memory added - format to be human-friendly
+    let mut headers: Vec<String> = lines[0].split_whitespace().map(format_header).collect();
+    headers.push("CPU".to_string());
+    headers.push("Memory".to_string());
+
+    // Build rows with capacity info
+    let rows: Vec<TableRow> = lines
+        .iter()
+        .skip(1)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let mut cells: Vec<String> = line.split_whitespace().map(String::from).collect();
+            let name = cells.first().cloned().unwrap_or_default();
+            if let Some((cpu, mem)) = capacity_map.get(&name) {
+                cells.push(cpu.clone());
+                cells.push(mem.clone());
+            } else {
+                cells.push("-".to_string());
+                cells.push("-".to_string());
+            }
+            TableRow::new(cells)
+        })
+        .collect();
+
+    TabData::new(headers, rows)
+}
+
+/// Fetch all status data for the status view.
+fn fetch_status_data() -> RefreshResult {
+    let cluster_status = get_cluster_status();
+
+    // URLs from ingress
+    let urls = run_command_optional("kubectl", &["get", "ingress", "-n", "inferadb"])
+        .map(|out| parse_ingress_data(&out))
+        .unwrap_or_default();
+
+    // Services
+    let services = run_command_optional(
+        "kubectl",
+        &["get", "services", "-n", "inferadb", "-o", "wide"],
+    )
+    .map(|out| parse_kubectl_output(&out))
+    .unwrap_or_default();
+
+    // Nodes with capacity info
+    let nodes = fetch_nodes_with_capacity();
+
+    // Pods (InferaDB + FDB) - parse separately and merge rows
+    let inferadb_pods =
+        run_command_optional("kubectl", &["get", "pods", "-n", "inferadb", "-o", "wide"])
+            .map(|out| parse_kubectl_output(&out))
+            .unwrap_or_default();
+    let fdb_pods = run_command_optional(
+        "kubectl",
+        &["get", "pods", "-n", "fdb-system", "-o", "wide"],
+    )
+    .map(|out| parse_kubectl_output(&out))
+    .unwrap_or_default();
+
+    // Merge pods - use inferadb headers, combine rows from both
+    let pods = TabData::new(
+        if inferadb_pods.headers.is_empty() {
+            fdb_pods.headers
+        } else {
+            inferadb_pods.headers
+        },
+        inferadb_pods
+            .rows
+            .into_iter()
+            .chain(fdb_pods.rows)
+            .collect(),
+    );
+
+    RefreshResult {
+        cluster_status,
+        urls,
+        services,
+        nodes,
+        pods,
+    }
+}
+
+/// Run dev status - show cluster status
+pub async fn dev_status(ctx: &Context, interactive: bool) -> Result<()> {
+    // Use full-screen TUI if explicitly requested and available
+    if interactive && crate::tui::is_interactive(ctx) {
+        return status_interactive();
+    }
+
+    // Default: Use spinners and streaming output
+    status_with_spinners()
+}
+
+/// Run status with inline spinners for each section.
+fn status_with_spinners() -> Result<()> {
+    use crate::tui::start_spinner;
+
+    print_styled_header("InferaDB Development Environment Status");
+
+    // Check cluster status
+    let handle = start_spinner("Checking cluster status...");
+    let cluster_status = get_cluster_status();
+    match cluster_status {
+        ClusterStatus::Offline => {
+            handle.failure("Cluster is not running");
+            println!();
+            print_info(TIP_START_CLUSTER);
+            return Ok(());
+        }
+        ClusterStatus::Paused => {
+            handle.warning("Cluster is paused");
+            println!();
+            print_info(TIP_RESUME_CLUSTER);
+            return Ok(());
+        }
+        ClusterStatus::Online => {
+            handle.success("Cluster is running");
+        }
+        ClusterStatus::Unknown => {
+            handle.warning("Cluster status unknown");
+        }
+    }
+
+    // Check kubectl context
+    let handle = start_spinner("Checking kubectl context...");
+    if let Some(current) = run_command_optional("kubectl", &["config", "current-context"]) {
+        let context = current.trim();
+        if context == KUBE_CONTEXT {
+            handle.success(&format!("kubectl context: {}", context));
+        } else {
+            handle.warning(&format!(
+                "kubectl context: {} (expected: {})",
+                context, KUBE_CONTEXT
+            ));
+        }
+    } else {
+        handle.warning("kubectl context not configured");
+    }
+    println!();
+
+    // Nodes
     print_phase("Nodes");
     run_command_streaming("kubectl", &["get", "nodes", "-o", "wide"], &[])?;
     println!();
 
-    // InferaDB pods
+    // InferaDB Pods
     print_phase("InferaDB Pods");
     run_command_streaming(
         "kubectl",
@@ -2182,7 +2717,7 @@ pub async fn dev_status(_ctx: &Context) -> Result<()> {
     )?;
     println!();
 
-    // FDB pods
+    // FDB Pods
     print_phase("FoundationDB Pods");
     run_command_streaming(
         "kubectl",
@@ -2191,7 +2726,7 @@ pub async fn dev_status(_ctx: &Context) -> Result<()> {
     )?;
     println!();
 
-    // Ingress
+    // Ingress/URLs
     print_phase("Ingress (Access URLs)");
     run_command_streaming("kubectl", &["get", "ingress", "-n", "inferadb"], &[])?;
     println!();
@@ -2199,6 +2734,34 @@ pub async fn dev_status(_ctx: &Context) -> Result<()> {
     // Services
     print_phase("Services");
     run_command_streaming("kubectl", &["get", "services", "-n", "inferadb"], &[])?;
+
+    Ok(())
+}
+
+/// Run status in full-screen interactive TUI mode.
+fn status_interactive() -> Result<()> {
+    use crate::tui::StatusView;
+    use ferment::output::{terminal_height, terminal_width};
+    use ferment::runtime::{Program, ProgramOptions};
+
+    let width = terminal_width();
+    let height = terminal_height();
+
+    // Get initial data
+    let initial_data = fetch_status_data();
+
+    let view = StatusView::new(width, height)
+        .with_refresh(fetch_status_data)
+        .with_status(initial_data.cluster_status)
+        .with_urls(initial_data.urls)
+        .with_services(initial_data.services)
+        .with_nodes(initial_data.nodes)
+        .with_pods(initial_data.pods);
+
+    Program::new(view)
+        .with_options(ProgramOptions::fullscreen())
+        .run()
+        .map_err(|e| Error::Other(e.to_string()))?;
 
     Ok(())
 }

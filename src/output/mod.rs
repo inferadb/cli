@@ -1,26 +1,14 @@
 //! Output formatting for the CLI.
 //!
-//! Supports multiple output formats:
-//! - `table` - Human-readable table (default)
-//! - `json` - Structured JSON
-//! - `yaml` - YAML format
-//! - `jsonl` - JSON Lines (one object per line)
-//!
-//! Also provides styled terminal display utilities via the `display` module.
-
-mod display;
-mod table;
-
-pub use display::{
-    colors, get_terminal_width, is_terminal, print_boxed, print_error, print_header, print_info,
-    print_kv, print_phase, print_success, print_warning, DisplayEntry, EntryStyle, ProgressBox,
-    StyledDisplay,
-};
-pub use table::TableFormatter;
+//! Provides format selection (table/json/yaml/jsonl) and integrates with Ferment
+//! for table rendering. For message output (success, error, warning, info),
+//! use `ferment::output` directly.
 
 use crate::error::Result;
+use ferment::components::{Column, Table};
+use ferment::output as foutput;
 use serde::Serialize;
-use std::io::{self, Write};
+use std::io::IsTerminal;
 
 /// Output format options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -52,7 +40,7 @@ impl OutputFormat {
     }
 }
 
-/// Trait for types that can be displayed in the CLI.
+/// Trait for types that can be displayed as table rows.
 pub trait Displayable {
     /// Display as a table row.
     fn table_row(&self) -> Vec<String>;
@@ -61,11 +49,16 @@ pub trait Displayable {
     fn table_headers() -> Vec<&'static str>;
 }
 
-/// Output writer that handles format selection and terminal capabilities.
+/// Output writer that handles format selection.
+///
+/// For message output (success, error, warning, info), use `ferment::output` directly.
 pub struct Output {
-    format: OutputFormat,
-    color: bool,
-    quiet: bool,
+    /// The output format.
+    pub format: OutputFormat,
+    /// Whether color is enabled.
+    pub color: bool,
+    /// Whether quiet mode is enabled.
+    pub quiet: bool,
 }
 
 impl Output {
@@ -85,7 +78,7 @@ impl Output {
         let color = match color {
             "always" => true,
             "never" => false,
-            _ => atty::is(atty::Stream::Stdout),
+            _ => std::io::stdout().is_terminal(),
         };
 
         Ok(Self::new(format, color, quiet))
@@ -108,12 +101,23 @@ impl Output {
     pub fn table<T: Displayable + Serialize>(&self, items: &[T]) -> Result<()> {
         match self.format {
             OutputFormat::Table => {
-                let mut formatter = TableFormatter::new();
-                formatter.headers(T::table_headers());
-                for item in items {
-                    formatter.row(item.table_row());
+                let columns: Vec<Column> =
+                    T::table_headers().into_iter().map(Column::new).collect();
+
+                let rows: Vec<Vec<String>> = items.iter().map(|item| item.table_row()).collect();
+
+                let table = Table::new()
+                    .columns(columns)
+                    .rows(rows)
+                    .show_borders(false)
+                    .focused(false);
+
+                let output = table.render();
+                if self.color {
+                    println!("{}", output);
+                } else {
+                    println!("{}", foutput::strip_ansi(&output));
                 }
-                formatter.print();
                 Ok(())
             }
             OutputFormat::Json => {
@@ -139,10 +143,21 @@ impl Output {
     pub fn item<T: Displayable + Serialize + Clone>(&self, item: &T) -> Result<()> {
         match self.format {
             OutputFormat::Table => {
-                let mut formatter = TableFormatter::new();
-                formatter.headers(T::table_headers());
-                formatter.row(item.table_row());
-                formatter.print();
+                let columns: Vec<Column> =
+                    T::table_headers().into_iter().map(Column::new).collect();
+
+                let table = Table::new()
+                    .columns(columns)
+                    .rows(vec![item.table_row()])
+                    .show_borders(false)
+                    .focused(false);
+
+                let output = table.render();
+                if self.color {
+                    println!("{}", output);
+                } else {
+                    println!("{}", foutput::strip_ansi(&output));
+                }
                 Ok(())
             }
             OutputFormat::Json => self.json(item),
@@ -172,63 +187,64 @@ impl Output {
         Ok(())
     }
 
-    /// Print a message to stderr (info, warnings, progress).
+    // -------------------------------------------------------------------------
+    // Message output methods - thin wrappers around ferment::output
+    // These respect the quiet flag before calling Ferment.
+    // -------------------------------------------------------------------------
+
+    /// Print an info message (respects quiet mode).
+    /// Wraps `ferment::output::info`.
     pub fn info(&self, message: &str) {
         if !self.quiet {
-            eprintln!("{}", message);
+            if self.color {
+                foutput::info(message);
+            } else {
+                eprintln!("- {}", message);
+            }
         }
     }
 
-    /// Print a success message.
+    /// Print a success message (respects quiet mode).
+    /// Wraps `ferment::output::success`.
     pub fn success(&self, message: &str) {
         if !self.quiet {
             if self.color {
-                eprintln!("\x1b[32m✓\x1b[0m {}", message);
+                foutput::success(message);
             } else {
-                eprintln!("✓ {}", message);
+                eprintln!("+ {}", message);
             }
         }
     }
 
-    /// Print a warning message.
+    /// Print a warning message (respects quiet mode).
+    /// Wraps `ferment::output::warning`.
     pub fn warn(&self, message: &str) {
         if !self.quiet {
             if self.color {
-                eprintln!("\x1b[33m⚠\x1b[0m {}", message);
+                foutput::warning(message);
             } else {
-                eprintln!("⚠ {}", message);
+                eprintln!("! {}", message);
             }
         }
     }
 
-    /// Print an error message.
+    /// Print an error message (always shown, even in quiet mode).
+    /// Wraps `ferment::output::error`.
     pub fn error(&self, message: &str) {
         if self.color {
-            eprintln!("\x1b[31m✗\x1b[0m {}", message);
+            foutput::error(message);
         } else {
-            eprintln!("✗ {}", message);
+            eprintln!("x {}", message);
         }
     }
 
-    /// Print raw text to stdout.
-    pub fn raw(&self, text: &str) {
-        print!("{}", text);
-        let _ = io::stdout().flush();
-    }
-
-    /// Print a line to stdout.
-    pub fn line(&self, text: &str) {
-        println!("{}", text);
-    }
+    // -------------------------------------------------------------------------
+    // Accessor methods for compatibility
+    // -------------------------------------------------------------------------
 
     /// Check if output is in quiet mode.
     pub fn is_quiet(&self) -> bool {
         self.quiet
-    }
-
-    /// Check if color is enabled.
-    pub fn has_color(&self) -> bool {
-        self.color
     }
 
     /// Get the current output format.
@@ -240,24 +256,6 @@ impl Output {
 impl Default for Output {
     fn default() -> Self {
         Self::new(OutputFormat::Table, true, false)
-    }
-}
-
-// atty crate functionality (inline to avoid extra dependency)
-mod atty {
-    #[allow(dead_code)]
-    pub enum Stream {
-        Stdout,
-        Stderr,
-    }
-
-    pub fn is(stream: Stream) -> bool {
-        use std::os::unix::io::AsRawFd;
-        let fd = match stream {
-            Stream::Stdout => std::io::stdout().as_raw_fd(),
-            Stream::Stderr => std::io::stderr().as_raw_fd(),
-        };
-        unsafe { libc::isatty(fd) != 0 }
     }
 }
 

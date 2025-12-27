@@ -30,7 +30,9 @@ pub mod client;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod i18n;
 pub mod output;
+pub mod tui;
 
 pub use cli::Cli;
 pub use error::{Error, Result};
@@ -43,14 +45,34 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// This is the main entry point for the CLI, parsing arguments and
 /// dispatching to the appropriate command handler.
 pub async fn run(args: Vec<String>) -> Result<()> {
-    use clap::Parser;
-
     // Parse @profile prefix before clap
     let (profile_override, args) = cli::parse_profile_prefix(args);
 
-    // Parse CLI arguments
-    let mut cli_args = match Cli::try_parse_from(&args) {
-        Ok(cli) => cli,
+    // Pre-scan for --lang to initialize i18n before full parse
+    let lang = extract_lang_arg(&args);
+    let lang_supported = i18n::init(&lang);
+
+    // Show warning if language not supported (after i18n init so we can use translations)
+    if !lang_supported && lang != "en-US" {
+        eprintln!(
+            "Warning: Language '{}' is not supported. Falling back to en-US.",
+            lang
+        );
+        eprintln!(
+            "Supported languages: {}",
+            i18n::SUPPORTED_LOCALES.join(", ")
+        );
+    }
+
+    // Parse CLI arguments using localized command
+    let mut cli_args = match Cli::command_localized().try_get_matches_from(&args) {
+        Ok(matches) => {
+            use clap::FromArgMatches;
+            Cli::from_arg_matches(&matches).map_err(|e| {
+                e.print().ok();
+                Error::other("")
+            })?
+        }
         Err(e) => {
             // Print clap error (includes help/version)
             e.print().ok();
@@ -100,4 +122,32 @@ fn init_logging() {
         .with(filter)
         .with(tracing_subscriber::fmt::layer().with_target(true))
         .init();
+}
+
+/// Extract the --lang argument from args before full parsing.
+///
+/// This allows us to initialize i18n with the correct language before
+/// parsing the full command (which may need localized help text).
+fn extract_lang_arg(args: &[String]) -> String {
+    // Check for --lang=value or --lang value
+    for (i, arg) in args.iter().enumerate() {
+        if let Some(lang) = arg.strip_prefix("--lang=") {
+            return lang.to_string();
+        }
+        if arg == "--lang" {
+            if let Some(lang) = args.get(i + 1) {
+                return lang.to_string();
+            }
+        }
+    }
+
+    // Check INFERADB_LANG environment variable
+    if let Ok(lang) = std::env::var("INFERADB_LANG") {
+        if !lang.is_empty() {
+            return lang;
+        }
+    }
+
+    // Default to en-US
+    "en-US".to_string()
 }
