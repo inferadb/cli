@@ -14,10 +14,7 @@ use crate::client::Context;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::tui::{ClusterStatus, RefreshResult, TabData, TableRow};
-use ferment::output::{
-    error as print_error, header as print_header, info as print_info, phase as print_phase,
-    success as print_success,
-};
+use ferment::output::{error as print_error, info as print_info, success as print_success};
 
 // Constants
 const CLUSTER_NAME: &str = "inferadb-dev";
@@ -110,7 +107,15 @@ fn format_dot_leader(text: &str, status: &str) -> String {
     use ferment::style::Color;
 
     let dim = Color::BrightBlack.to_ansi_fg();
+    let green = Color::Green.to_ansi_fg();
     let reset = "\x1b[0m";
+
+    // Color the status based on value
+    let status_colored = match status.to_uppercase().as_str() {
+        "OK" | "CREATED" | "CONFIGURED" => format!("{}{}{}", green, status, reset),
+        "UNCHANGED" => format!("{}{}{}", dim, status, reset),
+        _ => status.to_string(),
+    };
 
     // Calculate dots needed: total width - text length - visible status length - 2 spaces
     let dots_len = STEP_LINE_WIDTH
@@ -119,7 +124,46 @@ fn format_dot_leader(text: &str, status: &str) -> String {
         .saturating_sub(2);
     let dots = ".".repeat(dots_len);
 
-    format!("{} {}{}{} {}", text, dim, dots, reset, status)
+    format!("{} {}{}{} {}", text, dim, dots, reset, status_colored)
+}
+
+/// Format a dot leader line with colored prefix and status for reset output.
+fn format_reset_dot_leader(prefix: &str, text: &str, status: &str) -> String {
+    use ferment::style::Color;
+
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let green = Color::Green.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    // Color the prefix
+    let prefix_colored = if prefix == "✓" {
+        format!("{}{}{}", green, prefix, reset)
+    } else {
+        format!("{}{}{}", dim, prefix, reset)
+    };
+
+    // Color the status based on value
+    let status_upper = status.to_uppercase();
+    let status_colored = match status_upper.as_str() {
+        "OK" | "CREATED" | "CONFIGURED" => format!("{}{}{}", green, status_upper, reset),
+        "UNCHANGED" => format!("{}{}{}", dim, status_upper, reset),
+        _ => status_upper,
+    };
+
+    // Calculate dots needed
+    let prefix_len = 1; // visible prefix length (✓ or ○)
+    let dots_len = STEP_LINE_WIDTH
+        .saturating_sub(prefix_len)
+        .saturating_sub(1) // space after prefix
+        .saturating_sub(text.len())
+        .saturating_sub(visible_len(status))
+        .saturating_sub(2); // spaces around dots
+    let dots = ".".repeat(dots_len);
+
+    format!(
+        "{} {} {}{}{} {}",
+        prefix_colored, text, dim, dots, reset, status_colored
+    )
 }
 
 /// Print a line with a dimmed prefix symbol, dot leaders, and status.
@@ -153,7 +197,12 @@ fn print_prefixed_dot_leader(prefix: &str, text: &str, status: &str) {
 /// Format: `{prefix} {text} {dots} {status}` where total width is `STEP_LINE_WIDTH`.
 /// The `prefix_formatted` should include ANSI codes, `prefix_width` is the visible character count.
 /// Status may contain ANSI codes which are handled correctly.
-fn print_colored_prefix_dot_leader(prefix_formatted: &str, prefix_width: usize, text: &str, status: &str) {
+fn print_colored_prefix_dot_leader(
+    prefix_formatted: &str,
+    prefix_width: usize,
+    text: &str,
+    status: &str,
+) {
     use ferment::style::Color;
 
     let dim = Color::BrightBlack.to_ansi_fg();
@@ -266,6 +315,174 @@ fn get_tailscale_creds_file() -> PathBuf {
         .join("tailscale-credentials")
 }
 
+/// Get FoundationDB clusters for reset dry run.
+/// Returns: Vec<(name, process_count, version)>
+fn get_fdb_clusters_for_reset() -> Vec<(String, String, String)> {
+    let output = run_command_optional(
+        "kubectl",
+        &["get", "foundationdbcluster", "-n", "inferadb", "-o", "json"],
+    );
+
+    let mut clusters = Vec::new();
+    if let Some(json_str) = output {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            if let Some(items) = json.get("items").and_then(|i| i.as_array()) {
+                for item in items {
+                    let name = item
+                        .pointer("/metadata/name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    // Sum up all process counts
+                    let process_counts = item.pointer("/spec/processCounts");
+                    let total_processes: i64 = if let Some(counts) = process_counts {
+                        counts
+                            .as_object()
+                            .map(|obj| obj.values().filter_map(|v| v.as_i64()).sum())
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    let processes = if total_processes > 0 {
+                        format!("{} processes", total_processes)
+                    } else {
+                        "unknown".to_string()
+                    };
+
+                    let version = item
+                        .pointer("/status/runningVersion")
+                        .and_then(|v| v.as_str())
+                        .map(|v| format!("v{}", v))
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    clusters.push((name, processes, version));
+                }
+            }
+        }
+    }
+
+    clusters
+}
+
+/// Get deployments for reset dry run.
+/// Returns: Vec<(name, replicas, image_tag)>
+fn get_deployments_for_reset() -> Vec<(String, String, String)> {
+    let output = run_command_optional(
+        "kubectl",
+        &[
+            "get",
+            "deployments",
+            "-n",
+            "inferadb",
+            "-l",
+            "app.kubernetes.io/name in (inferadb-engine,inferadb-control,inferadb-dashboard)",
+            "-o",
+            "json",
+        ],
+    );
+
+    let mut deployments = Vec::new();
+    if let Some(json_str) = output {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            if let Some(items) = json.get("items").and_then(|i| i.as_array()) {
+                for item in items {
+                    let name = item
+                        .pointer("/metadata/name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    let replicas = item
+                        .pointer("/spec/replicas")
+                        .and_then(|v| v.as_i64())
+                        .map(|r| r.to_string())
+                        .unwrap_or_else(|| "1".to_string());
+
+                    // Get image and extract just the tag
+                    let image = item
+                        .pointer("/spec/template/spec/containers/0/image")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+
+                    let image_tag = if let Some(tag_pos) = image.rfind(':') {
+                        &image[tag_pos + 1..]
+                    } else if let Some(slash_pos) = image.rfind('/') {
+                        &image[slash_pos + 1..]
+                    } else {
+                        image
+                    };
+
+                    deployments.push((name, replicas, image_tag.to_string()));
+                }
+            }
+        }
+    }
+
+    deployments
+}
+
+/// Parse a kubectl apply output line into (resource, status).
+/// Example: "deployment.apps/inferadb-control created" -> ("deployment.apps/inferadb-control", "created")
+fn parse_kubectl_apply_line(line: &str) -> Option<(String, String)> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+
+    // kubectl apply output format: "<resource> <status>"
+    // Status can be: created, configured, unchanged, deleted
+    let parts: Vec<&str> = line.rsplitn(2, ' ').collect();
+    if parts.len() == 2 {
+        let status = parts[0].to_lowercase();
+        let resource = parts[1].to_string();
+        if matches!(
+            status.as_str(),
+            "created" | "configured" | "unchanged" | "deleted"
+        ) {
+            return Some((resource, status));
+        }
+    }
+    None
+}
+
+/// Get PVCs for reset dry run.
+/// Returns: Vec<(name, size, status)>
+fn get_pvcs_for_reset() -> Vec<(String, String, String)> {
+    let output = run_command_optional("kubectl", &["get", "pvc", "-n", "inferadb", "-o", "json"]);
+
+    let mut pvcs = Vec::new();
+    if let Some(json_str) = output {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            if let Some(items) = json.get("items").and_then(|i| i.as_array()) {
+                for item in items {
+                    let name = item
+                        .pointer("/metadata/name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    let size = item
+                        .pointer("/spec/resources/requests/storage")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    let status = item
+                        .pointer("/status/phase")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    pvcs.push((name, size, status));
+                }
+            }
+        }
+    }
+
+    pvcs
+}
+
 /// Check if a command is available in PATH
 fn command_exists(cmd: &str) -> bool {
     Command::new("which")
@@ -306,9 +523,7 @@ fn run_command_optional(cmd: &str, args: &[&str]) -> Option<String> {
 fn normalize_version(raw: &str) -> String {
     // Find where the version number starts (first digit, optionally preceded by 'v')
     let trimmed = raw.trim();
-    let start = trimmed
-        .find(|c: char| c.is_ascii_digit())
-        .unwrap_or(0);
+    let start = trimmed.find(|c: char| c.is_ascii_digit()).unwrap_or(0);
 
     // Check if there's a 'v' just before the digit
     let has_v = start > 0 && trimmed.chars().nth(start - 1) == Some('v');
@@ -327,7 +542,12 @@ fn normalize_version(raw: &str) -> String {
     // Ensure it starts with 'v'
     if version.starts_with('v') {
         version.to_string()
-    } else if version.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+    } else if version
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false)
+    {
         format!("v{}", version)
     } else {
         raw.to_string()
@@ -1731,39 +1951,55 @@ fn build_start_steps(
             ));
         }
 
-        steps.push(InstallStep::with_executor("Waiting for containers to stabilize", || {
-            std::thread::sleep(Duration::from_secs(3));
-            Ok(Some("ready".to_string()))
-        }));
+        steps.push(InstallStep::with_executor(
+            "Waiting for containers to stabilize",
+            || {
+                std::thread::sleep(Duration::from_secs(3));
+                Ok(Some("ready".to_string()))
+            },
+        ));
     }
 
     // Phase 1: Conditioning environment
-    steps.push(InstallStep::with_executor("Cloning deployment repository", {
-        let deploy_dir = deploy_dir_owned.clone();
-        let commit = commit_owned.clone();
-        move || step_clone_repo(&deploy_dir, force, commit.as_deref())
-    }));
-    steps.push(InstallStep::with_executor("Creating configuration directory", step_create_config_dir));
-    steps.push(InstallStep::with_executor("Setting up Helm repositories", step_setup_helm));
+    steps.push(InstallStep::with_executor(
+        "Cloning deployment repository",
+        {
+            let deploy_dir = deploy_dir_owned.clone();
+            let commit = commit_owned.clone();
+            move || step_clone_repo(&deploy_dir, force, commit.as_deref())
+        },
+    ));
+    steps.push(InstallStep::with_executor(
+        "Creating configuration directory",
+        step_create_config_dir,
+    ));
+    steps.push(InstallStep::with_executor(
+        "Setting up Helm repositories",
+        step_setup_helm,
+    ));
 
     // Phase 2: Setting up cluster
-    steps.push(InstallStep::with_executor("Cleaning stale contexts", || {
-        let _ = run_command_optional("talosctl", &["config", "context", ""]);
-        if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
-            for line in contexts.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
-                    let _ = run_command_optional(
-                        "talosctl",
-                        &["config", "remove", parts[1], "--noconfirm"],
-                    );
+    steps.push(InstallStep::with_executor(
+        "Cleaning stale contexts",
+        || {
+            let _ = run_command_optional("talosctl", &["config", "context", ""]);
+            if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
+                for line in contexts.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
+                        let _ = run_command_optional(
+                            "talosctl",
+                            &["config", "remove", parts[1], "--noconfirm"],
+                        );
+                    }
                 }
             }
-        }
-        Ok(Some("Cleaned".to_string()))
-    }));
-    steps.push(InstallStep::with_executor("Creating Talos cluster", || {
-        match run_command(
+            Ok(Some("Cleaned".to_string()))
+        },
+    ));
+    steps.push(InstallStep::with_executor(
+        "Creating Talos cluster",
+        || match run_command(
             "talosctl",
             &[
                 "cluster",
@@ -1784,20 +2020,22 @@ fn build_start_steps(
         ) {
             Ok(_) => Ok(Some("Created".to_string())),
             Err(e) => Err(e.to_string()),
-        }
-    }));
-    steps.push(InstallStep::with_executor("Setting kubectl context", || {
-        match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
+        },
+    ));
+    steps.push(InstallStep::with_executor(
+        "Setting kubectl context",
+        || match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
             Ok(_) => Ok(Some("Set".to_string())),
             Err(e) => Err(e.to_string()),
-        }
-    }));
-    steps.push(InstallStep::with_executor("Verifying cluster is ready", || {
-        match run_command("kubectl", &["get", "nodes"]) {
+        },
+    ));
+    steps.push(InstallStep::with_executor(
+        "Verifying cluster is ready",
+        || match run_command("kubectl", &["get", "nodes"]) {
             Ok(_) => Ok(Some("Verified".to_string())),
             Err(e) => Err(e.to_string()),
-        }
-    }));
+        },
+    ));
 
     steps
 }
@@ -1844,34 +2082,28 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
             let container_name = container.clone();
             let in_progress = format!("Resuming {}", container);
             let completed = format!("Resumed {}", container);
-            run_step(
-                &StartStep::with_ok(&in_progress, &completed),
-                || {
-                    run_command("docker", &["unpause", &container_name])
-                        .map(|_| StepOutcome::Success)
-                        .or_else(|e| {
-                            // Ignore errors for containers that aren't paused
-                            if e.to_string().contains("not paused") {
-                                Ok(StepOutcome::Success)
-                            } else {
-                                Err(e.to_string())
-                            }
-                        })
-                },
-            )?;
+            run_step(&StartStep::with_ok(&in_progress, &completed), || {
+                run_command("docker", &["unpause", &container_name])
+                    .map(|_| StepOutcome::Success)
+                    .or_else(|e| {
+                        // Ignore errors for containers that aren't paused
+                        if e.to_string().contains("not paused") {
+                            Ok(StepOutcome::Success)
+                        } else {
+                            Err(e.to_string())
+                        }
+                    })
+            })?;
         }
 
         // Unpause registry if it exists
         if docker_container_exists(REGISTRY_NAME) {
             let in_progress = format!("Resuming {}", REGISTRY_NAME);
             let completed = format!("Resumed {}", REGISTRY_NAME);
-            run_step(
-                &StartStep::with_ok(&in_progress, &completed),
-                || {
-                    let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
-                    Ok(StepOutcome::Success)
-                },
-            )?;
+            run_step(&StartStep::with_ok(&in_progress, &completed), || {
+                let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
+                Ok(StepOutcome::Success)
+            })?;
         }
 
         // Wait for containers to stabilize
@@ -2102,14 +2334,13 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
 
     // Step: Create or verify Talos cluster
     run_step(
-        &StartStep::with_ok(
-            "Provisioning Talos cluster",
-            "Provisioned Talos cluster",
-        ),
+        &StartStep::with_ok("Provisioning Talos cluster", "Provisioned Talos cluster"),
         || {
             if cluster_exists {
                 // Cluster exists - verify it's healthy
-                if run_command_optional("kubectl", &["--context", KUBE_CONTEXT, "get", "nodes"]).is_some() {
+                if run_command_optional("kubectl", &["--context", KUBE_CONTEXT, "get", "nodes"])
+                    .is_some()
+                {
                     return Ok(StepOutcome::Skipped(String::new()));
                 }
                 // Context might be stale, try to set it up
@@ -2458,21 +2689,32 @@ fn repair_registry_config(node_ip: &str, registry_ip: &str) -> std::result::Resu
     // Get the current machine config
     let config_output = run_command_optional(
         "talosctl",
-        &["--nodes", node_ip, "get", "machineconfig", "v1alpha1", "-o", "yaml"],
+        &[
+            "--nodes",
+            node_ip,
+            "get",
+            "machineconfig",
+            "v1alpha1",
+            "-o",
+            "yaml",
+        ],
     )
     .ok_or_else(|| format!("Failed to get machine config from {}", node_ip))?;
 
     // Extract the spec section (the actual config content)
-    let spec_start = config_output.find("spec: |")
+    let spec_start = config_output
+        .find("spec: |")
         .ok_or("Could not find spec section in machine config")?;
 
     // Find where spec content starts (after "spec: |\n")
-    let content_start = config_output[spec_start..].find('\n')
+    let content_start = config_output[spec_start..]
+        .find('\n')
         .map(|i| spec_start + i + 1)
         .ok_or("Malformed spec section")?;
 
     // Find the end of the spec (next "---" or end of output)
-    let content_end = config_output[content_start..].find("\n---")
+    let content_end = config_output[content_start..]
+        .find("\n---")
         .map(|i| content_start + i)
         .unwrap_or(config_output.len());
 
@@ -2489,17 +2731,21 @@ fn repair_registry_config(node_ip: &str, registry_ip: &str) -> std::result::Resu
     let fixed_config = fix_registries_section(&cleaned_config, registry_ip)?;
 
     // Write to temp file and apply
-    let config_file = std::env::temp_dir().join(format!("talos-config-{}.yaml", node_ip.replace('.', "-")));
+    let config_file =
+        std::env::temp_dir().join(format!("talos-config-{}.yaml", node_ip.replace('.', "-")));
     fs::write(&config_file, &fixed_config).map_err(|e| e.to_string())?;
 
     // Apply the fixed config
     let result = run_command_optional(
         "talosctl",
         &[
-            "--nodes", node_ip,
+            "--nodes",
+            node_ip,
             "apply-config",
-            "--file", config_file.to_str().unwrap(),
-            "--mode", "no-reboot",
+            "--file",
+            config_file.to_str().unwrap(),
+            "--mode",
+            "no-reboot",
         ],
     );
 
@@ -2914,7 +3160,7 @@ roleRef:
         {
             break;
         }
-        std::thread::sleep(Duration::from_secs(5));
+        std::thread::sleep(Duration::from_secs(2));
     }
 
     Ok(StepOutcome::Success)
@@ -3181,7 +3427,10 @@ fn stop_with_spinners() -> Result<()> {
                     spin.success(&format_dot_leader(&completed, "OK"));
                 } else {
                     spin.failure(&e.to_string());
-                    return Err(Error::Other(format!("Failed to pause {}: {}", container, e)));
+                    return Err(Error::Other(format!(
+                        "Failed to pause {}: {}",
+                        container, e
+                    )));
                 }
             }
         }
@@ -3605,10 +3854,7 @@ fn print_nodes_status() {
     use ferment::style::Color;
 
     // Get node info as JSON for more reliable parsing
-    let output = run_command_optional(
-        "kubectl",
-        &["get", "nodes", "-o", "json"],
-    );
+    let output = run_command_optional("kubectl", &["get", "nodes", "-o", "json"]);
 
     let green = Color::Green.to_ansi_fg();
     let red = Color::Red.to_ansi_fg();
@@ -3620,18 +3866,22 @@ fn print_nodes_status() {
                 for node in items {
                     let name = node["metadata"]["name"].as_str().unwrap_or("");
                     let labels = &node["metadata"]["labels"];
-                    let is_control_plane = labels.get("node-role.kubernetes.io/control-plane").is_some();
+                    let is_control_plane = labels
+                        .get("node-role.kubernetes.io/control-plane")
+                        .is_some();
 
                     // Check Ready condition
                     let ready = node["status"]["conditions"]
                         .as_array()
-                        .and_then(|conditions| {
-                            conditions.iter().find(|c| c["type"] == "Ready")
-                        })
+                        .and_then(|conditions| conditions.iter().find(|c| c["type"] == "Ready"))
                         .map(|c| c["status"] == "True")
                         .unwrap_or(false);
 
-                    let role = if is_control_plane { "control-plane" } else { "worker" };
+                    let role = if is_control_plane {
+                        "control-plane"
+                    } else {
+                        "worker"
+                    };
                     let status = if ready {
                         format!("{}Ready{} ({})", green, reset, role)
                     } else {
@@ -3681,7 +3931,10 @@ fn print_pods_status() {
             }
 
             // Count ready containers
-            let ready_count = ready_statuses.split_whitespace().filter(|s| *s == "true").count();
+            let ready_count = ready_statuses
+                .split_whitespace()
+                .filter(|s| *s == "true")
+                .count();
             let total_count = ready_statuses.split_whitespace().count().max(1);
 
             // Build status string
@@ -3729,7 +3982,8 @@ fn print_pods_status() {
                 for (i, seg) in segments.iter().enumerate().rev() {
                     let is_numeric = seg.chars().all(|c| c.is_ascii_digit());
                     let has_digit = seg.chars().any(|c| c.is_ascii_digit());
-                    let is_hash = seg.len() >= 4 && has_digit && seg.chars().all(|c| c.is_alphanumeric());
+                    let is_hash =
+                        seg.len() >= 4 && has_digit && seg.chars().all(|c| c.is_alphanumeric());
                     if is_numeric || is_hash {
                         meaningful_end = i;
                     } else {
@@ -3866,7 +4120,10 @@ pub async fn logs(_ctx: &Context, follow: bool, service: Option<&str>, tail: u32
                 other
             )));
         }
-        None => ("app.kubernetes.io/name in (inferadb-engine,inferadb-control,inferadb-dashboard)", "all"),
+        None => (
+            "app.kubernetes.io/name in (inferadb-engine,inferadb-control,inferadb-dashboard)",
+            "all",
+        ),
     };
 
     args.push("-l");
@@ -3982,9 +4239,91 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
         ));
     }
 
+    // Gather information about what will be deleted
+    let deploy_dir = get_deploy_dir();
+    let can_redeploy = deploy_dir.exists();
+
+    // Show dry run only if not skipping confirmation
     if !yes {
-        println!("This will delete all data in the development cluster!");
-        print!("Are you sure? [y/N] ");
+        let fdb_clusters = get_fdb_clusters_for_reset();
+        let deployments = get_deployments_for_reset();
+        let pvcs = get_pvcs_for_reset();
+
+        print_styled_header("Reset InferaDB Development Cluster");
+
+        // Section: What will be deleted
+        print_section_header("Resources to be deleted");
+
+        // FDB Clusters
+        if fdb_clusters.is_empty() {
+            print_prefixed_dot_leader("○", "FoundationDB Cluster", "none found");
+        } else {
+            for (name, processes, version) in &fdb_clusters {
+                let detail = format!("{} ({}, {})", name, processes, version);
+                print_prefixed_dot_leader("○", "FoundationDB Cluster", &detail);
+            }
+        }
+
+        // Deployments
+        if deployments.is_empty() {
+            print_prefixed_dot_leader("○", "Deployment", "none found");
+        } else {
+            for (name, replicas, image) in &deployments {
+                // Shorten the name for display
+                let short_name = name.strip_prefix("inferadb-").unwrap_or(name);
+                let detail = format!("{} replica(s), {}", replicas, image);
+                print_prefixed_dot_leader("○", &format!("Deployment: {}", short_name), &detail);
+            }
+        }
+
+        // PVCs
+        if pvcs.is_empty() {
+            print_prefixed_dot_leader("○", "Persistent Volume", "none found");
+        } else {
+            for (name, size, status) in &pvcs {
+                // Shorten FDB PVC names for display
+                let short_name = if name.starts_with("inferadb-fdb-") {
+                    let suffix = name.strip_prefix("inferadb-fdb-").unwrap_or(name);
+                    // Further simplify: "log-36529-data" -> "log", "storage-3983-data" -> "storage"
+                    if let Some(pos) = suffix.find('-') {
+                        format!("fdb-{}", &suffix[..pos])
+                    } else {
+                        format!("fdb-{}", suffix)
+                    }
+                } else {
+                    name.clone()
+                };
+                let detail = format!("{}, {}", size, status);
+                print_prefixed_dot_leader("○", &format!("Volume: {}", short_name), &detail);
+            }
+        }
+
+        // Section: What will be recreated
+        print_section_header("Actions after deletion");
+
+        if can_redeploy {
+            print_prefixed_dot_leader("○", "Redeploy from", "deploy/flux/apps/dev");
+            print_prefixed_dot_leader("○", "FoundationDB", "new cluster with empty data");
+            print_prefixed_dot_leader("○", "InferaDB Engine", "fresh deployment");
+            print_prefixed_dot_leader("○", "InferaDB Control", "fresh deployment");
+            print_prefixed_dot_leader("○", "InferaDB Dashboard", "fresh deployment");
+        } else {
+            print_prefixed_dot_leader(
+                "!",
+                "Deploy directory",
+                "not found - manual redeploy required",
+            );
+        }
+
+        println!();
+
+        use ferment::style::Color;
+        let yellow = Color::Yellow.to_ansi_fg();
+        let reset_color = "\x1b[0m";
+        print!(
+            "{}This action cannot be undone.{} Continue? [y/N] ",
+            yellow, reset_color
+        );
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
@@ -3994,53 +4333,142 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
             println!("Aborted.");
             return Ok(());
         }
+        println!();
     }
 
-    print_header("Resetting Development Cluster Data");
+    use crate::tui::start_spinner;
+
+    print_styled_header("Resetting InferaDB Development Cluster");
+    println!();
 
     // Delete FDB cluster (will recreate with empty data)
-    print_phase("Deleting FoundationDB cluster");
-    let _ = run_command_optional(
-        "kubectl",
-        &["delete", "foundationdbcluster", "--all", "-n", "inferadb"],
-    );
-
-    // Delete InferaDB deployments
-    print_phase("Deleting InferaDB deployments");
-    for deploy in &["inferadb-engine", "inferadb-control", "inferadb-dashboard"] {
+    {
+        let spin = start_spinner("Deleting FoundationDB Cluster");
         let _ = run_command_optional(
             "kubectl",
-            &["delete", "deployment", deploy, "-n", "inferadb"],
+            &["delete", "foundationdbcluster", "--all", "-n", "inferadb"],
         );
+        spin.success(&format_dot_leader("Deleted FoundationDB Cluster", "OK"));
+    }
+
+    // Delete InferaDB deployments
+    {
+        let spin = start_spinner("Deleting InferaDB Deployments");
+        for deploy in &["inferadb-engine", "inferadb-control", "inferadb-dashboard"] {
+            let _ = run_command_optional(
+                "kubectl",
+                &["delete", "deployment", deploy, "-n", "inferadb"],
+            );
+        }
+        spin.success(&format_dot_leader("Deleted InferaDB Deployments", "OK"));
     }
 
     // Delete PVCs
-    print_phase("Deleting persistent volume claims");
-    let _ = run_command_optional("kubectl", &["delete", "pvc", "--all", "-n", "inferadb"]);
+    {
+        let spin = start_spinner("Deleting Persistent Volumes");
+        let _ = run_command_optional("kubectl", &["delete", "pvc", "--all", "-n", "inferadb"]);
+        spin.success(&format_dot_leader("Deleted Persistent Volumes", "OK"));
+    }
 
     // Wait a moment
-    std::thread::sleep(Duration::from_secs(5));
+    {
+        let spin = start_spinner("Waiting for resources to terminate");
+        std::thread::sleep(Duration::from_secs(5));
+        spin.success(&format_dot_leader("Resources terminated", "OK"));
+    }
 
     // Reapply the dev overlay
-    let deploy_dir = get_deploy_dir();
-    if deploy_dir.exists() {
-        println!();
-        print_phase("Redeploying applications");
-        run_command_streaming(
+    if can_redeploy {
+        print_section_header("Redeploying Applications");
+
+        let spin = start_spinner("Applying Kubernetes manifests");
+        let apply_output = run_command(
             "kubectl",
             &[
                 "apply",
                 "-k",
                 deploy_dir.join("flux/apps/dev").to_str().unwrap(),
             ],
-            &[],
-        )?;
+        );
+        spin.clear();
+
+        if let Ok(output) = apply_output {
+            for line in output.lines() {
+                if let Some((resource, status)) = parse_kubectl_apply_line(line) {
+                    let prefix = if status == "created" || status == "configured" {
+                        "✓"
+                    } else {
+                        "○"
+                    };
+                    // Padding before prefix, not before text
+                    println!("  {}", format_reset_dot_leader(prefix, &resource, &status));
+                }
+            }
+        }
+
+        // Wait for FDB cluster to be ready (generates new cluster file ConfigMap)
+        println!();
+        {
+            let spin = start_spinner("Waiting for FoundationDB cluster");
+            let mut ready = false;
+            for _ in 0..150 {
+                // Wait up to 5 minutes (150 * 2s)
+                if let Some(output) = run_command_optional(
+                    "kubectl",
+                    &[
+                        "get",
+                        "foundationdbcluster",
+                        "inferadb-fdb",
+                        "-n",
+                        "inferadb",
+                        "-o",
+                        "jsonpath={.status.health.available}",
+                    ],
+                ) {
+                    if output.trim() == "true" {
+                        ready = true;
+                        break;
+                    }
+                }
+                std::thread::sleep(Duration::from_secs(2));
+            }
+            if ready {
+                spin.success(&format_dot_leader("FoundationDB cluster ready", "OK"));
+            } else {
+                spin.success(&format_dot_leader(
+                    "FoundationDB cluster",
+                    "WAITING (may take a few minutes)",
+                ));
+            }
+        }
+
+        // Restart engine deployment to pick up new FDB cluster file ConfigMap
+        {
+            let spin = start_spinner("Restarting engine to pick up new cluster file");
+            let _ = run_command_optional(
+                "kubectl",
+                &[
+                    "rollout",
+                    "restart",
+                    "deployment/inferadb-engine",
+                    "-n",
+                    "inferadb",
+                ],
+            );
+            spin.success(&format_dot_leader("Engine deployment restarted", "OK"));
+        }
     }
 
+    use ferment::style::Color;
+    let green = Color::Green.to_ansi_fg();
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset_color = "\x1b[0m";
     println!();
-    print_success("Cluster data reset complete!");
-    print_info("Applications are being recreated. Monitor with:");
-    println!("  kubectl get pods -n inferadb -w");
+    println!("{}✓ Cluster reset complete.{}", green, reset_color);
+    println!(
+        "{}  Applications may take a few minutes to become available.{}",
+        dim, reset_color
+    );
 
     Ok(())
 }
