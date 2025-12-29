@@ -31,9 +31,6 @@ inferadb completion fish > ~/.config/fish/completions/inferadb.fish
 ## Quick Start
 
 ```bash
-# First-time setup
-inferadb init
-
 # Authenticate
 inferadb login
 
@@ -57,7 +54,6 @@ inferadb relationships list --resource document:readme
 
 | Command             | Description                   |
 | ------------------- | ----------------------------- |
-| `inferadb init`     | First-run setup wizard        |
 | `inferadb login`    | Authenticate with InferaDB    |
 | `inferadb logout`   | Remove authentication         |
 | `inferadb register` | Create a new account          |
@@ -254,50 +250,43 @@ inferadb relationships list --resource document:readme
 
 ### Local Development
 
-| Command                       | Description                      |
-| ----------------------------- | -------------------------------- |
-| `inferadb dev doctor`         | Check development environment    |
-| `inferadb dev install`        | Install development dependencies |
-| `inferadb dev start`          | Start local Talos cluster        |
-| `inferadb dev stop`           | Pause local cluster              |
-| `inferadb dev stop --destroy` | Destroy local cluster            |
-| `inferadb dev status`         | Show cluster status              |
-| `inferadb dev logs`           | View cluster logs                |
+| Command                       | Description                   |
+| ----------------------------- | ----------------------------- |
+| `inferadb dev doctor`         | Check development environment |
+| `inferadb dev start`          | Start local Talos cluster     |
+| `inferadb dev stop`           | Pause local cluster           |
+| `inferadb dev stop --destroy` | Destroy local cluster         |
+| `inferadb dev status`         | Show cluster status           |
+| `inferadb dev logs`           | View cluster logs             |
+| `inferadb dev dashboard`      | Open dashboard in browser     |
+| `inferadb dev reset`          | Reset all cluster data        |
+| `inferadb dev import <file>`  | Import data into cluster      |
+| `inferadb dev export <file>`  | Export data from cluster      |
 
 ## Global Flags
 
-| Flag        | Short | Description                                     |
-| ----------- | ----- | ----------------------------------------------- |
-| `@<name>`   |       | Use specific profile (e.g., `@prod`)            |
-| `--org`     |       | Override organization from profile              |
-| `--vault`   | `-v`  | Override vault from profile                     |
-| `--output`  | `-o`  | Output format: `json`, `yaml`, `table`, `jsonl` |
-| `--quiet`   | `-q`  | Suppress non-essential output                   |
-| `--verbose` |       | Enable verbose output                           |
-| `--debug`   |       | Enable debug logging                            |
-| `--timeout` |       | Operation timeout (e.g., `30s`, `5m`)           |
-| `--yes`     | `-y`  | Skip confirmation prompts                       |
-| `--help`    | `-h`  | Show help                                       |
-| `--version` |       | Show version                                    |
+| Flag       | Short | Description                                     |
+| ---------- | ----- | ----------------------------------------------- |
+| `@<name>`  |       | Use specific profile (e.g., `@prod`)            |
+| `--org`    |       | Override organization from profile              |
+| `--vault`  | `-v`  | Override vault from profile                     |
+| `--output` | `-o`  | Output format: `json`, `yaml`, `table`, `jsonl` |
+| `--color`  |       | Color output: `auto`, `always`, `never`         |
+| `--quiet`  | `-q`  | Suppress non-essential output                   |
+| `--debug`  |       | Enable debug logging                            |
+| `--lang`   |       | Language for CLI output (e.g., `en-US`)         |
+| `--yes`    | `-y`  | Skip confirmation prompts                       |
+| `--help`   | `-h`  | Show help                                       |
+| `--version`| `-V`  | Show version                                    |
 
 ### Scripting Flags
 
-| Flag              | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| `--if-exists`     | No error if resource doesn't exist (for delete)   |
-| `--if-not-exists` | No error if resource already exists (for create)  |
-| `--wait`          | Wait for async operations to complete             |
-| `--wait-timeout`  | Timeout when waiting (default: 5m)                |
-| `--exit-code`     | Return meaningful exit codes (for check commands) |
+These flags are available on specific commands to support scripting:
 
-### Network & TLS Flags
-
-| Flag            | Description                            |
-| --------------- | -------------------------------------- |
-| `--ca-cert`     | Path to custom CA certificate bundle   |
-| `--client-cert` | Path to client certificate (mTLS)      |
-| `--client-key`  | Path to client private key (mTLS)      |
-| `--insecure`    | Skip TLS verification (local dev only) |
+| Flag              | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| `--if-exists`     | No error if resource doesn't exist (for delete)  |
+| `--if-not-exists` | No error if resource already exists (for create) |
 
 ## Configuration
 

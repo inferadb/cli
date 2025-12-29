@@ -1558,21 +1558,6 @@ pub enum DevCommands {
         interactive: bool,
     },
 
-    /// Completely remove local dev environment
-    Uninstall {
-        /// Skip confirmation prompt
-        #[arg(long, short)]
-        yes: bool,
-
-        /// Run in full-screen interactive TUI mode
-        #[arg(long, short)]
-        interactive: bool,
-
-        /// Also remove cached Tailscale credentials
-        #[arg(long)]
-        with_credentials: bool,
-    },
-
     /// Start local development cluster
     Start {
         /// Skip building container images
@@ -1602,6 +1587,18 @@ pub enum DevCommands {
 
     /// Stop local development cluster (pause containers)
     Stop {
+        /// Completely destroy the cluster instead of pausing
+        #[arg(long, short)]
+        destroy: bool,
+
+        /// Skip confirmation prompt (only used with --destroy)
+        #[arg(long, short)]
+        yes: bool,
+
+        /// Also remove cached Tailscale credentials (only used with --destroy)
+        #[arg(long)]
+        with_credentials: bool,
+
         /// Use interactive TUI mode
         #[arg(long, short = 'i')]
         interactive: bool,
@@ -1638,6 +1635,18 @@ pub enum DevCommands {
     /// Stop local development cluster (alias for 'stop')
     #[command(hide = true)]
     Down {
+        /// Completely destroy the cluster instead of pausing
+        #[arg(long, short)]
+        destroy: bool,
+
+        /// Skip confirmation prompt (only used with --destroy)
+        #[arg(long, short)]
+        yes: bool,
+
+        /// Also remove cached Tailscale credentials (only used with --destroy)
+        #[arg(long)]
+        with_credentials: bool,
+
         /// Use interactive TUI mode
         #[arg(long, short = 'i')]
         interactive: bool,

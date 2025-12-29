@@ -627,11 +627,6 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
     use crate::cli::DevCommands;
     match sub {
         DevCommands::Doctor { interactive } => dev::doctor(ctx, *interactive).await,
-        DevCommands::Uninstall {
-            yes,
-            interactive,
-            with_credentials,
-        } => dev::uninstall(ctx, *yes, *interactive, *with_credentials).await,
         DevCommands::Start {
             skip_build,
             interactive,
@@ -651,7 +646,12 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
             )
             .await
         }
-        DevCommands::Stop { interactive } => dev::stop(ctx, *interactive).await,
+        DevCommands::Stop {
+            destroy,
+            yes,
+            with_credentials,
+            interactive,
+        } => dev::stop(ctx, *destroy, *yes, *with_credentials, *interactive).await,
         DevCommands::Up {
             skip_build,
             interactive,
@@ -672,9 +672,14 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
             )
             .await
         }
-        DevCommands::Down { interactive } => {
+        DevCommands::Down {
+            destroy,
+            yes,
+            with_credentials,
+            interactive,
+        } => {
             eprintln!("Hint: 'dev down' is now 'dev stop'\n");
-            dev::stop(ctx, *interactive).await
+            dev::stop(ctx, *destroy, *yes, *with_credentials, *interactive).await
         }
         DevCommands::Status { interactive } => dev::dev_status(ctx, *interactive).await,
         DevCommands::Logs {

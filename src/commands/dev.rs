@@ -39,7 +39,7 @@ const TIP_RESUME_CLUSTER: &str = "Run 'inferadb dev start' to resume the cluster
 
 /// Target line width for step output (before terminal margin).
 /// This ensures consistent alignment across all phases.
-const STEP_LINE_WIDTH: usize = 60;
+const STEP_LINE_WIDTH: usize = 120;
 
 // ============================================================================
 // Start step types for clean output formatting
@@ -48,19 +48,19 @@ const STEP_LINE_WIDTH: usize = 60;
 /// A step in the start process with in-progress and completed text variants.
 struct StartStep {
     /// Text shown while the step is running (e.g., "Cloning deployment repository")
-    in_progress: &'static str,
+    in_progress: String,
     /// Text shown when the step completes (e.g., "Cloned deployment repository")
-    completed: &'static str,
+    completed: String,
     /// Whether to show dot leaders to status on the right
     dot_leader: bool,
 }
 
 impl StartStep {
     /// Create a step with dot leaders to status (OK or SKIPPED).
-    const fn with_ok(in_progress: &'static str, completed: &'static str) -> Self {
+    fn with_ok(in_progress: &str, completed: &str) -> Self {
         Self {
-            in_progress,
-            completed,
+            in_progress: in_progress.to_string(),
+            completed: completed.to_string(),
             dot_leader: true,
         }
     }
@@ -84,23 +84,106 @@ fn print_phase_header(title: &str) {
     println!("\n  {} ...\n", title);
 }
 
-/// Format a step line with dot leaders to a status suffix.
+/// Calculate the visible length of a string, stripping ANSI escape sequences.
+fn visible_len(s: &str) -> usize {
+    let mut len = 0;
+    let mut in_escape = false;
+    for c in s.chars() {
+        if in_escape {
+            if c == 'm' {
+                in_escape = false;
+            }
+        } else if c == '\x1b' {
+            in_escape = true;
+        } else {
+            len += 1;
+        }
+    }
+    len
+}
+
+/// Format a line with dot leaders to a status suffix.
 ///
-/// Format: `{text} {dots} {status}` where total width is consistent.
-fn format_step_line(text: &str, status: &str) -> String {
+/// Format: `{text} {dots} {status}` where total width is `STEP_LINE_WIDTH`.
+/// The dots are dimmed for visual distinction. Status may contain ANSI codes.
+fn format_dot_leader(text: &str, status: &str) -> String {
     use ferment::style::Color;
 
     let dim = Color::BrightBlack.to_ansi_fg();
     let reset = "\x1b[0m";
 
-    // Calculate dots needed: total width - text length - status length - 2 spaces
+    // Calculate dots needed: total width - text length - visible status length - 2 spaces
     let dots_len = STEP_LINE_WIDTH
         .saturating_sub(text.len())
-        .saturating_sub(status.len())
+        .saturating_sub(visible_len(status))
         .saturating_sub(2);
     let dots = ".".repeat(dots_len);
 
     format!("{} {}{}{} {}", text, dim, dots, reset, status)
+}
+
+/// Print a line with a dimmed prefix symbol, dot leaders, and status.
+///
+/// Format: `{prefix} {text} {dots} {status}` where total width is `STEP_LINE_WIDTH`.
+/// Status may contain ANSI codes which are handled correctly.
+fn print_prefixed_dot_leader(prefix: &str, text: &str, status: &str) {
+    use ferment::style::Color;
+
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    // Calculate dots needed: total width - prefix - text - visible status - spaces
+    let prefix_len = prefix.chars().count(); // Use char count for Unicode
+    let dots_len = STEP_LINE_WIDTH
+        .saturating_sub(prefix_len)
+        .saturating_sub(1) // space after prefix
+        .saturating_sub(text.len())
+        .saturating_sub(visible_len(status))
+        .saturating_sub(2); // spaces around dots
+    let dots = ".".repeat(dots_len);
+
+    println!(
+        "{}{}{} {} {}{}{} {}",
+        dim, prefix, reset, text, dim, dots, reset, status
+    );
+}
+
+/// Print a line with a colored prefix symbol, dot leaders, and status.
+///
+/// Format: `{prefix} {text} {dots} {status}` where total width is `STEP_LINE_WIDTH`.
+/// The `prefix_formatted` should include ANSI codes, `prefix_width` is the visible character count.
+/// Status may contain ANSI codes which are handled correctly.
+fn print_colored_prefix_dot_leader(prefix_formatted: &str, prefix_width: usize, text: &str, status: &str) {
+    use ferment::style::Color;
+
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    // Calculate dots needed: total width - prefix - text - visible status - spaces
+    let dots_len = STEP_LINE_WIDTH
+        .saturating_sub(prefix_width)
+        .saturating_sub(1) // space after prefix
+        .saturating_sub(text.len())
+        .saturating_sub(visible_len(status))
+        .saturating_sub(2); // spaces around dots
+    let dots = ".".repeat(dots_len);
+
+    println!(
+        "{} {} {}{}{} {}",
+        prefix_formatted, text, dim, dots, reset, status
+    );
+}
+
+/// Print a hint line with a dimmed circle prefix.
+///
+/// Format: `○ {text}` where the circle is dimmed.
+fn print_hint(text: &str) {
+    use ferment::style::Color;
+
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    println!("{}○{} {}", dim, reset, text);
 }
 
 /// Run a step with spinner and format output according to the new design.
@@ -127,7 +210,7 @@ where
             // Format output with optional dot leaders
             if step.dot_leader {
                 let status = if is_skipped { "SKIPPED" } else { "OK" };
-                let formatted = format_step_line(&success_text, status);
+                let formatted = format_dot_leader(&success_text, status);
                 if is_skipped {
                     spin.info(&formatted);
                 } else {
@@ -219,10 +302,42 @@ fn run_command_optional(cmd: &str, args: &[&str]) -> Option<String> {
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
 }
 
-/// Extract a meaningful version string from command output
+/// Normalize a version string to "vX.Y.Z" format, including build number if present.
+fn normalize_version(raw: &str) -> String {
+    // Find where the version number starts (first digit, optionally preceded by 'v')
+    let trimmed = raw.trim();
+    let start = trimmed
+        .find(|c: char| c.is_ascii_digit())
+        .unwrap_or(0);
+
+    // Check if there's a 'v' just before the digit
+    let has_v = start > 0 && trimmed.chars().nth(start - 1) == Some('v');
+    let version_start = if has_v { start - 1 } else { start };
+
+    // Extract version starting from this point
+    let version_part = &trimmed[version_start..];
+
+    // Find end of version (stop at whitespace or end)
+    let version = version_part
+        .split_whitespace()
+        .next()
+        .unwrap_or(version_part)
+        .trim_end_matches([',', ';', ':']);
+
+    // Ensure it starts with 'v'
+    if version.starts_with('v') {
+        version.to_string()
+    } else if version.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        format!("v{}", version)
+    } else {
+        raw.to_string()
+    }
+}
+
+/// Extract a meaningful version string from command output.
 fn extract_version_string(output: &str, command: &str) -> String {
     // Handle command-specific output formats
-    match command {
+    let raw = match command {
         "talosctl" => {
             // Output: "Client:\nTalos v1.11.5"
             output
@@ -251,7 +366,8 @@ fn extract_version_string(output: &str, command: &str) -> String {
                 .map(|line| line.trim().to_string())
                 .unwrap_or_else(|| "installed".to_string())
         }
-    }
+    };
+    normalize_version(&raw)
 }
 
 /// Run a command with live output streaming
@@ -338,48 +454,6 @@ fn are_containers_paused() -> bool {
     )
     .map(|output| !output.trim().is_empty())
     .unwrap_or(false)
-}
-
-/// Pause all cluster containers
-fn pause_cluster_containers() -> Result<()> {
-    let containers = get_cluster_containers();
-    if containers.is_empty() {
-        return Ok(());
-    }
-
-    println!("Pausing {} container(s)...", containers.len());
-    for container in &containers {
-        if let Err(e) = run_command("docker", &["pause", container]) {
-            // Ignore errors for already paused containers
-            if !e.to_string().contains("already paused") {
-                eprintln!("  Warning: Failed to pause {}: {}", container, e);
-            }
-        } else {
-            println!("  Paused: {}", container);
-        }
-    }
-    Ok(())
-}
-
-/// Unpause all cluster containers
-fn unpause_cluster_containers() -> Result<()> {
-    let containers = get_cluster_containers();
-    if containers.is_empty() {
-        return Ok(());
-    }
-
-    println!("Resuming {} container(s)...", containers.len());
-    for container in &containers {
-        if let Err(e) = run_command("docker", &["unpause", container]) {
-            // Ignore errors for containers that aren't paused
-            if !e.to_string().contains("not paused") {
-                eprintln!("  Warning: Failed to unpause {}: {}", container, e);
-            }
-        } else {
-            println!("  Resumed: {}", container);
-        }
-    }
-    Ok(())
 }
 
 /// Get Docker container IP on a specific network
@@ -480,12 +554,12 @@ fn get_install_hint(dep: &Dependency) -> &'static str {
 // Shared helper functions
 // ============================================================================
 
-/// Print a formatted header for non-interactive mode with dimmed slashes.
+/// Print a formatted header for non-interactive mode with dimmed record icon.
 fn print_styled_header(title: &str) {
     use ferment::style::Color;
     let dim = Color::BrightBlack.to_ansi_fg();
     let reset = "\x1b[0m";
-    println!("\n{}//{}  {}  {}//{}", dim, reset, title, dim, reset);
+    println!("\n{}⏺{} {}", dim, reset, title);
 }
 
 // ============================================================================
@@ -535,7 +609,7 @@ fn check_docker_daemon() -> Option<(CheckResult, bool)> {
 
     match run_command_optional("docker", &["info"]) {
         Some(_) => Some((
-            CheckResult::success("Services", "Docker daemon", "running"),
+            CheckResult::success("Services", "Docker daemon", "RUNNING"),
             true,
         )),
         None => Some((
@@ -558,7 +632,7 @@ fn check_tailscale_connection() -> Option<CheckResult> {
     match run_command_optional("tailscale", &["status", "--json"]) {
         Some(output) => {
             if output.contains("\"BackendState\"") && output.contains("\"Running\"") {
-                Some(CheckResult::success("Services", "Tailscale", "connected"))
+                Some(CheckResult::success("Services", "Tailscale", "CONNECTED"))
             } else {
                 Some(CheckResult::optional(
                     "Services",
@@ -575,27 +649,13 @@ fn check_tailscale_connection() -> Option<CheckResult> {
 fn check_tailscale_credentials() -> CheckResult {
     let creds_file = get_tailscale_creds_file();
     if creds_file.exists() {
-        CheckResult::success("Configuration", "Tailscale OAuth", "credentials cached")
+        CheckResult::success("Configuration", "Tailscale OAuth", "CONFIGURED")
     } else {
         CheckResult::optional(
             "Configuration",
             "Tailscale OAuth",
             "will be prompted during dev start",
         )
-    }
-}
-
-/// Check deploy repository status.
-fn check_deploy_repository() -> CheckResult {
-    let deploy_dir = get_deploy_dir();
-    if deploy_dir.exists() {
-        CheckResult::success(
-            "Configuration",
-            "Deployment",
-            deploy_dir.display().to_string(),
-        )
-    } else {
-        CheckResult::optional("Configuration", "Deployment", "pending install")
     }
 }
 
@@ -607,9 +667,9 @@ fn extract_status_detail(status: &str) -> &str {
         .trim_start_matches("○ ")
 }
 
-/// Format a check result with component name for spinner output.
+/// Format a check result with component name and dot leaders.
 fn format_check_output(component: &str, detail: &str) -> String {
-    format!("{}: {}", component, detail)
+    format_dot_leader(component, detail)
 }
 
 /// Run all doctor checks and return results.
@@ -642,9 +702,6 @@ fn run_all_checks() -> (Vec<CheckResult>, EnvironmentStatus) {
     // Check Tailscale credentials
     results.push(check_tailscale_credentials());
 
-    // Check deploy repository
-    results.push(check_deploy_repository());
-
     let status = if all_required_ok {
         EnvironmentStatus::Ready
     } else {
@@ -673,9 +730,11 @@ fn doctor_with_spinners() -> Result<()> {
 
     let mut all_required_ok = true;
 
-    // Check dependencies
+    // Phase 1: Check dependencies
+    print_phase_header("Checking dependencies");
+
     for dep in DEPENDENCIES {
-        let spin = start_spinner(format!("Check {}", dep.name));
+        let spin = start_spinner(format!("Checking {}", dep.name));
         let (result, ok) = check_dependency(dep);
         if !ok {
             all_required_ok = false;
@@ -695,9 +754,12 @@ fn doctor_with_spinners() -> Result<()> {
         }
     }
 
+    // Phase 2: Check environment
+    print_phase_header("Checking environment");
+
     // Check Docker daemon
     if command_exists("docker") {
-        let spin = start_spinner("Check Docker daemon");
+        let spin = start_spinner("Checking Docker daemon");
         if let Some((result, ok)) = check_docker_daemon() {
             if !ok {
                 all_required_ok = false;
@@ -714,13 +776,13 @@ fn doctor_with_spinners() -> Result<()> {
                 spin.success(&output);
             }
         } else {
-            spin.success("Docker daemon: skipped");
+            spin.success(&format_dot_leader("Docker daemon", "SKIPPED"));
         }
     }
 
     // Check Tailscale connection (optional)
     if command_exists("tailscale") {
-        let spin = start_spinner("Check Tailscale");
+        let spin = start_spinner("Checking Tailscale");
         if let Some(result) = check_tailscale_connection() {
             let detail = extract_status_detail(&result.status);
             let output = format_check_output(&result.component, detail);
@@ -733,13 +795,13 @@ fn doctor_with_spinners() -> Result<()> {
                 spin.success(&output);
             }
         } else {
-            spin.warning("Tailscale: could not check status");
+            spin.warning(&format_dot_leader("Tailscale", "UNKNOWN"));
         }
     }
 
     // Check Tailscale credentials
     {
-        let spin = start_spinner("Check Tailscale OAuth");
+        let spin = start_spinner("Checking Tailscale OAuth");
         let result = check_tailscale_credentials();
         let detail = extract_status_detail(&result.status);
         let output = format_check_output(&result.component, detail);
@@ -753,28 +815,10 @@ fn doctor_with_spinners() -> Result<()> {
         }
     }
 
-    // Check deploy repository
-    {
-        let spin = start_spinner("Check deployment repository");
-        let result = check_deploy_repository();
-        let detail = extract_status_detail(&result.status);
-        let output = format_check_output(&result.component, detail);
-
-        if result.status.starts_with('✓') {
-            spin.success(&output);
-        } else if result.status.starts_with('○') {
-            spin.warning(&output);
-        } else {
-            spin.success(&output);
-        }
-    }
-
-    // Print overall status
+    // Print overall status and hints
     println!();
     if all_required_ok {
-        print_success("Environment ready");
-        println!();
-        print_info("Run 'inferadb dev start' to start the development cluster");
+        print_hint("Run 'inferadb dev start' to start the development cluster");
         Ok(())
     } else {
         print_error("Environment not ready - missing required dependencies");
@@ -1286,37 +1330,26 @@ fn step_remove_tailscale_creds() -> std::result::Result<Option<String>, String> 
     Ok(Some("Credentials removed".to_string()))
 }
 
-/// Run dev uninstall - completely remove local dev environment
-pub async fn uninstall(
-    ctx: &Context,
-    yes: bool,
-    interactive: bool,
-    with_credentials: bool,
-) -> Result<()> {
-    if interactive && crate::tui::is_interactive(ctx) {
-        return uninstall_interactive(with_credentials);
-    }
-
-    uninstall_with_spinners(yes, with_credentials)
-}
+// Uninstall/destroy functionality is accessed via `stop --destroy`.
+// The functions below are called from stop() when the destroy flag is set.
 
 /// Run uninstall with inline spinners for each step
 fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
     use crate::tui::start_spinner;
 
-    print_styled_header("Uninstalling InferaDB Development Cluster");
+    print_styled_header("Destroying InferaDB Development Cluster");
 
     // Gather what will be removed
     let info = gather_uninstall_info();
 
     if !info.has_anything() {
-        println!("Nothing to uninstall. The development cluster is not installed.");
+        println!("Nothing to destroy. The development cluster is not installed.");
         return Ok(());
     }
 
-    // Show what will be removed
+    // Show what will be destroyed
     println!();
-    println!("This will remove:");
+    println!("This will destroy:");
     println!();
     for line in info.removal_lines() {
         println!("  • {}", line);
@@ -1414,13 +1447,13 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
 
     // Summary
     println!();
-    print_success("Uninstall complete");
+    print_success("Cluster destroyed");
 
     // Show hint about credentials if they weren't removed
     if !with_credentials && info.has_creds_file {
         println!();
         print_info("Tailscale credentials were preserved for future dev clusters.");
-        print_info("To also remove them: inferadb dev uninstall --with-credentials");
+        print_info("To also remove them: inferadb dev stop --destroy --with-credentials");
     }
 
     Ok(())
@@ -1435,7 +1468,7 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     let info = gather_uninstall_info();
 
     if !info.has_anything() {
-        println!("Nothing to uninstall. The development cluster is not installed.");
+        println!("Nothing to destroy. The development cluster is not installed.");
         return Ok(());
     }
 
@@ -1567,16 +1600,6 @@ pub async fn start(
     force: bool,
     commit: Option<&str>,
 ) -> Result<()> {
-    // Check if cluster containers exist and are paused - handle resume
-    if docker_container_exists(CLUSTER_NAME) && are_containers_paused() {
-        if interactive {
-            return start_resume_interactive();
-        } else {
-            return start_resume_with_spinners();
-        }
-    }
-    // If cluster is running, we continue - each step will validate and repair as needed
-
     // Save CLI-provided credentials if both are present
     if let (Some(client_id), Some(client_secret)) = (&tailscale_client, &tailscale_secret) {
         if !client_id.is_empty() && !client_secret.is_empty() {
@@ -1590,110 +1613,8 @@ pub async fn start(
     }
 
     // Non-interactive mode - continue with existing flow
+    // This handles both fresh starts and resuming paused clusters
     start_with_streaming(skip_build, force, commit)
-}
-
-/// Resume paused cluster with spinners (non-interactive)
-fn start_resume_with_spinners() -> Result<()> {
-    use crate::tui::start_spinner;
-
-    print_styled_header("Resuming InferaDB Development Cluster");
-
-    // Unpause all cluster containers
-    {
-        let spin = start_spinner("Resume cluster containers");
-        match unpause_cluster_containers() {
-            Ok(()) => spin.success("Resumed"),
-            Err(e) => {
-                spin.failure(&e.to_string());
-                return Err(e);
-            }
-        }
-    }
-
-    // Also unpause the registry if it exists
-    if docker_container_exists(REGISTRY_NAME) {
-        let spin = start_spinner("Resume local registry");
-        let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
-        spin.success("Resumed");
-    }
-
-    // Wait a moment for containers to stabilize
-    {
-        let spin = start_spinner("Wait for cluster to stabilize");
-        std::thread::sleep(Duration::from_secs(3));
-        spin.success("Ready");
-    }
-
-    // Verify cluster is healthy
-    {
-        let spin = start_spinner("Verify cluster status");
-        match run_command("kubectl", &["get", "nodes", "-o", "wide"]) {
-            Ok(_) => spin.success("Healthy"),
-            Err(e) => {
-                spin.warning(&e.to_string());
-            }
-        }
-    }
-
-    println!();
-    print_success("Cluster resumed successfully!");
-    println!();
-    print_info("Run 'inferadb dev status' for full cluster status.");
-    Ok(())
-}
-
-/// Resume paused cluster with interactive TUI
-fn start_resume_interactive() -> Result<()> {
-    use crate::tui::{DevStopView, InstallStep};
-    use ferment::runtime::{Program, ProgramOptions};
-
-    let steps = vec![
-        InstallStep::with_executor("Resume cluster containers", || {
-            unpause_cluster_containers()
-                .map(|()| Some("Resumed".to_string()))
-                .map_err(|e| e.to_string())
-        }),
-        InstallStep::with_executor("Resume local registry", || {
-            if docker_container_exists(REGISTRY_NAME) {
-                let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
-                Ok(Some("Resumed".to_string()))
-            } else {
-                Ok(Some("Not installed".to_string()))
-            }
-        }),
-        InstallStep::with_executor("Wait for cluster to stabilize", || {
-            std::thread::sleep(Duration::from_secs(3));
-            Ok(Some("Ready".to_string()))
-        }),
-        InstallStep::with_executor("Verify cluster status", || {
-            match run_command("kubectl", &["get", "nodes", "-o", "wide"]) {
-                Ok(_) => Ok(Some("Healthy".to_string())),
-                Err(e) => Err(e.to_string()),
-            }
-        }),
-    ];
-
-    let view = DevStopView::new(steps)
-        .title("InferaDB Development Cluster")
-        .subtitle("Resume");
-
-    let result = Program::new(view)
-        .with_options(ProgramOptions::fullscreen())
-        .run();
-
-    match result {
-        Ok(view) if view.is_success() => {
-            println!();
-            print_success("Cluster resumed successfully!");
-            println!();
-            print_info("Run 'inferadb dev status' for full cluster status.");
-            Ok(())
-        }
-        Ok(view) if view.was_cancelled() => Err(Error::Other("Cancelled".to_string())),
-        Ok(_) => Err(Error::Other("Resume failed".to_string())),
-        Err(e) => Err(Error::Other(e.to_string())),
-    }
 }
 
 /// Start new cluster with interactive TUI (shows Tailscale setup modal)
@@ -1773,75 +1694,117 @@ fn build_start_steps(
 
     let deploy_dir_owned = deploy_dir.to_path_buf();
     let commit_owned = commit.map(|s| s.to_string());
+    let is_paused = docker_container_exists(CLUSTER_NAME) && are_containers_paused();
 
-    vec![
-        // Phase 1: Conditioning environment
-        InstallStep::with_executor("Cloning deployment repository", {
-            let deploy_dir = deploy_dir_owned.clone();
-            let commit = commit_owned.clone();
-            move || step_clone_repo(&deploy_dir, force, commit.as_deref())
-        }),
-        InstallStep::with_executor("Creating configuration directory", step_create_config_dir),
-        InstallStep::with_executor("Setting up Helm repositories", step_setup_helm),
-        // Phase 2: Setting up cluster
-        InstallStep::with_executor("Cleaning stale contexts", || {
-            let _ = run_command_optional("talosctl", &["config", "context", ""]);
-            if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
-                for line in contexts.lines() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
-                        let _ = run_command_optional(
-                            "talosctl",
-                            &["config", "remove", parts[1], "--noconfirm"],
-                        );
-                    }
+    let mut steps = Vec::new();
+
+    // Phase 0: Resume paused cluster if needed
+    if is_paused {
+        // Add a step for each cluster container
+        let containers = get_cluster_containers();
+        for container in containers {
+            let container_name = container.clone();
+            steps.push(InstallStep::with_executor(
+                format!("Resuming {}", container),
+                move || {
+                    run_command("docker", &["unpause", &container_name])
+                        .map(|_| None)
+                        .or_else(|e| {
+                            if e.to_string().contains("not paused") {
+                                Ok(None)
+                            } else {
+                                Err(e.to_string())
+                            }
+                        })
+                },
+            ));
+        }
+
+        // Resume registry
+        if docker_container_exists(REGISTRY_NAME) {
+            steps.push(InstallStep::with_executor(
+                format!("Resuming {}", REGISTRY_NAME),
+                || {
+                    let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
+                    Ok(None)
+                },
+            ));
+        }
+
+        steps.push(InstallStep::with_executor("Waiting for containers to stabilize", || {
+            std::thread::sleep(Duration::from_secs(3));
+            Ok(Some("ready".to_string()))
+        }));
+    }
+
+    // Phase 1: Conditioning environment
+    steps.push(InstallStep::with_executor("Cloning deployment repository", {
+        let deploy_dir = deploy_dir_owned.clone();
+        let commit = commit_owned.clone();
+        move || step_clone_repo(&deploy_dir, force, commit.as_deref())
+    }));
+    steps.push(InstallStep::with_executor("Creating configuration directory", step_create_config_dir));
+    steps.push(InstallStep::with_executor("Setting up Helm repositories", step_setup_helm));
+
+    // Phase 2: Setting up cluster
+    steps.push(InstallStep::with_executor("Cleaning stale contexts", || {
+        let _ = run_command_optional("talosctl", &["config", "context", ""]);
+        if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
+            for line in contexts.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
+                    let _ = run_command_optional(
+                        "talosctl",
+                        &["config", "remove", parts[1], "--noconfirm"],
+                    );
                 }
             }
-            Ok(Some("Cleaned".to_string()))
-        }),
-        InstallStep::with_executor("Creating Talos cluster", || {
-            match run_command(
-                "talosctl",
-                &[
-                    "cluster",
-                    "create",
-                    "--name",
-                    CLUSTER_NAME,
-                    "--workers",
-                    "1",
-                    "--controlplanes",
-                    "1",
-                    "--provisioner",
-                    "docker",
-                    "--kubernetes-version",
-                    "1.32.0",
-                    "--wait-timeout",
-                    "10m",
-                ],
-            ) {
-                Ok(_) => Ok(Some("Created".to_string())),
-                Err(e) => Err(e.to_string()),
-            }
-        }),
-        InstallStep::with_executor("Setting kubectl context", || {
-            match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
-                Ok(_) => Ok(Some("Set".to_string())),
-                Err(e) => Err(e.to_string()),
-            }
-        }),
-        InstallStep::with_executor("Verifying cluster is ready", || {
-            match run_command("kubectl", &["get", "nodes"]) {
-                Ok(_) => Ok(Some("Verified".to_string())),
-                Err(e) => Err(e.to_string()),
-            }
-        }),
-    ]
+        }
+        Ok(Some("Cleaned".to_string()))
+    }));
+    steps.push(InstallStep::with_executor("Creating Talos cluster", || {
+        match run_command(
+            "talosctl",
+            &[
+                "cluster",
+                "create",
+                "--name",
+                CLUSTER_NAME,
+                "--workers",
+                "1",
+                "--controlplanes",
+                "1",
+                "--provisioner",
+                "docker",
+                "--kubernetes-version",
+                "1.32.0",
+                "--wait-timeout",
+                "10m",
+            ],
+        ) {
+            Ok(_) => Ok(Some("Created".to_string())),
+            Err(e) => Err(e.to_string()),
+        }
+    }));
+    steps.push(InstallStep::with_executor("Setting kubectl context", || {
+        match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
+            Ok(_) => Ok(Some("Set".to_string())),
+            Err(e) => Err(e.to_string()),
+        }
+    }));
+    steps.push(InstallStep::with_executor("Verifying cluster is ready", || {
+        match run_command("kubectl", &["get", "nodes"]) {
+            Ok(_) => Ok(Some("Verified".to_string())),
+            Err(e) => Err(e.to_string()),
+        }
+    }));
+
+    steps
 }
 
 /// Show final success output with URLs and hints.
 fn show_final_success(tailnet_suffix: Option<&str>) {
     use ferment::style::Color;
-    let dim = Color::BrightBlack.to_ansi_fg();
     let green = Color::Green.to_ansi_fg();
     let reset = "\x1b[0m";
 
@@ -1858,14 +1821,8 @@ fn show_final_success(tailnet_suffix: Option<&str>) {
     }
 
     println!();
-    println!(
-        "{}○{} Run 'inferadb dev status' for cluster details",
-        dim, reset
-    );
-    println!(
-        "{}○{} Run 'inferadb dev stop' to pause or destroy the cluster",
-        dim, reset
-    );
+    print_hint("Run 'inferadb dev status' for cluster details");
+    print_hint("Run 'inferadb dev stop' to pause or destroy the cluster");
 }
 
 /// Start new cluster with streaming output (non-interactive)
@@ -1874,6 +1831,61 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     let deploy_dir = get_deploy_dir();
 
     print_styled_header("Starting InferaDB Development Cluster");
+
+    // ========================================================================
+    // Phase 0: Resume paused cluster if needed
+    // ========================================================================
+    if docker_container_exists(CLUSTER_NAME) && are_containers_paused() {
+        print_phase_header("Resuming paused cluster");
+
+        // Unpause each cluster container individually
+        let containers = get_cluster_containers();
+        for container in &containers {
+            let container_name = container.clone();
+            let in_progress = format!("Resuming {}", container);
+            let completed = format!("Resumed {}", container);
+            run_step(
+                &StartStep::with_ok(&in_progress, &completed),
+                || {
+                    run_command("docker", &["unpause", &container_name])
+                        .map(|_| StepOutcome::Success)
+                        .or_else(|e| {
+                            // Ignore errors for containers that aren't paused
+                            if e.to_string().contains("not paused") {
+                                Ok(StepOutcome::Success)
+                            } else {
+                                Err(e.to_string())
+                            }
+                        })
+                },
+            )?;
+        }
+
+        // Unpause registry if it exists
+        if docker_container_exists(REGISTRY_NAME) {
+            let in_progress = format!("Resuming {}", REGISTRY_NAME);
+            let completed = format!("Resumed {}", REGISTRY_NAME);
+            run_step(
+                &StartStep::with_ok(&in_progress, &completed),
+                || {
+                    let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
+                    Ok(StepOutcome::Success)
+                },
+            )?;
+        }
+
+        // Wait for containers to stabilize
+        run_step(
+            &StartStep::with_ok(
+                "Waiting for containers to stabilize",
+                "Containers stabilized",
+            ),
+            || {
+                std::thread::sleep(Duration::from_secs(3));
+                Ok(StepOutcome::Success)
+            },
+        )?;
+    }
 
     // ========================================================================
     // Phase 1: Conditioning environment
@@ -2101,7 +2113,7 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
                     return Ok(StepOutcome::Skipped(String::new()));
                 }
                 // Context might be stale, try to set it up
-                return Err("Cluster containers exist but kubectl context is broken. Run 'inferadb dev uninstall' and try again.".to_string());
+                return Err("Cluster containers exist but kubectl context is broken. Run 'inferadb dev stop --destroy' and try again.".to_string());
             }
             run_command(
                 "talosctl",
@@ -2261,7 +2273,7 @@ where
 
             if step.dot_leader {
                 let status = if is_skipped { "SKIPPED" } else { "OK" };
-                let formatted = format_step_line(&success_text, status);
+                let formatted = format_dot_leader(&success_text, status);
                 if is_skipped {
                     spin.info(&formatted);
                 } else {
@@ -3099,11 +3111,26 @@ fn cleanup_tailscale_devices() -> Result<()> {
     Ok(())
 }
 
-/// Run dev stop - pause local development cluster
+/// Run dev stop - pause or destroy local development cluster
 ///
-/// This pauses all cluster containers so they can be quickly resumed.
-/// Use `inferadb dev uninstall` to fully remove the cluster.
-pub async fn stop(ctx: &Context, interactive: bool) -> Result<()> {
+/// By default, this pauses all cluster containers so they can be quickly resumed.
+/// With `--destroy`, it completely removes the cluster and all related resources.
+pub async fn stop(
+    ctx: &Context,
+    destroy: bool,
+    yes: bool,
+    with_credentials: bool,
+    interactive: bool,
+) -> Result<()> {
+    // If --destroy is passed, run the uninstall/destroy logic instead
+    if destroy {
+        if interactive && crate::tui::is_interactive(ctx) {
+            return uninstall_interactive(with_credentials);
+        }
+        return uninstall_with_spinners(yes, with_credentials);
+    }
+
+    // Normal stop (pause) behavior
     // Check if cluster exists
     if !docker_container_exists(CLUSTER_NAME) {
         println!("No cluster found for '{}'.", CLUSTER_NAME);
@@ -3117,8 +3144,12 @@ pub async fn stop(ctx: &Context, interactive: bool) -> Result<()> {
 
     // Check if already paused
     if are_containers_paused() {
-        println!("Cluster '{}' is already paused.", CLUSTER_NAME);
-        println!("Use 'inferadb dev start' to resume, or 'inferadb dev uninstall' to remove.");
+        print_styled_header("Pausing InferaDB Development Cluster");
+        println!();
+        print_prefixed_dot_leader("○", "Cluster paused", "SKIPPED");
+        println!();
+        print_hint("Run 'inferadb dev start' to resume the cluster");
+        print_hint("Run 'inferadb dev stop --destroy' to tear down the cluster");
         return Ok(());
     }
 
@@ -3134,38 +3165,42 @@ fn stop_with_spinners() -> Result<()> {
     use crate::tui::start_spinner;
 
     print_styled_header("Pausing InferaDB Development Cluster");
+    println!();
 
-    // Step 1: Pause cluster containers
-    {
-        let spin = start_spinner("Pause cluster containers");
-        match step_pause_cluster() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
+    // Pause each cluster container individually
+    let containers = get_cluster_containers();
+    for container in &containers {
+        let in_progress = format!("Pausing {}", container);
+        let completed = format!("Paused {}", container);
+        let spin = start_spinner(&in_progress);
+        match run_command("docker", &["pause", container]) {
+            Ok(_) => spin.success(&format_dot_leader(&completed, "OK")),
             Err(e) => {
-                spin.failure(&e.to_string());
-                return Err(e);
+                // Ignore errors for already paused containers
+                if e.to_string().contains("already paused") {
+                    spin.success(&format_dot_leader(&completed, "OK"));
+                } else {
+                    spin.failure(&e.to_string());
+                    return Err(Error::Other(format!("Failed to pause {}: {}", container, e)));
+                }
             }
         }
     }
 
-    // Step 2: Pause registry
+    // Pause registry
     if docker_container_exists(REGISTRY_NAME) {
-        let spin = start_spinner("Pause local registry");
-        match step_pause_registry() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => {
-                spin.failure(&e.to_string());
-                return Err(e);
-            }
-        }
+        let in_progress = format!("Pausing {}", REGISTRY_NAME);
+        let completed = format!("Paused {}", REGISTRY_NAME);
+        let spin = start_spinner(&in_progress);
+        let _ = run_command_optional("docker", &["pause", REGISTRY_NAME]);
+        spin.success(&format_dot_leader(&completed, "OK"));
     }
 
     println!();
     print_success("Cluster paused successfully!");
     println!();
-    print_info("To resume:  inferadb dev start");
-    print_info("To remove:  inferadb dev uninstall");
+    print_hint("Run 'inferadb dev start' to resume the cluster");
+    print_hint("Run 'inferadb dev stop --destroy' to tear down the cluster");
 
     Ok(())
 }
@@ -3175,14 +3210,38 @@ fn stop_interactive() -> Result<()> {
     use crate::tui::{DevStopView, InstallStep};
     use ferment::runtime::{Program, ProgramOptions};
 
-    let steps = vec![
-        InstallStep::with_executor("Pause cluster containers", || {
-            step_pause_cluster().map_err(|e| e.to_string())
-        }),
-        InstallStep::with_executor("Pause local registry", || {
-            step_pause_registry().map_err(|e| e.to_string())
-        }),
-    ];
+    let mut steps = Vec::new();
+
+    // Add a step for each cluster container
+    let containers = get_cluster_containers();
+    for container in containers {
+        let container_name = container.clone();
+        steps.push(InstallStep::with_executor(
+            format!("Pausing {}", container),
+            move || {
+                run_command("docker", &["pause", &container_name])
+                    .map(|_| None)
+                    .or_else(|e| {
+                        if e.to_string().contains("already paused") {
+                            Ok(None)
+                        } else {
+                            Err(e.to_string())
+                        }
+                    })
+            },
+        ));
+    }
+
+    // Pause registry
+    if docker_container_exists(REGISTRY_NAME) {
+        steps.push(InstallStep::with_executor(
+            format!("Pausing {}", REGISTRY_NAME),
+            || {
+                let _ = run_command_optional("docker", &["pause", REGISTRY_NAME]);
+                Ok(None)
+            },
+        ));
+    }
 
     let view = DevStopView::new(steps).subtitle("Stop");
 
@@ -3195,24 +3254,8 @@ fn stop_interactive() -> Result<()> {
 }
 
 // ============================================================================
-// Stop step functions
+// Helper functions
 // ============================================================================
-
-/// Step: Pause cluster containers.
-fn step_pause_cluster() -> Result<Option<String>> {
-    pause_cluster_containers()?;
-    Ok(Some("Paused".to_string()))
-}
-
-/// Step: Pause local registry.
-fn step_pause_registry() -> Result<Option<String>> {
-    if docker_container_exists(REGISTRY_NAME) {
-        let _ = run_command_optional("docker", &["pause", REGISTRY_NAME]);
-        Ok(Some("Paused".to_string()))
-    } else {
-        Ok(Some("Not running".to_string()))
-    }
-}
 
 /// Clean up stale talosctl and kubectl contexts
 fn cleanup_stale_contexts() {
@@ -3488,85 +3531,284 @@ pub async fn dev_status(ctx: &Context, interactive: bool) -> Result<()> {
 }
 
 /// Run status with inline spinners for each section.
+/// Print a section header with dimmed circle prefix.
+fn print_section_header(title: &str) {
+    use ferment::style::Color;
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset = "\x1b[0m";
+    println!("\n{}○{} {}\n", dim, reset, title);
+}
+
 fn status_with_spinners() -> Result<()> {
-    use crate::tui::start_spinner;
+    use ferment::style::Color;
 
     print_styled_header("InferaDB Development Cluster Status");
+    println!();
+
+    let green = Color::Green.to_ansi_fg();
+    let yellow = Color::Yellow.to_ansi_fg();
+    let red = Color::Red.to_ansi_fg();
+    let reset = "\x1b[0m";
 
     // Check cluster status
-    let handle = start_spinner("Checking cluster status...");
     let cluster_status = get_cluster_status();
     match cluster_status {
         ClusterStatus::Offline => {
-            handle.failure("Cluster is not running");
+            let prefix = format!("{}✗{}", red, reset);
+            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "NOT RUNNING");
             println!();
-            print_info(TIP_START_CLUSTER);
+            print_hint(TIP_START_CLUSTER);
             return Ok(());
         }
         ClusterStatus::Paused => {
-            handle.warning("Cluster is paused");
+            let prefix = format!("{}○{}", yellow, reset);
+            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "PAUSED");
             println!();
-            print_info(TIP_RESUME_CLUSTER);
+            print_hint(TIP_RESUME_CLUSTER);
             return Ok(());
         }
         ClusterStatus::Online => {
-            handle.success("Cluster is running");
+            let prefix = format!("{}✓{}", green, reset);
+            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "RUNNING");
         }
         ClusterStatus::Unknown => {
-            handle.warning("Cluster status unknown");
+            let prefix = format!("{}○{}", yellow, reset);
+            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "UNKNOWN");
         }
     }
 
     // Check kubectl context
-    let handle = start_spinner("Checking kubectl context...");
     if let Some(current) = run_command_optional("kubectl", &["config", "current-context"]) {
         let context = current.trim();
-        if context == KUBE_CONTEXT {
-            handle.success(&format!("kubectl context: {}", context));
-        } else {
-            handle.warning(&format!(
-                "kubectl context: {} (expected: {})",
-                context, KUBE_CONTEXT
-            ));
-        }
+        print_prefixed_dot_leader("○", "kubectl context", context);
     } else {
-        handle.warning("kubectl context not configured");
+        print_prefixed_dot_leader("○", "kubectl context", "NOT CONFIGURED");
     }
-    println!();
 
     // Nodes
-    print_phase("Nodes");
-    run_command_streaming("kubectl", &["get", "nodes", "-o", "wide"], &[])?;
-    println!();
+    print_section_header("Nodes");
+    print_nodes_status();
 
-    // InferaDB Pods
-    print_phase("InferaDB Pods");
-    run_command_streaming(
-        "kubectl",
-        &["get", "pods", "-n", "inferadb", "-o", "wide"],
-        &[],
-    )?;
-    println!();
+    // Pods (combined InferaDB + FDB)
+    print_section_header("Pods");
+    print_pods_status();
 
-    // FDB Pods
-    print_phase("FoundationDB Pods");
-    run_command_streaming(
-        "kubectl",
-        &["get", "pods", "-n", "fdb-system", "-o", "wide"],
-        &[],
-    )?;
-    println!();
-
-    // Ingress/URLs
-    print_phase("Ingress (Access URLs)");
-    run_command_streaming("kubectl", &["get", "ingress", "-n", "inferadb"], &[])?;
-    println!();
-
-    // Services
-    print_phase("Services");
-    run_command_streaming("kubectl", &["get", "services", "-n", "inferadb"], &[])?;
+    // URLs
+    print_section_header("URLs");
+    print_urls_status();
 
     Ok(())
+}
+
+/// Print formatted node status.
+fn print_nodes_status() {
+    use ferment::style::Color;
+
+    // Get node info as JSON for more reliable parsing
+    let output = run_command_optional(
+        "kubectl",
+        &["get", "nodes", "-o", "json"],
+    );
+
+    let green = Color::Green.to_ansi_fg();
+    let red = Color::Red.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    if let Some(output) = output {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output) {
+            if let Some(items) = json["items"].as_array() {
+                for node in items {
+                    let name = node["metadata"]["name"].as_str().unwrap_or("");
+                    let labels = &node["metadata"]["labels"];
+                    let is_control_plane = labels.get("node-role.kubernetes.io/control-plane").is_some();
+
+                    // Check Ready condition
+                    let ready = node["status"]["conditions"]
+                        .as_array()
+                        .and_then(|conditions| {
+                            conditions.iter().find(|c| c["type"] == "Ready")
+                        })
+                        .map(|c| c["status"] == "True")
+                        .unwrap_or(false);
+
+                    let role = if is_control_plane { "control-plane" } else { "worker" };
+                    let status = if ready {
+                        format!("{}Ready{} ({})", green, reset, role)
+                    } else {
+                        format!("{}NotReady{} ({})", red, reset, role)
+                    };
+
+                    // Use simpler name without cluster prefix
+                    let display_name = name.strip_prefix("inferadb-dev-").unwrap_or(name);
+                    print_prefixed_dot_leader(" ", display_name, &status);
+                }
+            }
+        }
+    }
+}
+
+/// Print formatted pod status.
+fn print_pods_status() {
+    use ferment::style::Color;
+
+    let green = Color::Green.to_ansi_fg();
+    let yellow = Color::Yellow.to_ansi_fg();
+    let red = Color::Red.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    // Get InferaDB pods
+    let inferadb_pods = run_command_optional(
+        "kubectl",
+        &["get", "pods", "-n", "inferadb", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}"],
+    );
+
+    // Get FDB pods
+    let fdb_pods = run_command_optional(
+        "kubectl",
+        &["get", "pods", "-n", "fdb-system", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}"],
+    );
+
+    let format_pod = |line: &str| -> Option<(String, String)> {
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() >= 2 {
+            let name = parts[0];
+            let phase = parts[1];
+            let ready_statuses = parts.get(2).unwrap_or(&"");
+
+            // Skip completed pods early
+            if phase == "Succeeded" || phase == "Completed" {
+                return None;
+            }
+
+            // Count ready containers
+            let ready_count = ready_statuses.split_whitespace().filter(|s| *s == "true").count();
+            let total_count = ready_statuses.split_whitespace().count().max(1);
+
+            // Build status string
+            let status = match phase {
+                "Running" => format!("{}{}/{} Running{}", green, ready_count, total_count, reset),
+                "Pending" => format!("{}{}/{} Pending{}", yellow, ready_count, total_count, reset),
+                _ => format!("{}{}/{} {}{}", red, ready_count, total_count, phase, reset),
+            };
+
+            // Simplify pod names by removing hash/id suffixes
+            let display_name = if name.starts_with("controller-manager-") {
+                "fdb-operator".to_string()
+            } else {
+                // Strip inferadb- prefix first
+                let base = name.strip_prefix("inferadb-").unwrap_or(name);
+
+                // Split into parts
+                let segments: Vec<&str> = base.split('-').collect();
+                let len = segments.len();
+
+                // Detect K8s Deployment pod pattern: <name>-<replicaset-hash>-<pod-hash>
+                // Replicaset hash: 9-10 alphanumeric chars with digits
+                // Pod hash: 5 alphanumeric chars (may be all letters)
+                if len >= 3 {
+                    let last = segments[len - 1];
+                    let second_last = segments[len - 2];
+                    let is_pod_hash = last.len() == 5 && last.chars().all(|c| c.is_alphanumeric());
+                    let is_rs_hash = second_last.len() >= 9
+                        && second_last.len() <= 10
+                        && second_last.chars().any(|c| c.is_ascii_digit())
+                        && second_last.chars().all(|c| c.is_alphanumeric());
+
+                    if is_pod_hash && is_rs_hash {
+                        let name = segments[..len - 2].join("-");
+                        if !name.is_empty() {
+                            return Some((name, status));
+                        }
+                    }
+                }
+
+                // Identify suffix segments to strip:
+                // - Numeric suffixes (FDB pod IDs like "583", "36529")
+                // - Alphanumeric hashes with digits (Deployment hashes like "59b5db5b77")
+                let mut meaningful_end = segments.len();
+                for (i, seg) in segments.iter().enumerate().rev() {
+                    let is_numeric = seg.chars().all(|c| c.is_ascii_digit());
+                    let has_digit = seg.chars().any(|c| c.is_ascii_digit());
+                    let is_hash = seg.len() >= 4 && has_digit && seg.chars().all(|c| c.is_alphanumeric());
+                    if is_numeric || is_hash {
+                        meaningful_end = i;
+                    } else {
+                        break;
+                    }
+                }
+
+                if meaningful_end == 0 {
+                    base.to_string()
+                } else {
+                    segments[..meaningful_end].join("-")
+                }
+            };
+
+            // Skip if display name is empty
+            if display_name.is_empty() {
+                return None;
+            }
+
+            Some((display_name, status))
+        } else {
+            None
+        }
+    };
+
+    let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    if let Some(output) = inferadb_pods {
+        for line in output.lines() {
+            if let Some((name, status)) = format_pod(line) {
+                if seen_names.insert(name.clone()) {
+                    print_prefixed_dot_leader(" ", &name, &status);
+                }
+            }
+        }
+    }
+
+    if let Some(output) = fdb_pods {
+        for line in output.lines() {
+            if let Some((name, status)) = format_pod(line) {
+                if seen_names.insert(name.clone()) {
+                    print_prefixed_dot_leader(" ", &name, &status);
+                }
+            }
+        }
+    }
+}
+
+/// Print formatted URLs.
+fn print_urls_status() {
+    let output = run_command_optional(
+        "kubectl",
+        &["get", "ingress", "-n", "inferadb", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.loadBalancer.ingress[0].hostname}{\"\\n\"}{end}"],
+    );
+
+    if let Some(output) = output {
+        for line in output.lines() {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() >= 2 {
+                let name = parts[0];
+                let hostname = parts[1];
+
+                if hostname.is_empty() {
+                    continue;
+                }
+
+                // Map ingress names to friendly labels
+                let label = match name {
+                    "inferadb-dashboard-tailscale" => "Dashboard",
+                    "inferadb-api-tailscale" => "API",
+                    "inferadb-mailpit-tailscale" => "Mailpit",
+                    _ => name,
+                };
+
+                let url = format!("https://{}", hostname);
+                print_prefixed_dot_leader(" ", label, &url);
+            }
+        }
+    }
 }
 
 /// Run status in full-screen interactive TUI mode.
@@ -3609,21 +3851,22 @@ pub async fn logs(_ctx: &Context, follow: bool, service: Option<&str>, tail: u32
     let mut args = vec!["logs", "-n", "inferadb"];
 
     // Determine which pods to show logs from
-    let selector = match service {
-        Some("engine") => "app=inferadb-engine",
-        Some("control") => "app=inferadb-control",
-        Some("dashboard") => "app=inferadb-dashboard",
+    let (selector, service_name) = match service {
+        Some("engine") => ("app.kubernetes.io/name=inferadb-engine", "engine"),
+        Some("control") => ("app.kubernetes.io/name=inferadb-control", "control"),
+        Some("dashboard") => ("app.kubernetes.io/name=inferadb-dashboard", "dashboard"),
         Some("fdb") => {
             args[1] = "fdb-system";
-            "app=fdb-kubernetes-operator"
+            ("app=fdb-kubernetes-operator", "fdb")
         }
+        Some("mailpit") => ("app.kubernetes.io/name=mailpit", "mailpit"),
         Some(other) => {
             return Err(Error::Other(format!(
-                "Unknown service: {}. Valid: engine, control, dashboard, fdb",
+                "Unknown service: {}. Valid: engine, control, dashboard, fdb, mailpit",
                 other
             )));
         }
-        None => "app.kubernetes.io/part-of=inferadb",
+        None => ("app.kubernetes.io/name in (inferadb-engine,inferadb-control,inferadb-dashboard)", "all"),
     };
 
     args.push("-l");
@@ -3637,11 +3880,42 @@ pub async fn logs(_ctx: &Context, follow: bool, service: Option<&str>, tail: u32
         args.push("-f");
     }
 
-    print_phase(&format!(
-        "Showing logs for {}",
-        service.unwrap_or("all services")
-    ));
-    run_command_streaming("kubectl", &args, &[])?;
+    // Add prefix when viewing multiple services
+    if service.is_none() {
+        args.push("--prefix");
+    }
+
+    // Print header
+    print_styled_header("Development Cluster Logs");
+    println!();
+
+    let mode = if follow { "following" } else { "tail" };
+    print_prefixed_dot_leader("○", "Service", service_name);
+    print_prefixed_dot_leader("○", "Mode", mode);
+    if !follow {
+        print_prefixed_dot_leader("○", "Lines", &tail_str);
+    }
+    println!();
+
+    // Build kubectl command and pipe through grep to filter health checks
+    // Quote args that contain special shell characters
+    let quoted_args: Vec<String> = args
+        .iter()
+        .map(|arg| {
+            if arg.contains('(') || arg.contains(' ') {
+                format!("'{}'", arg)
+            } else {
+                (*arg).to_string()
+            }
+        })
+        .collect();
+    let kubectl_cmd = format!("kubectl {}", quoted_args.join(" "));
+    let filter_cmd = format!(
+        "{} 2>/dev/null | grep -v --line-buffered -E '/livez|/readyz'",
+        kubectl_cmd
+    );
+
+    run_command_streaming("sh", &["-c", &filter_cmd], &[])?;
 
     Ok(())
 }
