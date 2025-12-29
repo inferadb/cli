@@ -44,17 +44,18 @@ fn test_whoami_without_auth() {
         .stdout(predicate::str::contains("Authenticated: no"));
 }
 
-/// Test profiles list with no profiles.
+/// Test profiles list creates default profile when no config exists.
 #[test]
-fn test_profiles_list_empty() {
+fn test_profiles_list_creates_default() {
     let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    // Use a temp config directory to ensure no profiles
+    // Use a temp config directory with no existing config
     cmd.env("XDG_CONFIG_HOME", "/tmp/inferadb-test-empty")
         .arg("profiles")
         .arg("list")
         .assert()
         .success()
-        .stderr(predicate::str::contains("No profiles configured"));
+        // A default profile should be auto-created
+        .stdout(predicate::str::contains("default"));
 }
 
 /// Test check command format.

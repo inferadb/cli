@@ -1,6 +1,6 @@
 //! Doctor view for environment health checks.
 //!
-//! A full-screen TUI for displaying development environment diagnostics
+//! A full-screen TUI for displaying development cluster diagnostics
 //! including dependency checks, service status, and configuration validation.
 
 use ferment::components::{Column, Table};
@@ -66,7 +66,7 @@ impl CheckResult {
 
 /// Message type for the doctor view.
 #[derive(Clone)]
-pub enum DoctorViewMsg {
+pub enum DevDoctorViewMsg {
     /// Move selection up.
     SelectPrev,
     /// Move selection down.
@@ -91,7 +91,7 @@ pub enum DoctorViewMsg {
 }
 
 /// Doctor view for environment health checks.
-pub struct DoctorView {
+pub struct DevDoctorView {
     /// Terminal width.
     width: usize,
     /// Terminal height.
@@ -118,7 +118,7 @@ pub struct DoctorView {
     footer_hints: Vec<(&'static str, &'static str)>,
 }
 
-impl DoctorView {
+impl DevDoctorView {
     /// Create a new doctor view.
     pub fn new(width: usize, height: usize) -> Self {
         Self {
@@ -313,8 +313,8 @@ impl DoctorView {
     }
 }
 
-impl Model for DoctorView {
-    type Message = DoctorViewMsg;
+impl Model for DevDoctorView {
+    type Message = DevDoctorViewMsg;
 
     fn init(&self) -> Option<Cmd<Self::Message>> {
         None
@@ -322,7 +322,7 @@ impl Model for DoctorView {
 
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
         match msg {
-            DoctorViewMsg::SelectPrev => {
+            DevDoctorViewMsg::SelectPrev => {
                 if self.selected_row > 0 {
                     self.selected_row -= 1;
                     if self.selected_row < self.scroll_offset {
@@ -330,7 +330,7 @@ impl Model for DoctorView {
                     }
                 }
             }
-            DoctorViewMsg::SelectNext => {
+            DevDoctorViewMsg::SelectNext => {
                 if self.selected_row < self.rows.len().saturating_sub(1) {
                     self.selected_row += 1;
                     let visible = self.visible_rows();
@@ -339,10 +339,10 @@ impl Model for DoctorView {
                     }
                 }
             }
-            DoctorViewMsg::ScrollLeft => {
+            DevDoctorViewMsg::ScrollLeft => {
                 self.h_scroll_offset = self.h_scroll_offset.saturating_sub(4);
             }
-            DoctorViewMsg::ScrollRight => {
+            DevDoctorViewMsg::ScrollRight => {
                 let max = self.max_h_scroll();
                 if self.h_scroll_offset + 4 <= max {
                     self.h_scroll_offset += 4;
@@ -350,14 +350,14 @@ impl Model for DoctorView {
                     self.h_scroll_offset = max;
                 }
             }
-            DoctorViewMsg::PageUp => {
+            DevDoctorViewMsg::PageUp => {
                 let page_size = self.visible_rows().saturating_sub(1);
                 self.selected_row = self.selected_row.saturating_sub(page_size);
                 if self.selected_row < self.scroll_offset {
                     self.scroll_offset = self.selected_row;
                 }
             }
-            DoctorViewMsg::PageDown => {
+            DevDoctorViewMsg::PageDown => {
                 let page_size = self.visible_rows().saturating_sub(1);
                 self.selected_row =
                     (self.selected_row + page_size).min(self.rows.len().saturating_sub(1));
@@ -366,10 +366,10 @@ impl Model for DoctorView {
                     self.scroll_offset = self.selected_row.saturating_sub(visible - 1);
                 }
             }
-            DoctorViewMsg::Quit => {
+            DevDoctorViewMsg::Quit => {
                 return Some(Cmd::quit());
             }
-            DoctorViewMsg::Resize { width, height } => {
+            DevDoctorViewMsg::Resize { width, height } => {
                 self.width = width;
                 self.height = height;
             }
@@ -427,16 +427,16 @@ impl Model for DoctorView {
     fn handle_event(&self, event: Event) -> Option<Self::Message> {
         match event {
             Event::Key(key) => match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => Some(DoctorViewMsg::Quit),
-                KeyCode::Up | KeyCode::Char('k') => Some(DoctorViewMsg::SelectPrev),
-                KeyCode::Down | KeyCode::Char('j') => Some(DoctorViewMsg::SelectNext),
-                KeyCode::Left | KeyCode::Char('h') => Some(DoctorViewMsg::ScrollLeft),
-                KeyCode::Right | KeyCode::Char('l') => Some(DoctorViewMsg::ScrollRight),
-                KeyCode::PageUp => Some(DoctorViewMsg::PageUp),
-                KeyCode::PageDown => Some(DoctorViewMsg::PageDown),
+                KeyCode::Char('q') => Some(DevDoctorViewMsg::Quit),
+                KeyCode::Up | KeyCode::Char('k') => Some(DevDoctorViewMsg::SelectPrev),
+                KeyCode::Down | KeyCode::Char('j') => Some(DevDoctorViewMsg::SelectNext),
+                KeyCode::Left | KeyCode::Char('h') => Some(DevDoctorViewMsg::ScrollLeft),
+                KeyCode::Right | KeyCode::Char('l') => Some(DevDoctorViewMsg::ScrollRight),
+                KeyCode::PageUp => Some(DevDoctorViewMsg::PageUp),
+                KeyCode::PageDown => Some(DevDoctorViewMsg::PageDown),
                 _ => None,
             },
-            Event::Resize { width, height } => Some(DoctorViewMsg::Resize {
+            Event::Resize { width, height } => Some(DevDoctorViewMsg::Resize {
                 width: width as usize,
                 height: height as usize,
             }),
@@ -451,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_doctor_view_creation() {
-        let view = DoctorView::new(80, 24);
+        let view = DevDoctorView::new(80, 24);
         assert_eq!(view.status, EnvironmentStatus::Checking);
         assert!(view.results.is_empty());
     }
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn test_with_status() {
-        let view = DoctorView::new(80, 24).with_status(EnvironmentStatus::Ready);
+        let view = DevDoctorView::new(80, 24).with_status(EnvironmentStatus::Ready);
         assert!(view.is_ready());
     }
 
@@ -480,7 +480,7 @@ mod tests {
             CheckResult::success("Deps", "Docker", "v24.0.0"),
             CheckResult::success("Deps", "kubectl", "v1.30.0"),
         ];
-        let view = DoctorView::new(80, 24).with_results(results);
+        let view = DevDoctorView::new(80, 24).with_results(results);
         assert_eq!(view.results.len(), 2);
     }
 }

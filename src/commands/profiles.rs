@@ -41,8 +41,7 @@ pub async fn profiles_list(ctx: &Context) -> Result<()> {
 
     if ctx.config.profiles.is_empty() {
         ctx.output.info("No profiles configured.");
-        ctx.output
-            .info("Run 'inferadb init' to create your first profile.");
+        ctx.output.info("Run 'inferadb login' to authenticate.");
         return Ok(());
     }
 

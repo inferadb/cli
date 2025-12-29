@@ -34,7 +34,6 @@ use crate::error::Result;
 pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
     match command {
         // Auth commands
-        Commands::Init => auth::init(ctx).await,
         Commands::Login => login(ctx).await,
         Commands::Logout => logout(ctx).await,
         Commands::Register { email, name } => {
@@ -628,21 +627,54 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
     use crate::cli::DevCommands;
     match sub {
         DevCommands::Doctor { interactive } => dev::doctor(ctx, *interactive).await,
-        DevCommands::Install {
+        DevCommands::Uninstall {
+            yes,
+            interactive,
+            with_credentials,
+        } => dev::uninstall(ctx, *yes, *interactive, *with_credentials).await,
+        DevCommands::Start {
+            skip_build,
+            interactive,
+            tailscale_client,
+            tailscale_secret,
             force,
             commit,
-            interactive,
-        } => dev::install(ctx, *force, commit.as_deref(), *interactive).await,
-        DevCommands::Uninstall { yes } => dev::uninstall(ctx, *yes).await,
-        DevCommands::Start { skip_build } => dev::start(ctx, *skip_build).await,
-        DevCommands::Stop { destroy } => dev::stop(ctx, *destroy).await,
-        DevCommands::Up { skip_build } => {
-            eprintln!("Hint: 'dev up' is now 'dev start'\n");
-            dev::start(ctx, *skip_build).await
+        } => {
+            dev::start(
+                ctx,
+                *skip_build,
+                *interactive,
+                tailscale_client.clone(),
+                tailscale_secret.clone(),
+                *force,
+                commit.as_deref(),
+            )
+            .await
         }
-        DevCommands::Down { destroy } => {
+        DevCommands::Stop { interactive } => dev::stop(ctx, *interactive).await,
+        DevCommands::Up {
+            skip_build,
+            interactive,
+            tailscale_client,
+            tailscale_secret,
+            force,
+            commit,
+        } => {
+            eprintln!("Hint: 'dev up' is now 'dev start'\n");
+            dev::start(
+                ctx,
+                *skip_build,
+                *interactive,
+                tailscale_client.clone(),
+                tailscale_secret.clone(),
+                *force,
+                commit.as_deref(),
+            )
+            .await
+        }
+        DevCommands::Down { interactive } => {
             eprintln!("Hint: 'dev down' is now 'dev stop'\n");
-            dev::stop(ctx, *destroy).await
+            dev::stop(ctx, *interactive).await
         }
         DevCommands::Status { interactive } => dev::dev_status(ctx, *interactive).await,
         DevCommands::Logs {

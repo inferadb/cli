@@ -90,6 +90,14 @@ impl Config {
         // Apply environment variables (highest precedence for profiles)
         config.apply_env_overrides();
 
+        // Auto-create default profile if none exist
+        if config.profiles.is_empty() {
+            config
+                .profiles
+                .insert("default".to_string(), Profile::default());
+            config.default_profile = Some("default".to_string());
+        }
+
         Ok(config)
     }
 

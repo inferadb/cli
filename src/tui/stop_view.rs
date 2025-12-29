@@ -1,7 +1,7 @@
-//! Interactive install view for dev cluster setup.
+//! Interactive stop view for dev cluster.
 //!
-//! A full-screen TUI showing installation progress with animated spinners,
-//! task completion status, and error modals.
+//! A full-screen TUI showing progress with animated spinners
+//! when stopping (pausing) or destroying the development cluster.
 
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::Arc;
@@ -14,79 +14,19 @@ use ferment::style::Color;
 use ferment::terminal::{Event, KeyCode};
 use ferment::{Cmd, Model};
 
-/// Type alias for step executor function.
-/// Returns Ok(detail) on success, or Err(error_message) on failure.
-pub type StepExecutor = Arc<dyn Fn() -> Result<Option<String>, String> + Send + Sync>;
+use super::install_view::{InstallStep, StepExecutor, StepResult};
 
-/// Installation step definition.
-#[derive(Clone)]
-pub struct InstallStep {
-    /// Step name displayed to user.
-    pub name: String,
-    /// Optional executor function for this step.
-    pub executor: Option<StepExecutor>,
-}
-
-impl std::fmt::Debug for InstallStep {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InstallStep")
-            .field("name", &self.name)
-            .field("executor", &self.executor.is_some())
-            .finish()
-    }
-}
-
-impl InstallStep {
-    /// Create a new installation step.
-    pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            executor: None,
-        }
-    }
-
-    /// Create a step with an executor function.
-    pub fn with_executor<F>(name: impl Into<String>, executor: F) -> Self
-    where
-        F: Fn() -> Result<Option<String>, String> + Send + Sync + 'static,
-    {
-        Self {
-            name: name.into(),
-            executor: Some(Arc::new(executor)),
-        }
-    }
-}
-
-/// Result of running an installation step.
+/// Message type for dev stop view.
 #[derive(Debug, Clone)]
-pub enum StepResult {
-    /// Step completed successfully.
-    Success(Option<String>),
-    /// Step was skipped (with reason).
-    Skipped(String),
-    /// Step failed with error.
-    Failure(String),
-}
-
-/// Message type for install view.
-#[derive(Debug, Clone)]
-pub enum DevInstallViewMsg {
+pub enum DevStopViewMsg {
     /// Advance spinner animation and poll for worker results.
     Tick,
-    /// Start the installation process.
+    /// Start the stop process.
     Start,
-    /// Run a specific step.
-    RunStep(usize),
-    /// A step completed with result.
-    StepCompleted(usize, StepResult),
-    /// Start a task (for manual control).
-    StartTask(usize),
-    /// Complete a task with result (for manual control).
-    CompleteTask(usize, StepResult),
-    /// User pressed 'q' to quit/cancel.
-    Quit,
     /// Close error modal.
     CloseModal,
+    /// User pressed 'q' to quit/cancel.
+    Quit,
     /// Terminal resize.
     Resize(u16, u16),
 }
@@ -94,8 +34,8 @@ pub enum DevInstallViewMsg {
 /// Result message from a worker thread.
 type WorkerResult = (usize, StepResult);
 
-/// The install view state.
-pub struct DevInstallView {
+/// The dev stop view state.
+pub struct DevStopView {
     /// Title for the view.
     title: String,
     /// Subtitle for the view.
@@ -120,12 +60,12 @@ pub struct DevInstallView {
     error_modal: Option<(String, String)>,
     /// Whether the view should quit.
     should_quit: bool,
-    /// Whether install was cancelled.
+    /// Whether stop was cancelled.
     was_cancelled: bool,
 }
 
-impl DevInstallView {
-    /// Create a new install view with the given steps.
+impl DevStopView {
+    /// Create a new stop view with the given steps.
     pub fn new(steps: Vec<InstallStep>) -> Self {
         let mut task_list = TaskList::new();
         let mut executors = Vec::new();
@@ -140,7 +80,7 @@ impl DevInstallView {
 
         Self {
             title: "InferaDB Development Cluster".to_string(),
-            subtitle: "Install".to_string(),
+            subtitle: "Stop".to_string(),
             task_list,
             executors,
             current_step: 0,
@@ -172,12 +112,12 @@ impl DevInstallView {
         self.should_quit
     }
 
-    /// Check if install was cancelled by user.
+    /// Check if stop was cancelled by user.
     pub fn was_cancelled(&self) -> bool {
         self.was_cancelled
     }
 
-    /// Check if install completed successfully.
+    /// Check if stop completed successfully.
     pub fn is_success(&self) -> bool {
         self.task_list.is_all_complete() && !self.task_list.has_failure()
     }
@@ -185,45 +125,6 @@ impl DevInstallView {
     /// Check if there was a failure.
     pub fn has_failure(&self) -> bool {
         self.task_list.has_failure()
-    }
-
-    /// Start a task by index.
-    pub fn start_task(&mut self, index: usize) {
-        self.task_list.start_task(index);
-    }
-
-    /// Complete a task with result.
-    pub fn complete_task(&mut self, index: usize, result: StepResult) {
-        match result {
-            StepResult::Success(detail) => {
-                self.task_list.complete_task(index, detail);
-            }
-            StepResult::Skipped(reason) => {
-                self.task_list.skip_task(index, Some(reason));
-            }
-            StepResult::Failure(error) => {
-                self.task_list.fail_task(index, Some(error.clone()));
-                // Show error modal
-                if let Some(task) = self.task_list.get(index) {
-                    self.error_modal = Some((task.name.clone(), error));
-                }
-            }
-        }
-    }
-
-    /// Check if a task is currently running.
-    pub fn is_running(&self) -> bool {
-        self.task_list.is_running()
-    }
-
-    /// Check if all tasks are complete.
-    pub fn is_all_complete(&self) -> bool {
-        self.task_list.is_all_complete()
-    }
-
-    /// Get current task index.
-    pub fn current_task_index(&self) -> Option<usize> {
-        self.task_list.current_task_index()
     }
 
     /// Render the title bar with dimmed slashes.
@@ -287,7 +188,6 @@ impl DevInstallView {
     }
 
     /// Spawn a worker thread to execute a step.
-    /// Returns a receiver to poll for the result.
     fn spawn_step_worker(&self, index: usize) -> Receiver<WorkerResult> {
         let (tx, rx) = mpsc::channel();
 
@@ -322,7 +222,6 @@ impl DevInstallView {
                 }
                 Err(TryRecvError::Empty) => None,
                 Err(TryRecvError::Disconnected) => {
-                    // Worker crashed or finished without sending
                     self.executing = false;
                     self.result_receiver = None;
                     None
@@ -334,7 +233,7 @@ impl DevInstallView {
     }
 
     /// Render the error modal.
-    fn render_modal(&self, background: &str) -> String {
+    fn render_error_modal(&self, background: &str) -> String {
         if let Some((task_name, error_msg)) = &self.error_modal {
             let modal_width = 60.min(self.width as usize - 4);
             let modal_height = 10.min(self.height as usize - 4);
@@ -354,19 +253,19 @@ impl DevInstallView {
     }
 }
 
-impl Model for DevInstallView {
-    type Message = DevInstallViewMsg;
+impl Model for DevStopView {
+    type Message = DevStopViewMsg;
 
     fn init(&self) -> Option<Cmd<Self::Message>> {
         // Schedule start after a brief delay to allow initial render
         Some(Cmd::tick(Duration::from_millis(100), |_| {
-            DevInstallViewMsg::Start
+            DevStopViewMsg::Start
         }))
     }
 
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
         match msg {
-            DevInstallViewMsg::Tick => {
+            DevStopViewMsg::Tick => {
                 // Forward tick to task list for spinner animation
                 self.task_list
                     .update(ferment::components::TaskListMsg::Tick);
@@ -399,13 +298,13 @@ impl Model for DevInstallView {
                         self.result_receiver = Some(self.spawn_step_worker(next_step));
                         // Continue ticking for the next step
                         return Some(Cmd::tick(Duration::from_millis(80), |_| {
-                            DevInstallViewMsg::Tick
+                            DevStopViewMsg::Tick
                         }));
                     }
                 }
                 None
             }
-            DevInstallViewMsg::Start => {
+            DevStopViewMsg::Start => {
                 if !self.started && !self.executors.is_empty() {
                     self.started = true;
                     self.current_step = 0;
@@ -414,46 +313,16 @@ impl Model for DevInstallView {
                     self.result_receiver = Some(self.spawn_step_worker(0));
                     // Return a tick command to ensure polling starts immediately
                     return Some(Cmd::tick(Duration::from_millis(80), |_| {
-                        DevInstallViewMsg::Tick
+                        DevStopViewMsg::Tick
                     }));
                 }
                 None
             }
-            DevInstallViewMsg::RunStep(index) => {
-                if index < self.executors.len() && !self.executing {
-                    self.task_list.start_task(index);
-                    self.executing = true;
-                    self.result_receiver = Some(self.spawn_step_worker(index));
-                }
+            DevStopViewMsg::CloseModal => {
+                self.error_modal = None;
                 None
             }
-            DevInstallViewMsg::StepCompleted(index, result) => {
-                // Manual completion (for external control)
-                match &result {
-                    StepResult::Success(detail) => {
-                        self.task_list.complete_task(index, detail.clone());
-                    }
-                    StepResult::Skipped(reason) => {
-                        self.task_list.skip_task(index, Some(reason.clone()));
-                    }
-                    StepResult::Failure(error) => {
-                        self.task_list.fail_task(index, Some(error.clone()));
-                        if let Some(task) = self.task_list.get(index) {
-                            self.error_modal = Some((task.name.clone(), error.clone()));
-                        }
-                    }
-                }
-                None
-            }
-            DevInstallViewMsg::StartTask(index) => {
-                self.start_task(index);
-                None
-            }
-            DevInstallViewMsg::CompleteTask(index, result) => {
-                self.complete_task(index, result);
-                None
-            }
-            DevInstallViewMsg::Quit => {
+            DevStopViewMsg::Quit => {
                 if self.error_modal.is_some() {
                     // Close modal first
                     self.error_modal = None;
@@ -466,11 +335,7 @@ impl Model for DevInstallView {
                     Some(Cmd::quit())
                 }
             }
-            DevInstallViewMsg::CloseModal => {
-                self.error_modal = None;
-                None
-            }
-            DevInstallViewMsg::Resize(w, h) => {
+            DevStopViewMsg::Resize(w, h) => {
                 self.width = w;
                 self.height = h;
                 None
@@ -518,9 +383,9 @@ impl Model for DevInstallView {
             output.push_str(&self.render_footer());
         }
 
-        // Overlay modal if showing
+        // Overlay error modal if showing
         if self.error_modal.is_some() {
-            self.render_modal(&output)
+            self.render_error_modal(&output)
         } else {
             output
         }
@@ -532,28 +397,26 @@ impl Model for DevInstallView {
                 // If modal is showing, only modal keys work
                 if self.error_modal.is_some() {
                     match key.code {
-                        KeyCode::Esc => Some(DevInstallViewMsg::CloseModal),
+                        KeyCode::Esc => Some(DevStopViewMsg::CloseModal),
                         _ => None,
                     }
                 } else {
                     match key.code {
-                        KeyCode::Char('q') => Some(DevInstallViewMsg::Quit),
+                        KeyCode::Char('q') => Some(DevStopViewMsg::Quit),
                         _ => None,
                     }
                 }
             }
-            Event::Resize { width, height } => Some(DevInstallViewMsg::Resize(width, height)),
+            Event::Resize { width, height } => Some(DevStopViewMsg::Resize(width, height)),
             _ => None,
         }
     }
 
     fn subscriptions(&self) -> Sub<Self::Message> {
-        // Keep ticking while executing to:
-        // 1. Animate the spinner
-        // 2. Poll for worker thread results
+        // Keep ticking while executing
         if self.executing || self.task_list.is_running() {
-            Sub::interval("install-spinner", Duration::from_millis(80), || {
-                DevInstallViewMsg::Tick
+            Sub::interval("stop-tick", Duration::from_millis(80), || {
+                DevStopViewMsg::Tick
             })
         } else {
             Sub::none()
@@ -566,50 +429,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_install_view_creation() {
-        let steps = vec![
-            InstallStep::new("Clone repository"),
-            InstallStep::new("Install dependencies"),
-            InstallStep::new("Build project"),
-        ];
-
-        let view = DevInstallView::new(steps);
-        assert!(!view.is_all_complete());
-        assert!(!view.is_running());
+    fn test_stop_view_creation() {
+        let view = DevStopView::new(vec![]);
+        assert!(!view.should_quit());
     }
 
     #[test]
-    fn test_task_lifecycle() {
-        let steps = vec![InstallStep::new("Step 1"), InstallStep::new("Step 2")];
-
-        let mut view = DevInstallView::new(steps);
-
-        // Start first task
-        view.start_task(0);
-        assert!(view.is_running());
-        assert_eq!(view.current_task_index(), Some(0));
-
-        // Complete first task
-        view.complete_task(0, StepResult::Success(Some("/path".to_string())));
-        assert!(!view.is_running());
-        assert!(!view.is_all_complete());
-
-        // Complete second task
-        view.start_task(1);
-        view.complete_task(1, StepResult::Success(None));
-        assert!(view.is_all_complete());
-        assert!(view.is_success());
-    }
-
-    #[test]
-    fn test_failure_shows_modal() {
-        let steps = vec![InstallStep::new("Failing step")];
-        let mut view = DevInstallView::new(steps);
-
-        view.start_task(0);
-        view.complete_task(0, StepResult::Failure("Something went wrong".to_string()));
-
-        assert!(view.has_failure());
-        assert!(view.error_modal.is_some());
+    fn test_stop_view_with_steps() {
+        let steps = vec![InstallStep::new("Test step")];
+        let view = DevStopView::new(steps);
+        assert!(!view.is_success());
     }
 }

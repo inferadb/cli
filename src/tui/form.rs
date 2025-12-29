@@ -52,8 +52,7 @@ mod tests {
     fn test_is_accessible_in_test() {
         // In tests, we're typically not in a TTY, so accessible mode should be true
         // unless explicitly set otherwise
-        let result = is_accessible();
-        // Just ensure it doesn't panic
-        assert!(result == true || result == false);
+        // Just ensure it doesn't panic and returns a valid bool
+        let _result = is_accessible();
     }
 }

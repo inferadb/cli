@@ -6,7 +6,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use ferment::components::{BadgeVariant, Column, StatusBadge, Tab, TabBar, Table};
+use ferment::components::{
+    BadgeVariant, Column, Modal, ModalBorder, StatusBadge, Tab, TabBar, Table,
+};
 use ferment::runtime::Sub;
 use ferment::style::Color;
 use ferment::terminal::{Event, KeyCode};
@@ -197,7 +199,7 @@ impl EnvironmentStatus {
 
 /// Message type for the status view.
 #[derive(Clone)]
-pub enum StatusViewMsg {
+pub enum DevStatusViewMsg {
     /// Move selection up.
     SelectPrev,
     /// Move selection down.
@@ -218,6 +220,8 @@ pub enum StatusViewMsg {
     PrevTab,
     /// Cycle through sort options (column and direction).
     CycleSort,
+    /// Close the offline modal.
+    CloseModal,
     /// Quit the view.
     Quit,
     /// Resize the view.
@@ -234,7 +238,7 @@ pub enum StatusViewMsg {
 }
 
 /// Interactive status view state.
-pub struct StatusView {
+pub struct DevStatusView {
     /// Terminal width.
     width: usize,
     /// Terminal height.
@@ -277,9 +281,11 @@ pub struct StatusView {
     refresh_fn: Option<RefreshFn>,
     /// Refresh interval in seconds (default: 5).
     refresh_interval_secs: u64,
+    /// Show the cluster offline modal.
+    show_offline_modal: bool,
 }
 
-impl StatusView {
+impl DevStatusView {
     /// Create a new status view.
     pub fn new(width: usize, height: usize) -> Self {
         let tabs: Vec<Tab> = StatusTab::all()
@@ -289,7 +295,8 @@ impl StatusView {
 
         let tab_bar = TabBar::new()
             .tabs(tabs)
-            .active_color(Color::Cyan)
+            .active_color(Color::Black)
+            .active_bg_color(Color::Cyan)
             .inactive_color(Color::BrightBlack)
             .key_color(Color::Cyan);
 
@@ -320,6 +327,7 @@ impl StatusView {
             ],
             refresh_fn: None,
             refresh_interval_secs: 5,
+            show_offline_modal: false,
         }
     }
 
@@ -341,6 +349,10 @@ impl StatusView {
     /// Set the cluster status.
     pub fn with_status(mut self, status: ClusterStatus) -> Self {
         self.cluster_status = status;
+        // Show offline modal automatically when cluster is offline
+        if matches!(status, ClusterStatus::Offline) {
+            self.show_offline_modal = true;
+        }
         self
     }
 
@@ -576,10 +588,30 @@ impl StatusView {
             reset
         )
     }
+
+    /// Render the cluster offline modal.
+    fn render_offline_modal(&self, background: &str) -> String {
+        let modal_width = 50.min(self.width.saturating_sub(4));
+        let modal_height = 10.min(self.height.saturating_sub(4));
+
+        let content = "The development cluster is not running.\n\n\
+            To start the cluster:\n\n\
+              inferadb dev start";
+
+        let modal = Modal::new(modal_width, modal_height)
+            .border(ModalBorder::Rounded)
+            .border_color(Color::Yellow)
+            .title("Cluster Offline")
+            .title_color(Color::Yellow)
+            .content(content)
+            .footer_hint("esc", "close");
+
+        modal.render_overlay(self.width, self.height, background)
+    }
 }
 
-impl Model for StatusView {
-    type Message = StatusViewMsg;
+impl Model for DevStatusView {
+    type Message = DevStatusViewMsg;
 
     fn init(&self) -> Option<Cmd<Self::Message>> {
         None
@@ -587,7 +619,7 @@ impl Model for StatusView {
 
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
         match msg {
-            StatusViewMsg::SelectPrev => {
+            DevStatusViewMsg::SelectPrev => {
                 if self.selected_row > 0 {
                     self.selected_row -= 1;
                     if self.selected_row < self.scroll_offset {
@@ -595,7 +627,7 @@ impl Model for StatusView {
                     }
                 }
             }
-            StatusViewMsg::SelectNext => {
+            DevStatusViewMsg::SelectNext => {
                 if self.selected_row < self.rows.len().saturating_sub(1) {
                     self.selected_row += 1;
                     let visible = self.visible_rows();
@@ -604,10 +636,10 @@ impl Model for StatusView {
                     }
                 }
             }
-            StatusViewMsg::ScrollLeft => {
+            DevStatusViewMsg::ScrollLeft => {
                 self.h_scroll_offset = self.h_scroll_offset.saturating_sub(4);
             }
-            StatusViewMsg::ScrollRight => {
+            DevStatusViewMsg::ScrollRight => {
                 let max = self.max_h_scroll();
                 if self.h_scroll_offset + 4 <= max {
                     self.h_scroll_offset += 4;
@@ -615,14 +647,14 @@ impl Model for StatusView {
                     self.h_scroll_offset = max;
                 }
             }
-            StatusViewMsg::PageUp => {
+            DevStatusViewMsg::PageUp => {
                 let page_size = self.visible_rows().saturating_sub(1);
                 self.selected_row = self.selected_row.saturating_sub(page_size);
                 if self.selected_row < self.scroll_offset {
                     self.scroll_offset = self.selected_row;
                 }
             }
-            StatusViewMsg::PageDown => {
+            DevStatusViewMsg::PageDown => {
                 let page_size = self.visible_rows().saturating_sub(1);
                 self.selected_row =
                     (self.selected_row + page_size).min(self.rows.len().saturating_sub(1));
@@ -631,37 +663,40 @@ impl Model for StatusView {
                     self.scroll_offset = self.selected_row.saturating_sub(visible - 1);
                 }
             }
-            StatusViewMsg::SwitchTab(id) => {
+            DevStatusViewMsg::SwitchTab(id) => {
                 self.tab_bar.set_selected(&id);
                 self.handle_tab_switch();
             }
-            StatusViewMsg::NextTab => {
+            DevStatusViewMsg::NextTab => {
                 self.tab_bar.update(ferment::components::TabBarMsg::Next);
                 self.handle_tab_switch();
             }
-            StatusViewMsg::PrevTab => {
+            DevStatusViewMsg::PrevTab => {
                 self.tab_bar
                     .update(ferment::components::TabBarMsg::Previous);
                 self.handle_tab_switch();
             }
-            StatusViewMsg::CycleSort => {
+            DevStatusViewMsg::CycleSort => {
                 self.cycle_sort();
             }
-            StatusViewMsg::Quit => {
+            DevStatusViewMsg::CloseModal => {
+                self.show_offline_modal = false;
+            }
+            DevStatusViewMsg::Quit => {
                 return Some(Cmd::quit());
             }
-            StatusViewMsg::Resize { width, height } => {
+            DevStatusViewMsg::Resize { width, height } => {
                 self.width = width;
                 self.height = height;
             }
-            StatusViewMsg::Tick => {
+            DevStatusViewMsg::Tick => {
                 // Trigger data refresh if callback is available
                 if let Some(ref refresh_fn) = self.refresh_fn {
                     let f = Arc::clone(refresh_fn);
-                    return Some(Cmd::perform(move || StatusViewMsg::RefreshData(f())));
+                    return Some(Cmd::perform(move || DevStatusViewMsg::RefreshData(f())));
                 }
             }
-            StatusViewMsg::RefreshData(result) => {
+            DevStatusViewMsg::RefreshData(result) => {
                 // Apply the refreshed data
                 self.cluster_status = result.cluster_status;
                 self.urls_data = result.urls;
@@ -724,35 +759,55 @@ impl Model for StatusView {
         // Footer separator
         output.push_str(&format!("{}{}{}\r\n", dim, "─".repeat(self.width), reset));
 
-        // Footer hints
-        output.push_str(&self.render_footer());
+        // Footer hints (hidden when modal is showing)
+        if self.show_offline_modal {
+            // Empty footer line to maintain layout
+            output.push_str(&" ".repeat(self.width));
+        } else {
+            output.push_str(&self.render_footer());
+        }
 
-        output
+        // Overlay modal if showing
+        if self.show_offline_modal {
+            self.render_offline_modal(&output)
+        } else {
+            output
+        }
     }
 
     fn handle_event(&self, event: Event) -> Option<Self::Message> {
         match event {
-            Event::Key(key) => match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => Some(StatusViewMsg::Quit),
-                KeyCode::Up | KeyCode::Char('k') => Some(StatusViewMsg::SelectPrev),
-                KeyCode::Down | KeyCode::Char('j') => Some(StatusViewMsg::SelectNext),
-                KeyCode::Left | KeyCode::Char('h') => Some(StatusViewMsg::ScrollLeft),
-                KeyCode::Right | KeyCode::Char('l') => Some(StatusViewMsg::ScrollRight),
-                KeyCode::PageUp => Some(StatusViewMsg::PageUp),
-                KeyCode::PageDown => Some(StatusViewMsg::PageDown),
-                KeyCode::Tab => Some(StatusViewMsg::NextTab),
-                KeyCode::BackTab => Some(StatusViewMsg::PrevTab),
-                KeyCode::Char('S') => Some(StatusViewMsg::CycleSort),
-                KeyCode::Char(c) => {
-                    // Check if character matches any tab's key shortcut
-                    if let Some(id) = self.tab_bar.tab_for_key(c) {
-                        return Some(StatusViewMsg::SwitchTab(id.to_string()));
+            Event::Key(key) => {
+                // If modal is showing, only modal keys work
+                if self.show_offline_modal {
+                    match key.code {
+                        KeyCode::Esc => Some(DevStatusViewMsg::CloseModal),
+                        _ => None,
                     }
-                    None
+                } else {
+                    match key.code {
+                        KeyCode::Char('q') => Some(DevStatusViewMsg::Quit),
+                        KeyCode::Up | KeyCode::Char('k') => Some(DevStatusViewMsg::SelectPrev),
+                        KeyCode::Down | KeyCode::Char('j') => Some(DevStatusViewMsg::SelectNext),
+                        KeyCode::Left | KeyCode::Char('h') => Some(DevStatusViewMsg::ScrollLeft),
+                        KeyCode::Right | KeyCode::Char('l') => Some(DevStatusViewMsg::ScrollRight),
+                        KeyCode::PageUp => Some(DevStatusViewMsg::PageUp),
+                        KeyCode::PageDown => Some(DevStatusViewMsg::PageDown),
+                        KeyCode::Tab => Some(DevStatusViewMsg::NextTab),
+                        KeyCode::BackTab => Some(DevStatusViewMsg::PrevTab),
+                        KeyCode::Char('S') => Some(DevStatusViewMsg::CycleSort),
+                        KeyCode::Char(c) => {
+                            // Check if character matches any tab's key shortcut
+                            if let Some(id) = self.tab_bar.tab_for_key(c) {
+                                return Some(DevStatusViewMsg::SwitchTab(id.to_string()));
+                            }
+                            None
+                        }
+                        _ => None,
+                    }
                 }
-                _ => None,
-            },
-            Event::Resize { width, height } => Some(StatusViewMsg::Resize {
+            }
+            Event::Resize { width, height } => Some(DevStatusViewMsg::Resize {
                 width: width as usize,
                 height: height as usize,
             }),
@@ -765,7 +820,7 @@ impl Model for StatusView {
             Sub::interval(
                 "status-refresh",
                 Duration::from_secs(self.refresh_interval_secs),
-                || StatusViewMsg::Tick,
+                || DevStatusViewMsg::Tick,
             )
         } else {
             Sub::none()
@@ -779,15 +834,15 @@ mod tests {
 
     #[test]
     fn test_status_view_creation() {
-        let view = StatusView::new(80, 24);
+        let view = DevStatusView::new(80, 24);
         assert_eq!(view.current_tab, StatusTab::Urls);
         assert_eq!(view.cluster_status, ClusterStatus::Unknown);
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut view = StatusView::new(80, 24);
-        view.update(StatusViewMsg::SwitchTab("services".to_string()));
+        let mut view = DevStatusView::new(80, 24);
+        view.update(DevStatusViewMsg::SwitchTab("services".to_string()));
         assert_eq!(view.current_tab, StatusTab::Services);
     }
 

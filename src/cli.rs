@@ -57,9 +57,6 @@ pub struct Cli {
 /// Available CLI commands.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// First-run setup wizard
-    Init,
-
     /// Authenticate with InferaDB
     Login,
 
@@ -360,7 +357,7 @@ pub enum Commands {
         name: Option<String>,
     },
 
-    /// Local development environment
+    /// Local development cluster
     #[command(subcommand)]
     Dev(DevCommands),
 
@@ -1551,26 +1548,11 @@ pub enum TokensCommands {
     },
 }
 
-/// Local development environment commands.
+/// Local development cluster commands.
 #[derive(Subcommand, Debug)]
 pub enum DevCommands {
     /// Check if host environment is ready for development
     Doctor {
-        /// Run in full-screen interactive TUI mode
-        #[arg(long, short)]
-        interactive: bool,
-    },
-
-    /// Install deploy repository (~/.inferadb/deploy)
-    Install {
-        /// Remove and re-clone if already present
-        #[arg(long)]
-        force: bool,
-
-        /// Clone a specific commit, tag, or branch
-        #[arg(long)]
-        commit: Option<String>,
-
         /// Run in full-screen interactive TUI mode
         #[arg(long, short)]
         interactive: bool,
@@ -1581,6 +1563,14 @@ pub enum DevCommands {
         /// Skip confirmation prompt
         #[arg(long, short)]
         yes: bool,
+
+        /// Run in full-screen interactive TUI mode
+        #[arg(long, short)]
+        interactive: bool,
+
+        /// Also remove cached Tailscale credentials
+        #[arg(long)]
+        with_credentials: bool,
     },
 
     /// Start local development cluster
@@ -1588,13 +1578,33 @@ pub enum DevCommands {
         /// Skip building container images
         #[arg(long)]
         skip_build: bool,
+
+        /// Run in full-screen interactive TUI mode
+        #[arg(long, short)]
+        interactive: bool,
+
+        /// Tailscale OAuth client ID
+        #[arg(long, env = "TAILSCALE_CLIENT_ID")]
+        tailscale_client: Option<String>,
+
+        /// Tailscale OAuth client secret
+        #[arg(long, env = "TAILSCALE_CLIENT_SECRET")]
+        tailscale_secret: Option<String>,
+
+        /// Re-clone deploy repository if already present
+        #[arg(long)]
+        force: bool,
+
+        /// Clone a specific commit, tag, or branch of deploy repository
+        #[arg(long)]
+        commit: Option<String>,
     },
 
     /// Stop local development cluster (pause containers)
     Stop {
-        /// Fully destroy the cluster instead of pausing
-        #[arg(long)]
-        destroy: bool,
+        /// Use interactive TUI mode
+        #[arg(long, short = 'i')]
+        interactive: bool,
     },
 
     /// Start local development cluster (alias for 'start')
@@ -1603,14 +1613,34 @@ pub enum DevCommands {
         /// Skip building container images
         #[arg(long)]
         skip_build: bool,
+
+        /// Run in full-screen interactive TUI mode
+        #[arg(long, short)]
+        interactive: bool,
+
+        /// Tailscale OAuth client ID
+        #[arg(long, env = "TAILSCALE_CLIENT_ID")]
+        tailscale_client: Option<String>,
+
+        /// Tailscale OAuth client secret
+        #[arg(long, env = "TAILSCALE_CLIENT_SECRET")]
+        tailscale_secret: Option<String>,
+
+        /// Re-clone deploy repository if already present
+        #[arg(long)]
+        force: bool,
+
+        /// Clone a specific commit, tag, or branch of deploy repository
+        #[arg(long)]
+        commit: Option<String>,
     },
 
     /// Stop local development cluster (alias for 'stop')
     #[command(hide = true)]
     Down {
-        /// Fully destroy the cluster instead of pausing
-        #[arg(long)]
-        destroy: bool,
+        /// Use interactive TUI mode
+        #[arg(long, short = 'i')]
+        interactive: bool,
     },
 
     /// Show cluster status
