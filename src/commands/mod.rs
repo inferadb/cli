@@ -652,35 +652,6 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
             with_credentials,
             interactive,
         } => dev::stop(ctx, *destroy, *yes, *with_credentials, *interactive).await,
-        DevCommands::Up {
-            skip_build,
-            interactive,
-            tailscale_client,
-            tailscale_secret,
-            force,
-            commit,
-        } => {
-            eprintln!("Hint: 'dev up' is now 'dev start'\n");
-            dev::start(
-                ctx,
-                *skip_build,
-                *interactive,
-                tailscale_client.clone(),
-                tailscale_secret.clone(),
-                *force,
-                commit.as_deref(),
-            )
-            .await
-        }
-        DevCommands::Down {
-            destroy,
-            yes,
-            with_credentials,
-            interactive,
-        } => {
-            eprintln!("Hint: 'dev down' is now 'dev stop'\n");
-            dev::stop(ctx, *destroy, *yes, *with_credentials, *interactive).await
-        }
         DevCommands::Status { interactive } => dev::dev_status(ctx, *interactive).await,
         DevCommands::Logs {
             follow,

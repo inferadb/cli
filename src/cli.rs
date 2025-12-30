@@ -1559,6 +1559,7 @@ pub enum DevCommands {
     },
 
     /// Start local development cluster
+    #[command(alias = "up")]
     Start {
         /// Skip building container images
         #[arg(long)]
@@ -1586,55 +1587,8 @@ pub enum DevCommands {
     },
 
     /// Stop local development cluster (pause containers)
+    #[command(alias = "down")]
     Stop {
-        /// Completely destroy the cluster instead of pausing
-        #[arg(long, short)]
-        destroy: bool,
-
-        /// Skip confirmation prompt (only used with --destroy)
-        #[arg(long, short)]
-        yes: bool,
-
-        /// Also remove cached Tailscale credentials (only used with --destroy)
-        #[arg(long)]
-        with_credentials: bool,
-
-        /// Use interactive TUI mode
-        #[arg(long, short = 'i')]
-        interactive: bool,
-    },
-
-    /// Start local development cluster (alias for 'start')
-    #[command(hide = true)]
-    Up {
-        /// Skip building container images
-        #[arg(long)]
-        skip_build: bool,
-
-        /// Run in full-screen interactive TUI mode
-        #[arg(long, short)]
-        interactive: bool,
-
-        /// Tailscale OAuth client ID
-        #[arg(long, env = "TAILSCALE_CLIENT_ID")]
-        tailscale_client: Option<String>,
-
-        /// Tailscale OAuth client secret
-        #[arg(long, env = "TAILSCALE_CLIENT_SECRET")]
-        tailscale_secret: Option<String>,
-
-        /// Re-clone deploy repository if already present
-        #[arg(long)]
-        force: bool,
-
-        /// Clone a specific commit, tag, or branch of deploy repository
-        #[arg(long)]
-        commit: Option<String>,
-    },
-
-    /// Stop local development cluster (alias for 'stop')
-    #[command(hide = true)]
-    Down {
         /// Completely destroy the cluster instead of pausing
         #[arg(long, short)]
         destroy: bool,

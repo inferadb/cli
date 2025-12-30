@@ -235,14 +235,6 @@ fn print_hint(text: &str) {
     println!("{}○{} {}", dim, reset, text);
 }
 
-/// Result of a destroy step - either work was done or it was skipped.
-enum DestroyStepResult {
-    /// Work was performed
-    Done,
-    /// Nothing to do (already in desired state)
-    Skipped,
-}
-
 /// Run a destroy step with spinner, then show dot-leader format on completion.
 ///
 /// Shows `{in_progress}...` spinner while running, then outputs:
@@ -253,7 +245,7 @@ enum DestroyStepResult {
 /// Returns whether work was done (for tracking if anything was destroyed).
 fn run_destroy_step<F>(in_progress: &str, completed: &str, executor: F) -> bool
 where
-    F: FnOnce() -> std::result::Result<DestroyStepResult, String>,
+    F: FnOnce() -> std::result::Result<StepOutcome, String>,
 {
     use crate::tui::start_spinner;
     use ferment::style::Color;
@@ -261,7 +253,7 @@ where
     let mut spin = start_spinner(in_progress);
 
     match executor() {
-        Ok(DestroyStepResult::Done) => {
+        Ok(StepOutcome::Success) | Ok(StepOutcome::SuccessMsg(_)) => {
             spin.stop();
             let green = Color::Green.to_ansi_fg();
             let dim = Color::BrightBlack.to_ansi_fg();
@@ -284,12 +276,12 @@ where
             );
             true
         }
-        Ok(DestroyStepResult::Skipped) => {
+        Ok(StepOutcome::Skipped(_)) => {
             spin.stop();
             print_destroy_skipped(completed);
             false
         }
-        Err(e) => {
+        Ok(StepOutcome::Failed(e)) | Err(e) => {
             spin.failure(&e);
             false
         }
@@ -1545,9 +1537,9 @@ fn gather_uninstall_info() -> UninstallInfo {
 // ============================================================================
 
 /// Step: Destroy Talos cluster and clean up Tailscale devices.
-fn step_destroy_cluster() -> std::result::Result<DestroyStepResult, String> {
+fn step_destroy_cluster() -> std::result::Result<StepOutcome, String> {
     if !docker_container_exists(CLUSTER_NAME) {
-        return Ok(DestroyStepResult::Skipped);
+        return Ok(StepOutcome::Skipped(String::new()));
     }
 
     // Clean up Tailscale devices first
@@ -1557,24 +1549,24 @@ fn step_destroy_cluster() -> std::result::Result<DestroyStepResult, String> {
     run_command("talosctl", &["cluster", "destroy", "--name", CLUSTER_NAME])
         .map_err(|e| e.to_string())?;
 
-    Ok(DestroyStepResult::Done)
+    Ok(StepOutcome::Success)
 }
 
 /// Step: Remove local Docker registry.
-fn step_remove_registry() -> std::result::Result<DestroyStepResult, String> {
+fn step_remove_registry() -> std::result::Result<StepOutcome, String> {
     if !docker_container_exists(REGISTRY_NAME) {
-        return Ok(DestroyStepResult::Skipped);
+        return Ok(StepOutcome::Skipped(String::new()));
     }
 
     let _ = run_command_optional("docker", &["stop", REGISTRY_NAME]);
     let _ = run_command_optional("docker", &["rm", "-f", REGISTRY_NAME]);
 
-    Ok(DestroyStepResult::Done)
+    Ok(StepOutcome::Success)
 }
 
 /// Step: Clean up kubectl/talosctl contexts.
 /// Returns Done if any contexts were found and cleaned, Skipped otherwise.
-fn step_cleanup_contexts() -> std::result::Result<DestroyStepResult, String> {
+fn step_cleanup_contexts() -> std::result::Result<StepOutcome, String> {
     let has_talos = run_command_optional("talosctl", &["config", "contexts"])
         .map(|o| o.contains(CLUSTER_NAME))
         .unwrap_or(false);
@@ -1584,11 +1576,11 @@ fn step_cleanup_contexts() -> std::result::Result<DestroyStepResult, String> {
         .unwrap_or(false);
 
     if !has_talos && !has_kube {
-        return Ok(DestroyStepResult::Skipped);
+        return Ok(StepOutcome::Skipped(String::new()));
     }
 
     cleanup_stale_contexts();
-    Ok(DestroyStepResult::Done)
+    Ok(StepOutcome::Success)
 }
 
 /// Step: Remove Docker images.
@@ -1613,27 +1605,27 @@ fn step_remove_docker_images() -> std::result::Result<Option<String>, String> {
 }
 
 /// Step: Remove state directory.
-fn step_remove_state_dir() -> std::result::Result<DestroyStepResult, String> {
+fn step_remove_state_dir() -> std::result::Result<StepOutcome, String> {
     let state_dir = Config::state_dir().unwrap_or_else(|| PathBuf::from(".local/state/inferadb"));
     if !state_dir.exists() {
-        return Ok(DestroyStepResult::Skipped);
+        return Ok(StepOutcome::Skipped(String::new()));
     }
 
     fs::remove_dir_all(&state_dir)
         .map_err(|e| format!("Failed to remove {}: {}", state_dir.display(), e))?;
 
-    Ok(DestroyStepResult::Done)
+    Ok(StepOutcome::Success)
 }
 
 /// Step: Remove Tailscale credentials.
-fn step_remove_tailscale_creds() -> std::result::Result<DestroyStepResult, String> {
+fn step_remove_tailscale_creds() -> std::result::Result<StepOutcome, String> {
     let creds_file = get_tailscale_creds_file();
     if !creds_file.exists() {
-        return Ok(DestroyStepResult::Skipped);
+        return Ok(StepOutcome::Skipped(String::new()));
     }
     fs::remove_file(&creds_file)
         .map_err(|e| format!("Failed to remove {}: {}", creds_file.display(), e))?;
-    Ok(DestroyStepResult::Done)
+    Ok(StepOutcome::Success)
 }
 
 // Uninstall/destroy functionality is accessed via `stop --destroy`.
@@ -1721,10 +1713,10 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
                 &format!("Removed image {}", display_name),
                 move || {
                     if run_command_optional("docker", &["rmi", "-f", &image_clone]).is_some() {
-                        Ok(DestroyStepResult::Done)
+                        Ok(StepOutcome::Success)
                     } else {
                         // Image might already be removed - treat as skipped not error
-                        Ok(DestroyStepResult::Skipped)
+                        Ok(StepOutcome::Skipped(String::new()))
                     }
                 },
             );
@@ -1787,14 +1779,15 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
 
     // Build steps based on what's installed
     // Note: Registry must be removed before cluster to avoid network conflicts
-    // Each step is wrapped to convert DestroyStepResult to Option<String>
+    // Each step is wrapped to convert StepOutcome to Option<String>
     let mut steps = Vec::new();
 
     if info.has_registry {
         steps.push(InstallStep::with_executor("Removing registry", || {
             step_remove_registry().map(|r| match r {
-                DestroyStepResult::Done => Some("Removed".to_string()),
-                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+                StepOutcome::Success => Some("Removed".to_string()),
+                StepOutcome::Skipped(_) => Some("Skipped".to_string()),
+                _ => None,
             })
         }));
     }
@@ -1802,8 +1795,9 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     if info.has_cluster {
         steps.push(InstallStep::with_executor("Destroying cluster", || {
             step_destroy_cluster().map(|r| match r {
-                DestroyStepResult::Done => Some("Destroyed".to_string()),
-                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+                StepOutcome::Success => Some("Destroyed".to_string()),
+                StepOutcome::Skipped(_) => Some("Skipped".to_string()),
+                _ => None,
             })
         }));
     }
@@ -1811,8 +1805,9 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     if info.has_kube_context || info.has_talos_context {
         steps.push(InstallStep::with_executor("Cleaning contexts", || {
             step_cleanup_contexts().map(|r| match r {
-                DestroyStepResult::Done => Some("Cleaned".to_string()),
-                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+                StepOutcome::Success => Some("Cleaned".to_string()),
+                StepOutcome::Skipped(_) => Some("Skipped".to_string()),
+                _ => None,
             })
         }));
     }
@@ -1829,8 +1824,9 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     if info.has_state_dir {
         steps.push(InstallStep::with_executor("Removing state directory", || {
             step_remove_state_dir().map(|r| match r {
-                DestroyStepResult::Done => Some("Removed".to_string()),
-                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+                StepOutcome::Success => Some("Removed".to_string()),
+                StepOutcome::Skipped(_) => Some("Skipped".to_string()),
+                _ => None,
             })
         }));
     }
@@ -1840,8 +1836,9 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
             "Removing Tailscale credentials",
             || {
                 step_remove_tailscale_creds().map(|r| match r {
-                    DestroyStepResult::Done => Some("Removed".to_string()),
-                    DestroyStepResult::Skipped => Some("Skipped".to_string()),
+                    StepOutcome::Success => Some("Removed".to_string()),
+                    StepOutcome::Skipped(_) => Some("Skipped".to_string()),
+                    _ => None,
                 })
             },
         ));
