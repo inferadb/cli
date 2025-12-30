@@ -2,7 +2,7 @@
 //!
 //! Provides utilities for working with Docker containers, images, and the local registry.
 
-use super::commands::run_command_optional;
+use super::commands::{run_command, run_command_optional};
 use super::constants::{CLUSTER_NAME, REGISTRY_NAME};
 
 /// Check if a Docker container exists.
@@ -19,6 +19,16 @@ pub fn docker_container_exists(name: &str) -> bool {
         ],
     )
     .map(|output| output.lines().any(|line| line.contains(name)))
+    .unwrap_or(false)
+}
+
+/// Check if a specific container is paused.
+pub fn is_container_paused(container: &str) -> bool {
+    run_command_optional(
+        "docker",
+        &["inspect", container, "--format", "{{.State.Paused}}"],
+    )
+    .map(|output| output.trim() == "true")
     .unwrap_or(false)
 }
 
@@ -43,6 +53,14 @@ pub fn get_cluster_containers() -> Vec<String> {
             .collect()
     })
     .unwrap_or_default()
+}
+
+/// Get expected cluster container names.
+pub fn get_expected_cluster_containers() -> Vec<String> {
+    vec![
+        format!("{}-controlplane-1", CLUSTER_NAME),
+        format!("{}-worker-1", CLUSTER_NAME),
+    ]
 }
 
 /// Check if cluster containers are paused.
@@ -129,6 +147,13 @@ pub fn get_dev_docker_images() -> Vec<String> {
     images
 }
 
+/// Remove a Docker image by name.
+///
+/// Returns true if the image was removed, false otherwise.
+pub fn remove_image(image: &str) -> bool {
+    run_command_optional("docker", &["rmi", "-f", image]).is_some()
+}
+
 /// Check if the registry container exists.
 pub fn registry_exists() -> bool {
     docker_container_exists(REGISTRY_NAME)
@@ -137,4 +162,16 @@ pub fn registry_exists() -> bool {
 /// Check if the cluster container exists.
 pub fn cluster_exists() -> bool {
     docker_container_exists(CLUSTER_NAME)
+}
+
+/// Check if Docker daemon is running.
+pub fn is_docker_running() -> bool {
+    run_command_optional("docker", &["info"]).is_some()
+}
+
+/// Pull a Docker image.
+pub fn pull_image(image: &str) -> Result<(), String> {
+    run_command("docker", &["pull", image])
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
