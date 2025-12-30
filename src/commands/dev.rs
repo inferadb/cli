@@ -113,7 +113,7 @@ fn format_dot_leader(text: &str, status: &str) -> String {
     // Color the status based on value
     let status_colored = match status.to_uppercase().as_str() {
         "OK" | "CREATED" | "CONFIGURED" => format!("{}{}{}", green, status, reset),
-        "UNCHANGED" => format!("{}{}{}", dim, status, reset),
+        "SKIPPED" | "UNCHANGED" => format!("{}{}{}", dim, status, reset),
         _ => status.to_string(),
     };
 
@@ -146,7 +146,7 @@ fn format_reset_dot_leader(prefix: &str, text: &str, status: &str) -> String {
     let status_upper = status.to_uppercase();
     let status_colored = match status_upper.as_str() {
         "OK" | "CREATED" | "CONFIGURED" => format!("{}{}{}", green, status_upper, reset),
-        "UNCHANGED" => format!("{}{}{}", dim, status_upper, reset),
+        "SKIPPED" | "UNCHANGED" => format!("{}{}{}", dim, status_upper, reset),
         _ => status_upper,
     };
 
@@ -233,6 +233,93 @@ fn print_hint(text: &str) {
     let reset = "\x1b[0m";
 
     println!("{}○{} {}", dim, reset, text);
+}
+
+/// Result of a destroy step - either work was done or it was skipped.
+enum DestroyStepResult {
+    /// Work was performed
+    Done,
+    /// Nothing to do (already in desired state)
+    Skipped,
+}
+
+/// Run a destroy step with spinner, then show dot-leader format on completion.
+///
+/// Shows `{in_progress}...` spinner while running, then outputs:
+/// - `✓ {completed} ....... OK` on success (green checkmark and OK)
+/// - `○ {completed} ....... SKIPPED` if nothing to do (dimmed)
+/// - `✗ {completed} ....... FAILED` on failure
+///
+/// Returns whether work was done (for tracking if anything was destroyed).
+fn run_destroy_step<F>(in_progress: &str, completed: &str, executor: F) -> bool
+where
+    F: FnOnce() -> std::result::Result<DestroyStepResult, String>,
+{
+    use crate::tui::start_spinner;
+    use ferment::style::Color;
+
+    let mut spin = start_spinner(in_progress);
+
+    match executor() {
+        Ok(DestroyStepResult::Done) => {
+            spin.stop();
+            let green = Color::Green.to_ansi_fg();
+            let dim = Color::BrightBlack.to_ansi_fg();
+            let reset = "\x1b[0m";
+
+            let checkmark = "✓";
+            let prefix_width = 1;
+            let status = format!("{}OK{}", green, reset);
+            let dots_len = STEP_LINE_WIDTH
+                .saturating_sub(prefix_width)
+                .saturating_sub(1)
+                .saturating_sub(completed.len())
+                .saturating_sub(2)
+                .saturating_sub(2);
+            let dots = ".".repeat(dots_len);
+
+            println!(
+                "{}{}{} {} {}{}{} {}",
+                green, checkmark, reset, completed, dim, dots, reset, status
+            );
+            true
+        }
+        Ok(DestroyStepResult::Skipped) => {
+            spin.stop();
+            print_destroy_skipped(completed);
+            false
+        }
+        Err(e) => {
+            spin.failure(&e);
+            false
+        }
+    }
+}
+
+/// Print a skipped destroy step in dot-leader format.
+///
+/// Outputs: `○ {text} ....... SKIPPED` (dimmed)
+fn print_destroy_skipped(text: &str) {
+    use ferment::style::Color;
+
+    let dim = Color::BrightBlack.to_ansi_fg();
+    let reset = "\x1b[0m";
+
+    let prefix = "○";
+    let prefix_width = 1;
+    let status = "SKIPPED";
+    let dots_len = STEP_LINE_WIDTH
+        .saturating_sub(prefix_width)
+        .saturating_sub(1) // space after prefix
+        .saturating_sub(text.len())
+        .saturating_sub(status.len())
+        .saturating_sub(2); // spaces around dots
+    let dots = ".".repeat(dots_len);
+
+    println!(
+        "{}{}{} {} {}{}{} {}{}{}",
+        dim, prefix, reset, text, dim, dots, reset, dim, status, reset
+    );
 }
 
 /// Run a step with spinner and format output according to the new design.
@@ -1191,12 +1278,15 @@ fn step_create_config_dir() -> std::result::Result<Option<String>, String> {
         .unwrap_or_else(|| std::path::PathBuf::from(".config"))
         .join("inferadb");
 
-    if !config_dir.exists() {
-        fs::create_dir_all(&config_dir)
-            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    if config_dir.exists() {
+        // Directory already exists, skip
+        return Ok(Some("already exists".to_string()));
     }
 
-    Ok(Some(config_dir.display().to_string()))
+    fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to create config directory: {}", e))?;
+
+    Ok(None)
 }
 
 /// Step: Set up Helm repositories.
@@ -1455,9 +1545,9 @@ fn gather_uninstall_info() -> UninstallInfo {
 // ============================================================================
 
 /// Step: Destroy Talos cluster and clean up Tailscale devices.
-fn step_destroy_cluster() -> std::result::Result<Option<String>, String> {
+fn step_destroy_cluster() -> std::result::Result<DestroyStepResult, String> {
     if !docker_container_exists(CLUSTER_NAME) {
-        return Ok(Some("No cluster to remove".to_string()));
+        return Ok(DestroyStepResult::Skipped);
     }
 
     // Clean up Tailscale devices first
@@ -1467,25 +1557,38 @@ fn step_destroy_cluster() -> std::result::Result<Option<String>, String> {
     run_command("talosctl", &["cluster", "destroy", "--name", CLUSTER_NAME])
         .map_err(|e| e.to_string())?;
 
-    Ok(Some("Cluster destroyed".to_string()))
+    Ok(DestroyStepResult::Done)
 }
 
 /// Step: Remove local Docker registry.
-fn step_remove_registry() -> std::result::Result<Option<String>, String> {
+fn step_remove_registry() -> std::result::Result<DestroyStepResult, String> {
     if !docker_container_exists(REGISTRY_NAME) {
-        return Ok(Some("No registry to remove".to_string()));
+        return Ok(DestroyStepResult::Skipped);
     }
 
     let _ = run_command_optional("docker", &["stop", REGISTRY_NAME]);
     let _ = run_command_optional("docker", &["rm", "-f", REGISTRY_NAME]);
 
-    Ok(Some("Registry removed".to_string()))
+    Ok(DestroyStepResult::Done)
 }
 
 /// Step: Clean up kubectl/talosctl contexts.
-fn step_cleanup_contexts() -> std::result::Result<Option<String>, String> {
+/// Returns Done if any contexts were found and cleaned, Skipped otherwise.
+fn step_cleanup_contexts() -> std::result::Result<DestroyStepResult, String> {
+    let has_talos = run_command_optional("talosctl", &["config", "contexts"])
+        .map(|o| o.contains(CLUSTER_NAME))
+        .unwrap_or(false);
+
+    let has_kube = run_command_optional("kubectl", &["config", "get-contexts", "-o", "name"])
+        .map(|o| o.lines().any(|l| l == KUBE_CONTEXT))
+        .unwrap_or(false);
+
+    if !has_talos && !has_kube {
+        return Ok(DestroyStepResult::Skipped);
+    }
+
     cleanup_stale_contexts();
-    Ok(Some("Contexts cleaned".to_string()))
+    Ok(DestroyStepResult::Done)
 }
 
 /// Step: Remove Docker images.
@@ -1509,172 +1612,162 @@ fn step_remove_docker_images() -> std::result::Result<Option<String>, String> {
     )))
 }
 
-/// Step: Remove deploy repository.
-fn step_remove_deploy_repo() -> std::result::Result<Option<String>, String> {
-    let deploy_dir = get_deploy_dir();
-    if !deploy_dir.exists() {
-        return Ok(Some("No deploy directory".to_string()));
-    }
-
-    fs::remove_dir_all(&deploy_dir)
-        .map_err(|e| format!("Failed to remove {}: {}", deploy_dir.display(), e))?;
-
-    // Try to remove parent data directory if empty
-    let data_dir = Config::data_dir().unwrap_or_else(|| PathBuf::from(".local/share/inferadb"));
-    let _ = fs::remove_dir(&data_dir); // Ignore error if not empty
-
-    Ok(Some(format!("Removed {}", deploy_dir.display())))
-}
-
 /// Step: Remove state directory.
-fn step_remove_state_dir() -> std::result::Result<Option<String>, String> {
+fn step_remove_state_dir() -> std::result::Result<DestroyStepResult, String> {
     let state_dir = Config::state_dir().unwrap_or_else(|| PathBuf::from(".local/state/inferadb"));
     if !state_dir.exists() {
-        return Ok(Some("No state directory".to_string()));
+        return Ok(DestroyStepResult::Skipped);
     }
 
     fs::remove_dir_all(&state_dir)
         .map_err(|e| format!("Failed to remove {}: {}", state_dir.display(), e))?;
 
-    Ok(Some(format!("Removed {}", state_dir.display())))
+    Ok(DestroyStepResult::Done)
 }
 
 /// Step: Remove Tailscale credentials.
-fn step_remove_tailscale_creds() -> std::result::Result<Option<String>, String> {
+fn step_remove_tailscale_creds() -> std::result::Result<DestroyStepResult, String> {
     let creds_file = get_tailscale_creds_file();
     if !creds_file.exists() {
-        return Ok(Some("No credentials to remove".to_string()));
+        return Ok(DestroyStepResult::Skipped);
     }
     fs::remove_file(&creds_file)
         .map_err(|e| format!("Failed to remove {}: {}", creds_file.display(), e))?;
-    Ok(Some("Credentials removed".to_string()))
+    Ok(DestroyStepResult::Done)
 }
 
 // Uninstall/destroy functionality is accessed via `stop --destroy`.
 // The functions below are called from stop() when the destroy flag is set.
 
 /// Run uninstall with inline spinners for each step
+///
+/// This function is idempotent - each step checks its own preconditions and
+/// reports whether work was done or skipped. Safe to re-run if interrupted.
 fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
-    use crate::tui::start_spinner;
+    use ferment::style::Color;
 
     print_styled_header("Destroying InferaDB Development Cluster");
 
-    // Gather what will be removed
+    // Gather initial info for confirmation prompt (snapshot at start)
     let info = gather_uninstall_info();
+    let initially_had_something = info.has_anything();
 
-    if !info.has_anything() {
-        println!("Nothing to destroy. The development cluster is not installed.");
-        return Ok(());
-    }
-
-    // Show what will be destroyed
-    println!();
-    println!("This will destroy:");
-    println!();
-    for line in info.removal_lines() {
-        println!("  • {}", line);
-    }
-    if with_credentials && info.has_creds_file {
-        println!("  • Tailscale credentials");
-    }
-    println!();
-
-    // Confirm unless --yes
-    if !yes {
-        print!("Are you sure you want to continue? [y/N] ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-        let input = input.trim().to_lowercase();
-
-        if input != "y" && input != "yes" {
-            println!("Aborted.");
-            return Ok(());
+    // Only show confirmation if there appears to be something to destroy
+    if initially_had_something {
+        // Show what will be destroyed
+        println!();
+        println!("This will destroy:");
+        println!();
+        for line in info.removal_lines() {
+            println!("  • {}", line);
         }
+        if with_credentials && info.has_creds_file {
+            println!("  • Tailscale credentials");
+        }
+        println!();
+
+        // Confirm unless --yes
+        if !yes {
+            print!("Are you sure you want to continue? [y/N] ");
+            io::stdout().flush().unwrap();
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).unwrap();
+            let input = input.trim().to_lowercase();
+
+            if input != "y" && input != "yes" {
+                println!("Aborted.");
+                return Ok(());
+            }
+            println!();
+        }
+    } else {
         println!();
     }
 
+    // Track whether any work was actually done
+    let mut did_work = false;
+
     // Step 1: Remove registry (must be before cluster to avoid network conflicts)
-    if info.has_registry {
-        let spin = start_spinner("Remove local registry");
-        match step_remove_registry() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
-        }
-    }
+    // Always call - the step checks if registry exists
+    did_work |= run_destroy_step("Removing registry", "Removed registry", step_remove_registry);
 
     // Step 2: Destroy cluster
-    if info.has_cluster {
-        let spin = start_spinner("Destroy Talos cluster");
-        match step_destroy_cluster() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
-        }
-    }
+    // Always call - the step checks if cluster exists
+    did_work |= run_destroy_step(
+        "Destroying cluster",
+        "Destroyed cluster",
+        step_destroy_cluster,
+    );
 
     // Step 3: Clean up contexts
-    if info.has_kube_context || info.has_talos_context {
-        let spin = start_spinner("Clean up configuration contexts");
-        match step_cleanup_contexts() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
+    // Always call - the step checks if contexts exist
+    did_work |= run_destroy_step("Cleaning contexts", "Cleaned contexts", step_cleanup_contexts);
+
+    // Step 4: Remove Docker images (each image individually)
+    // Re-check images at execution time (not from cached info)
+    let dev_images = get_dev_docker_images();
+    if dev_images.is_empty() {
+        print_destroy_skipped("Remove images");
+    } else {
+        for image in &dev_images {
+            let image_clone = image.clone();
+            let display_name = image
+                .strip_prefix("ghcr.io/siderolabs/")
+                .or_else(|| image.strip_prefix("registry.k8s.io/"))
+                .unwrap_or(image);
+            did_work |= run_destroy_step(
+                &format!("Removing image {}", display_name),
+                &format!("Removed image {}", display_name),
+                move || {
+                    if run_command_optional("docker", &["rmi", "-f", &image_clone]).is_some() {
+                        Ok(DestroyStepResult::Done)
+                    } else {
+                        // Image might already be removed - treat as skipped not error
+                        Ok(DestroyStepResult::Skipped)
+                    }
+                },
+            );
         }
     }
 
-    // Step 4: Remove Docker images
-    if info.dev_image_count > 0 {
-        let spin = start_spinner("Remove Docker images");
-        match step_remove_docker_images() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
-        }
-    }
+    // Step 5: Remove state directory
+    // Always call - the step checks if directory exists
+    did_work |= run_destroy_step(
+        "Removing state directory",
+        "Removed state directory",
+        step_remove_state_dir,
+    );
 
-    // Step 5: Remove deploy repository
-    if info.has_deploy_dir {
-        let spin = start_spinner("Remove deploy repository");
-        match step_remove_deploy_repo() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
-        }
-    }
-
-    // Step 6: Remove state directory
-    if info.has_state_dir {
-        let spin = start_spinner("Remove state directory");
-        match step_remove_state_dir() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
-        }
-    }
-
-    // Step 7: Remove Tailscale credentials (optional)
-    if with_credentials && info.has_creds_file {
-        let spin = start_spinner("Remove Tailscale credentials");
-        match step_remove_tailscale_creds() {
-            Ok(Some(msg)) => spin.success(&msg),
-            Ok(None) => spin.success("Done"),
-            Err(e) => spin.warning(&e),
-        }
+    // Step 6: Remove Tailscale credentials (optional, only shown if requested)
+    if with_credentials {
+        // Always call - the step checks if credentials exist
+        did_work |= run_destroy_step(
+            "Removing Tailscale credentials",
+            "Removed Tailscale credentials",
+            step_remove_tailscale_creds,
+        );
     }
 
     // Summary
     println!();
-    print_success("Cluster destroyed");
+    if did_work {
+        let green = Color::Green.to_ansi_fg();
+        let reset = "\x1b[0m";
+        println!("{}Cluster destroyed successfully.{}", green, reset);
 
-    // Show hint about credentials if they weren't removed
-    if !with_credentials && info.has_creds_file {
-        println!();
-        print_info("Tailscale credentials were preserved for future dev clusters.");
-        print_info("To also remove them: inferadb dev stop --destroy --with-credentials");
+        // Show hint about credentials if they weren't removed
+        if !with_credentials && info.has_creds_file {
+            println!();
+            print_info("Tailscale credentials were preserved for future dev clusters.");
+            print_info("To also remove them: inferadb dev stop --destroy --with-credentials");
+        }
+    } else {
+        println!("Nothing to destroy.");
     }
+
+    println!();
+    print_hint("Run 'inferadb dev start' to start the cluster");
 
     Ok(())
 }
@@ -1694,54 +1787,63 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
 
     // Build steps based on what's installed
     // Note: Registry must be removed before cluster to avoid network conflicts
+    // Each step is wrapped to convert DestroyStepResult to Option<String>
     let mut steps = Vec::new();
 
     if info.has_registry {
-        steps.push(InstallStep::with_executor(
-            "Remove local registry",
-            step_remove_registry,
-        ));
+        steps.push(InstallStep::with_executor("Removing registry", || {
+            step_remove_registry().map(|r| match r {
+                DestroyStepResult::Done => Some("Removed".to_string()),
+                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+            })
+        }));
     }
 
     if info.has_cluster {
-        steps.push(InstallStep::with_executor(
-            "Destroy Talos cluster",
-            step_destroy_cluster,
-        ));
+        steps.push(InstallStep::with_executor("Destroying cluster", || {
+            step_destroy_cluster().map(|r| match r {
+                DestroyStepResult::Done => Some("Destroyed".to_string()),
+                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+            })
+        }));
     }
 
     if info.has_kube_context || info.has_talos_context {
-        steps.push(InstallStep::with_executor(
-            "Clean up configuration contexts",
-            step_cleanup_contexts,
-        ));
+        steps.push(InstallStep::with_executor("Cleaning contexts", || {
+            step_cleanup_contexts().map(|r| match r {
+                DestroyStepResult::Done => Some("Cleaned".to_string()),
+                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+            })
+        }));
     }
 
     if info.dev_image_count > 0 {
         steps.push(InstallStep::with_executor(
-            "Remove Docker images",
+            "Removing Docker images",
             step_remove_docker_images,
         ));
     }
 
-    if info.has_deploy_dir {
-        steps.push(InstallStep::with_executor(
-            "Remove deploy repository",
-            step_remove_deploy_repo,
-        ));
-    }
+    // Note: Deploy repository is intentionally NOT removed
 
     if info.has_state_dir {
-        steps.push(InstallStep::with_executor(
-            "Remove state directory",
-            step_remove_state_dir,
-        ));
+        steps.push(InstallStep::with_executor("Removing state directory", || {
+            step_remove_state_dir().map(|r| match r {
+                DestroyStepResult::Done => Some("Removed".to_string()),
+                DestroyStepResult::Skipped => Some("Skipped".to_string()),
+            })
+        }));
     }
 
     if with_credentials && info.has_creds_file {
         steps.push(InstallStep::with_executor(
-            "Remove Tailscale credentials",
-            step_remove_tailscale_creds,
+            "Removing Tailscale credentials",
+            || {
+                step_remove_tailscale_creds().map(|r| match r {
+                    DestroyStepResult::Done => Some("Removed".to_string()),
+                    DestroyStepResult::Skipped => Some("Skipped".to_string()),
+                })
+            },
         ));
     }
 
@@ -2083,12 +2185,16 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
             let in_progress = format!("Resuming {}", container);
             let completed = format!("Resumed {}", container);
             run_step(&StartStep::with_ok(&in_progress, &completed), || {
+                // Check if container is paused before trying to unpause
+                if !is_container_paused(&container_name) {
+                    return Ok(StepOutcome::Skipped(String::new()));
+                }
                 run_command("docker", &["unpause", &container_name])
                     .map(|_| StepOutcome::Success)
                     .or_else(|e| {
-                        // Ignore errors for containers that aren't paused
+                        // Container wasn't paused
                         if e.to_string().contains("not paused") {
-                            Ok(StepOutcome::Success)
+                            Ok(StepOutcome::Skipped(String::new()))
                         } else {
                             Err(e.to_string())
                         }
@@ -2101,8 +2207,19 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
             let in_progress = format!("Resuming {}", REGISTRY_NAME);
             let completed = format!("Resumed {}", REGISTRY_NAME);
             run_step(&StartStep::with_ok(&in_progress, &completed), || {
-                let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
-                Ok(StepOutcome::Success)
+                // Check if registry is paused before trying to unpause
+                if !is_container_paused(REGISTRY_NAME) {
+                    return Ok(StepOutcome::Skipped(String::new()));
+                }
+                run_command("docker", &["unpause", REGISTRY_NAME])
+                    .map(|_| StepOutcome::Success)
+                    .or_else(|e| {
+                        if e.to_string().contains("not paused") {
+                            Ok(StepOutcome::Skipped(String::new()))
+                        } else {
+                            Err(e.to_string())
+                        }
+                    })
             })?;
         }
 
@@ -2168,7 +2285,8 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
             "Created configuration directory",
         ),
         || match step_create_config_dir() {
-            Ok(_) => Ok(StepOutcome::Success),
+            Ok(Some(_)) => Ok(StepOutcome::Skipped(String::new())),
+            Ok(None) => Ok(StepOutcome::Success),
             Err(e) => Err(e),
         },
     )?;
@@ -2180,7 +2298,13 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
             "Set up Tailscale Helm repository",
         ),
         || {
-            let _ = run_command_optional(
+            // Check if repo already exists
+            if let Some(repos) = run_command_optional("helm", &["repo", "list", "-o", "json"]) {
+                if repos.contains("\"tailscale\"") || repos.contains("\"name\":\"tailscale\"") {
+                    return Ok(StepOutcome::Skipped(String::new()));
+                }
+            }
+            run_command(
                 "helm",
                 &[
                     "repo",
@@ -2188,8 +2312,9 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
                     "tailscale",
                     "https://pkgs.tailscale.com/helmcharts",
                 ],
-            );
-            Ok(StepOutcome::Success)
+            )
+            .map(|_| StepOutcome::Success)
+            .map_err(|e| e.to_string())
         },
     )?;
 
@@ -2374,6 +2499,12 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     run_step(
         &StartStep::with_ok("Setting kubectl context", "Set kubectl context"),
         || {
+            // Check if already the current context
+            if let Some(current) = run_command_optional("kubectl", &["config", "current-context"]) {
+                if current.trim() == KUBE_CONTEXT {
+                    return Ok(StepOutcome::Skipped(String::new()));
+                }
+            }
             run_command("kubectl", &["config", "use-context", KUBE_CONTEXT])
                 .map(|_| StepOutcome::Success)
                 .map_err(|e| e.to_string())
@@ -2681,139 +2812,49 @@ fn needs_registry_repair(node_ip: &str, registry_ip: &str) -> bool {
     false
 }
 
-/// Repair the registry configuration on a node by applying a clean config.
+/// Configure the registry on a node using talosctl patch.
 ///
-/// This extracts the current machine config, fixes the registries section,
-/// and reapplies it using apply-config (which replaces rather than merges).
+/// This applies a YAML patch to set the registry configuration, which is simpler
+/// and more reliable than extracting and modifying the full machine config.
 fn repair_registry_config(node_ip: &str, registry_ip: &str) -> std::result::Result<(), String> {
-    // Get the current machine config
-    let config_output = run_command_optional(
-        "talosctl",
-        &[
-            "--nodes",
-            node_ip,
-            "get",
-            "machineconfig",
-            "v1alpha1",
-            "-o",
-            "yaml",
-        ],
-    )
-    .ok_or_else(|| format!("Failed to get machine config from {}", node_ip))?;
+    // Create a YAML patch that sets the registry configuration
+    let patch = format!(
+        r#"machine:
+  registries:
+    mirrors:
+      {}:5000:
+        endpoints:
+          - http://{}:5000"#,
+        registry_ip, registry_ip
+    );
 
-    // Extract the spec section (the actual config content)
-    let spec_start = config_output
-        .find("spec: |")
-        .ok_or("Could not find spec section in machine config")?;
+    // Write patch to temp file
+    let patch_file =
+        std::env::temp_dir().join(format!("talos-patch-{}.yaml", node_ip.replace('.', "-")));
+    fs::write(&patch_file, &patch).map_err(|e| e.to_string())?;
 
-    // Find where spec content starts (after "spec: |\n")
-    let content_start = config_output[spec_start..]
-        .find('\n')
-        .map(|i| spec_start + i + 1)
-        .ok_or("Malformed spec section")?;
-
-    // Find the end of the spec (next "---" or end of output)
-    let content_end = config_output[content_start..]
-        .find("\n---")
-        .map(|i| content_start + i)
-        .unwrap_or(config_output.len());
-
-    let spec_content = &config_output[content_start..content_end];
-
-    // Remove the leading indentation from the YAML (Talos outputs with 4-space indent)
-    let cleaned_config: String = spec_content
-        .lines()
-        .map(|line| line.strip_prefix("    ").unwrap_or(line))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    // Fix the registries section in the config
-    let fixed_config = fix_registries_section(&cleaned_config, registry_ip)?;
-
-    // Write to temp file and apply
-    let config_file =
-        std::env::temp_dir().join(format!("talos-config-{}.yaml", node_ip.replace('.', "-")));
-    fs::write(&config_file, &fixed_config).map_err(|e| e.to_string())?;
-
-    // Apply the fixed config
+    // Apply the patch
     let result = run_command_optional(
         "talosctl",
         &[
             "--nodes",
             node_ip,
-            "apply-config",
-            "--file",
-            config_file.to_str().unwrap(),
+            "patch",
+            "machineconfig",
+            "--patch-file",
+            patch_file.to_str().unwrap(),
             "--mode",
             "no-reboot",
         ],
     );
 
-    fs::remove_file(&config_file).ok();
+    fs::remove_file(&patch_file).ok();
 
     if result.is_some() {
         Ok(())
     } else {
-        Err(format!("Failed to apply fixed config to {}", node_ip))
+        Err(format!("Failed to apply registry patch to {}", node_ip))
     }
-}
-
-/// Fix the registries section in a machine config YAML.
-///
-/// This replaces the entire registries section with a clean configuration
-/// that has a single HTTP endpoint and no TLS or overridePath settings.
-fn fix_registries_section(config: &str, registry_ip: &str) -> std::result::Result<String, String> {
-    // The correct registries section with relative indentation
-    // First line has 0 indent, subsequent lines have 4-space relative indentation
-    let correct_registries = format!(
-        "registries:\n    mirrors:\n        {}:5000:\n            endpoints:\n                - http://{}:5000",
-        registry_ip, registry_ip
-    );
-
-    // Find and replace the registries section under machine:
-    let lines: Vec<&str> = config.lines().collect();
-    let mut result = Vec::new();
-    let mut registries_indent = 0;
-    let mut skip_until_same_or_less_indent = false;
-    let mut inserted_registries = false;
-
-    for line in lines {
-        let trimmed = line.trim_start();
-        let current_indent = line.len() - trimmed.len();
-
-        if skip_until_same_or_less_indent {
-            if current_indent <= registries_indent && !trimmed.is_empty() {
-                skip_until_same_or_less_indent = false;
-                // Fall through to process this line
-            } else {
-                continue; // Skip this line
-            }
-        }
-
-        if trimmed.starts_with("registries:") && !inserted_registries {
-            // Found registries section under machine:
-            registries_indent = current_indent;
-
-            // Insert the correct registries section with proper indentation
-            // Preserve relative indentation from the template, add base indent
-            let indent = " ".repeat(current_indent);
-            for reg_line in correct_registries.lines() {
-                result.push(format!("{}{}", indent, reg_line));
-            }
-            inserted_registries = true;
-            skip_until_same_or_less_indent = true;
-            continue;
-        }
-
-        result.push(line.to_string());
-    }
-
-    // If we never found a registries section, we need to add one under machine:
-    if !inserted_registries {
-        return Err("Could not find registries section in machine config".to_string());
-    }
-
-    Ok(result.join("\n"))
 }
 
 /// Build and push container images.
@@ -3235,7 +3276,7 @@ spec:
         &[
             "get",
             "ingress",
-            "inferadb-api-tailscale",
+            "dev-inferadb-api-tailscale",
             "-n",
             "inferadb",
             "-o",
@@ -3245,7 +3286,7 @@ spec:
 
     let tailnet_suffix = ingress_hostname
         .as_ref()
-        .and_then(|h| h.strip_prefix("inferadb-api."))
+        .and_then(|h| h.strip_prefix("inferadb-dev-api."))
         .map(|s| s.to_string())
         .or_else(get_tailnet_info);
 
@@ -3361,6 +3402,9 @@ fn cleanup_tailscale_devices() -> Result<()> {
 ///
 /// By default, this pauses all cluster containers so they can be quickly resumed.
 /// With `--destroy`, it completely removes the cluster and all related resources.
+///
+/// This function is idempotent - each container is checked individually and
+/// shows OK/SKIPPED based on its current state.
 pub async fn stop(
     ctx: &Context,
     destroy: bool,
@@ -3376,29 +3420,7 @@ pub async fn stop(
         return uninstall_with_spinners(yes, with_credentials);
     }
 
-    // Normal stop (pause) behavior
-    // Check if cluster exists
-    if !docker_container_exists(CLUSTER_NAME) {
-        println!("No cluster found for '{}'.", CLUSTER_NAME);
-
-        // Clean up any stale contexts even if containers are gone
-        cleanup_stale_contexts();
-
-        println!("Nothing to stop.");
-        return Ok(());
-    }
-
-    // Check if already paused
-    if are_containers_paused() {
-        print_styled_header("Pausing InferaDB Development Cluster");
-        println!();
-        print_prefixed_dot_leader("○", "Cluster paused", "SKIPPED");
-        println!();
-        print_hint("Run 'inferadb dev start' to resume the cluster");
-        print_hint("Run 'inferadb dev stop --destroy' to tear down the cluster");
-        return Ok(());
-    }
-
+    // Normal stop (pause) behavior - always show status for each component
     if interactive && crate::tui::is_interactive(ctx) {
         return stop_interactive();
     }
@@ -3407,51 +3429,117 @@ pub async fn stop(
 }
 
 /// Run stop with inline spinners for each step
+///
+/// This function is idempotent - handles already-paused and non-existent containers.
+/// Always shows status for each expected component (controlplane, worker, registry).
 fn stop_with_spinners() -> Result<()> {
-    use crate::tui::start_spinner;
-
     print_styled_header("Pausing InferaDB Development Cluster");
     println!();
 
-    // Pause each cluster container individually
-    let containers = get_cluster_containers();
-    for container in &containers {
-        let in_progress = format!("Pausing {}", container);
-        let completed = format!("Paused {}", container);
-        let spin = start_spinner(&in_progress);
-        match run_command("docker", &["pause", container]) {
-            Ok(_) => spin.success(&format_dot_leader(&completed, "OK")),
-            Err(e) => {
-                // Ignore errors for already paused containers
-                if e.to_string().contains("already paused") {
-                    spin.success(&format_dot_leader(&completed, "OK"));
-                } else {
-                    spin.failure(&e.to_string());
-                    return Err(Error::Other(format!(
-                        "Failed to pause {}: {}",
-                        container, e
-                    )));
-                }
-            }
+    let mut any_paused = false;
+
+    // Define expected containers (always show these, even if they don't exist)
+    let expected_containers = vec![
+        format!("{}-controlplane-1", CLUSTER_NAME),
+        format!("{}-worker-1", CLUSTER_NAME),
+    ];
+
+    // Pause each expected container
+    for container in &expected_containers {
+        any_paused |= pause_container(container);
+    }
+
+    // Also pause any other cluster containers that might exist
+    let actual_containers = get_cluster_containers();
+    for container in &actual_containers {
+        // Skip if already processed above
+        if expected_containers.contains(container) {
+            continue;
         }
+        any_paused |= pause_container(container);
     }
 
     // Pause registry
-    if docker_container_exists(REGISTRY_NAME) {
-        let in_progress = format!("Pausing {}", REGISTRY_NAME);
-        let completed = format!("Paused {}", REGISTRY_NAME);
-        let spin = start_spinner(&in_progress);
-        let _ = run_command_optional("docker", &["pause", REGISTRY_NAME]);
-        spin.success(&format_dot_leader(&completed, "OK"));
-    }
+    any_paused |= pause_container(REGISTRY_NAME);
 
     println!();
-    print_success("Cluster paused successfully!");
+    if any_paused {
+        print_success("Cluster paused successfully!");
+    } else {
+        println!("Nothing to pause.");
+    }
     println!();
     print_hint("Run 'inferadb dev start' to resume the cluster");
     print_hint("Run 'inferadb dev stop --destroy' to tear down the cluster");
 
     Ok(())
+}
+
+/// Pause a single container, showing spinner and returning whether work was done.
+///
+/// Returns true if the container was paused (or was already paused).
+/// Returns false if the container doesn't exist.
+fn pause_container(container: &str) -> bool {
+    use crate::tui::start_spinner;
+
+    let display_name = container
+        .strip_prefix(&format!("{}-", CLUSTER_NAME))
+        .unwrap_or(container);
+    let in_progress = format!("Pausing {}", display_name);
+    let completed = format!("Paused {}", display_name);
+    let mut spin = start_spinner(&in_progress);
+
+    // Check if container exists
+    if !docker_container_exists(container) {
+        spin.stop();
+        print_destroy_skipped(&completed);
+        return false;
+    }
+
+    // Check if container is already paused
+    if is_container_paused(container) {
+        spin.stop();
+        print_destroy_skipped(&completed);
+        return false;
+    }
+
+    // Try to pause
+    match run_command("docker", &["pause", container]) {
+        Ok(_) => {
+            spin.success(&format_dot_leader(&completed, "OK"));
+            true
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            // Already paused or container not found - treat as skip
+            if err_str.contains("already paused")
+                || err_str.contains("No such container")
+                || err_str.contains("not found")
+            {
+                spin.stop();
+                print_destroy_skipped(&completed);
+                false
+            } else {
+                spin.failure(&err_str);
+                false
+            }
+        }
+    }
+}
+
+/// Check if a specific container is paused
+fn is_container_paused(container: &str) -> bool {
+    run_command_optional(
+        "docker",
+        &[
+            "inspect",
+            "-f",
+            "{{.State.Paused}}",
+            container,
+        ],
+    )
+    .map(|output| output.trim() == "true")
+    .unwrap_or(false)
 }
 
 /// Run stop in interactive TUI mode
@@ -3804,14 +3892,16 @@ fn status_with_spinners() -> Result<()> {
     match cluster_status {
         ClusterStatus::Offline => {
             let prefix = format!("{}✗{}", red, reset);
-            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "NOT RUNNING");
+            let status = format!("{}NOT RUNNING{}", red, reset);
+            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", &status);
             println!();
             print_hint(TIP_START_CLUSTER);
             return Ok(());
         }
         ClusterStatus::Paused => {
-            let prefix = format!("{}○{}", yellow, reset);
-            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "PAUSED");
+            let prefix = format!("{}⚠{}", yellow, reset);
+            let status = format!("{}STOPPED{}", yellow, reset);
+            print_colored_prefix_dot_leader(&prefix, 1, "Cluster", &status);
             println!();
             print_hint(TIP_RESUME_CLUSTER);
             return Ok(());
@@ -3948,8 +4038,11 @@ fn print_pods_status() {
             let display_name = if name.starts_with("controller-manager-") {
                 "fdb-operator".to_string()
             } else {
-                // Strip inferadb- prefix first
-                let base = name.strip_prefix("inferadb-").unwrap_or(name);
+                // Strip dev-inferadb- prefix first (or inferadb- for backwards compat)
+                let base = name
+                    .strip_prefix("dev-inferadb-")
+                    .or_else(|| name.strip_prefix("inferadb-"))
+                    .unwrap_or(name);
 
                 // Split into parts
                 let segments: Vec<&str> = base.split('-').collect();
@@ -4052,9 +4145,9 @@ fn print_urls_status() {
 
                 // Map ingress names to friendly labels
                 let label = match name {
-                    "inferadb-dashboard-tailscale" => "Dashboard",
-                    "inferadb-api-tailscale" => "API",
-                    "inferadb-mailpit-tailscale" => "Mailpit",
+                    "dev-inferadb-dashboard-tailscale" => "Dashboard",
+                    "dev-inferadb-api-tailscale" => "API",
+                    "dev-inferadb-mailpit-tailscale" => "Mailpit",
                     _ => name,
                 };
 
@@ -4192,7 +4285,7 @@ pub async fn dashboard(_ctx: &Context) -> Result<()> {
         &[
             "get",
             "ingress",
-            "inferadb-dashboard-tailscale",
+            "dev-inferadb-dashboard-tailscale",
             "-n",
             "inferadb",
             "-o",
@@ -4270,7 +4363,10 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
         } else {
             for (name, replicas, image) in &deployments {
                 // Shorten the name for display
-                let short_name = name.strip_prefix("inferadb-").unwrap_or(name);
+                let short_name = name
+                    .strip_prefix("dev-inferadb-")
+                    .or_else(|| name.strip_prefix("inferadb-"))
+                    .unwrap_or(name);
                 let detail = format!("{} replica(s), {}", replicas, image);
                 print_prefixed_dot_leader("○", &format!("Deployment: {}", short_name), &detail);
             }
@@ -4282,8 +4378,8 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
         } else {
             for (name, size, status) in &pvcs {
                 // Shorten FDB PVC names for display
-                let short_name = if name.starts_with("inferadb-fdb-") {
-                    let suffix = name.strip_prefix("inferadb-fdb-").unwrap_or(name);
+                let short_name = if name.starts_with("dev-inferadb-fdb-") {
+                    let suffix = name.strip_prefix("dev-inferadb-fdb-").unwrap_or(name);
                     // Further simplify: "log-36529-data" -> "log", "storage-3983-data" -> "storage"
                     if let Some(pos) = suffix.find('-') {
                         format!("fdb-{}", &suffix[..pos])
@@ -4354,7 +4450,11 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
     // Delete InferaDB deployments
     {
         let spin = start_spinner("Deleting InferaDB Deployments");
-        for deploy in &["inferadb-engine", "inferadb-control", "inferadb-dashboard"] {
+        for deploy in &[
+            "dev-inferadb-engine",
+            "dev-inferadb-control",
+            "dev-inferadb-dashboard",
+        ] {
             let _ = run_command_optional(
                 "kubectl",
                 &["delete", "deployment", deploy, "-n", "inferadb"],
@@ -4418,7 +4518,7 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
                     &[
                         "get",
                         "foundationdbcluster",
-                        "inferadb-fdb",
+                        "dev-inferadb-fdb",
                         "-n",
                         "inferadb",
                         "-o",
@@ -4450,7 +4550,7 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
                 &[
                     "rollout",
                     "restart",
-                    "deployment/inferadb-engine",
+                    "deployment/dev-inferadb-engine",
                     "-n",
                     "inferadb",
                 ],
@@ -4468,102 +4568,6 @@ pub async fn reset(_ctx: &Context, yes: bool) -> Result<()> {
     println!(
         "{}  Applications may take a few minutes to become available.{}",
         dim, reset_color
-    );
-
-    Ok(())
-}
-
-/// Run dev import - import seed data
-pub async fn import(_ctx: &Context, file: &str) -> Result<()> {
-    // Check if cluster is running
-    if !docker_container_exists(CLUSTER_NAME) {
-        return Err(Error::Other(
-            "Cluster is not running. Start with 'inferadb dev start'.".to_string(),
-        ));
-    }
-
-    if !std::path::Path::new(file).exists() {
-        return Err(Error::Other(format!("File not found: {}", file)));
-    }
-
-    println!("Importing data from {}...", file);
-
-    // Get the control pod name
-    let pod = run_command(
-        "kubectl",
-        &[
-            "get",
-            "pods",
-            "-n",
-            "inferadb",
-            "-l",
-            "app=inferadb-control",
-            "-o",
-            "jsonpath={.items[0].metadata.name}",
-        ],
-    )?;
-    let pod = pod.trim();
-
-    if pod.is_empty() {
-        return Err(Error::Other(
-            "Control plane pod not found. Is the cluster fully deployed?".to_string(),
-        ));
-    }
-
-    // Copy file to pod
-    run_command_streaming(
-        "kubectl",
-        &["cp", file, &format!("inferadb/{}:/tmp/import.json", pod)],
-        &[],
-    )?;
-
-    // Execute import (this assumes the control plane has an import endpoint/command)
-    println!("Note: Data import requires the control plane to support bulk import.");
-    println!(
-        "You can use 'inferadb bulk import {}' directly if authenticated.",
-        file
-    );
-
-    Ok(())
-}
-
-/// Run dev export - export data
-pub async fn export(_ctx: &Context, output: &str) -> Result<()> {
-    // Check if cluster is running
-    if !docker_container_exists(CLUSTER_NAME) {
-        return Err(Error::Other(
-            "Cluster is not running. Start with 'inferadb dev start'.".to_string(),
-        ));
-    }
-
-    println!("Exporting data to {}...", output);
-
-    // Get the control pod name
-    let pod = run_command(
-        "kubectl",
-        &[
-            "get",
-            "pods",
-            "-n",
-            "inferadb",
-            "-l",
-            "app=inferadb-control",
-            "-o",
-            "jsonpath={.items[0].metadata.name}",
-        ],
-    )?;
-    let pod = pod.trim();
-
-    if pod.is_empty() {
-        return Err(Error::Other(
-            "Control plane pod not found. Is the cluster fully deployed?".to_string(),
-        ));
-    }
-
-    println!("Note: Data export requires the control plane to support bulk export.");
-    println!(
-        "You can use 'inferadb bulk export {}' directly if authenticated.",
-        output
     );
 
     Ok(())

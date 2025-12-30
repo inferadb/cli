@@ -689,8 +689,6 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
         } => dev::logs(ctx, *follow, service.as_deref(), *tail).await,
         DevCommands::Dashboard => dev::dashboard(ctx).await,
         DevCommands::Reset { yes } => dev::reset(ctx, *yes).await,
-        DevCommands::Import { file } => dev::import(ctx, file).await,
-        DevCommands::Export { output } => dev::export(ctx, output).await,
     }
 }
 

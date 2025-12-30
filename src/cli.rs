@@ -1683,18 +1683,6 @@ pub enum DevCommands {
         #[arg(long)]
         yes: bool,
     },
-
-    /// Import data into cluster
-    Import {
-        /// File to import
-        file: String,
-    },
-
-    /// Export data from cluster
-    Export {
-        /// Output file
-        output: String,
-    },
 }
 
 impl Cli {
