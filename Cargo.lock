@@ -512,15 +512,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
-name = "ferment"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "unicode-segmentation",
- "unicode-width",
-]
-
-[[package]]
 name = "fiat-crypto"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1046,7 +1037,6 @@ dependencies = [
  "clap",
  "clap_complete",
  "dirs",
- "ferment",
  "fluent-bundle",
  "futures",
  "http",
@@ -1059,6 +1049,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "teapot",
  "tempfile",
  "thiserror 2.0.17",
  "tiny_http",
@@ -2090,6 +2081,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "teapot"
+version = "0.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d8e645aa63f20720bcad226f1c22a1691f62b605620bf8cec41eb4d37d086d1"
+dependencies = [
+ "crossterm",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]

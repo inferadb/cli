@@ -4,7 +4,7 @@
 
 use crate::error::{Error, Result};
 use crate::tui::start_spinner;
-use ferment::style::RESET;
+use teapot::style::RESET;
 
 use super::constants::STEP_LINE_WIDTH;
 

@@ -6,15 +6,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use ferment::components::{
+use teapot::components::{
     BadgeVariant, Column, FooterHints, Modal, ModalBorder, StatusBadge, Tab, TabBar, Table,
     TitleBar,
 };
-use ferment::runtime::Sub;
-use ferment::style::{Color, RESET};
-use ferment::terminal::{Event, KeyCode};
-use ferment::util::{measure_text, ScrollState};
-use ferment::{Cmd, Model};
+use teapot::runtime::Sub;
+use teapot::style::{Color, RESET};
+use teapot::terminal::{Event, KeyCode};
+use teapot::util::{measure_text, ScrollState};
+use teapot::{Cmd, Model};
 
 /// Data returned by a refresh callback.
 #[derive(Clone)]
@@ -593,12 +593,12 @@ impl Model for DevStatusView {
                 self.handle_tab_switch();
             }
             DevStatusViewMsg::NextTab => {
-                self.tab_bar.update(ferment::components::TabBarMsg::Next);
+                self.tab_bar.update(teapot::components::TabBarMsg::Next);
                 self.handle_tab_switch();
             }
             DevStatusViewMsg::PrevTab => {
                 self.tab_bar
-                    .update(ferment::components::TabBarMsg::Previous);
+                    .update(teapot::components::TabBarMsg::Previous);
                 self.handle_tab_switch();
             }
             DevStatusViewMsg::CycleSort => {

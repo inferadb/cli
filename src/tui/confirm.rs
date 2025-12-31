@@ -1,6 +1,6 @@
 //! Interactive confirmation utilities.
 //!
-//! Provides a beautiful confirmation prompt using Ferment's Confirm component.
+//! Provides a beautiful confirmation prompt using Teapot's Confirm component.
 //!
 //! # Example
 //!
@@ -14,10 +14,10 @@
 
 use std::io::{self, BufRead, Write};
 
-use ferment::components::Confirm as FermentConfirm;
-use ferment::output::{is_ci, is_tty};
-use ferment::style::{Color, RESET};
-use ferment::Model;
+use teapot::components::Confirm as TeapotConfirm;
+use teapot::output::{is_ci, is_tty};
+use teapot::style::{Color, RESET};
+use teapot::Model;
 
 /// Result of a confirmation prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,7 +88,7 @@ pub fn confirm(message: &str) -> crate::error::Result<bool> {
 pub fn confirm_with_options(message: &str, options: &ConfirmOptions) -> crate::error::Result<bool> {
     // In non-interactive mode, use default
     if !is_tty() || is_ci() {
-        ferment::output::info(&format!(
+        teapot::output::info(&format!(
             "{} [{}] (non-interactive, using default)",
             message,
             if options.default { "Y" } else { "N" }
@@ -97,7 +97,7 @@ pub fn confirm_with_options(message: &str, options: &ConfirmOptions) -> crate::e
     }
 
     // Create and display the confirmation prompt
-    let confirm = FermentConfirm::new(message)
+    let confirm = TeapotConfirm::new(message)
         .default(options.default)
         .yes_label(&options.yes_label)
         .no_label(&options.no_label);
@@ -136,14 +136,14 @@ pub fn confirm_with_options(message: &str, options: &ConfirmOptions) -> crate::e
 pub fn confirm_danger(message: &str) -> crate::error::Result<bool> {
     // In non-interactive mode, use default (no for danger)
     if !is_tty() || is_ci() {
-        ferment::output::info(&format!("{} [N] (non-interactive, using default)", message));
+        teapot::output::info(&format!("{} [N] (non-interactive, using default)", message));
         return Ok(false);
     }
 
     // Show warning prefix in danger mode
     eprint!("{}⚠{} ", Color::Red.to_ansi_fg(), RESET);
 
-    let confirm = FermentConfirm::new(message)
+    let confirm = TeapotConfirm::new(message)
         .default(false)
         .yes_label("Yes, I'm sure")
         .no_label("Cancel")

@@ -3,11 +3,11 @@
 //! A full-screen TUI for displaying development cluster diagnostics
 //! including dependency checks, service status, and configuration validation.
 
-use ferment::components::{Column, FooterHints, Table, TitleBar};
-use ferment::style::{Color, RESET};
-use ferment::terminal::{Event, KeyCode};
-use ferment::util::{measure_text, ScrollState};
-use ferment::{Cmd, Model};
+use teapot::components::{Column, FooterHints, Table, TitleBar};
+use teapot::style::{Color, RESET};
+use teapot::terminal::{Event, KeyCode};
+use teapot::util::{measure_text, ScrollState};
+use teapot::{Cmd, Model};
 
 use super::status_view::EnvironmentStatus;
 

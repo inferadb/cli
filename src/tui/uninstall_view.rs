@@ -3,17 +3,17 @@
 //! A full-screen TUI showing a confirmation modal before uninstalling,
 //! then progress with animated spinners, task completion status, and error modals.
 //!
-//! This module provides a thin wrapper around Ferment's `TaskProgressView`.
+//! This module provides a thin wrapper around Teapot's `TaskProgressView`.
 
 use std::any::Any;
 use std::path::PathBuf;
 
-use ferment::components::{
+use teapot::components::{
     ConfirmationConfig, Phase, TaskProgressMsg, TaskProgressView, TaskStep,
 };
-use ferment::runtime::{Cmd, Model, Sub};
-use ferment::style::Color;
-use ferment::terminal::Event;
+use teapot::runtime::{Cmd, Model, Sub};
+use teapot::style::Color;
+use teapot::terminal::Event;
 
 use super::install_view::InstallStep;
 

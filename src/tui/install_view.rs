@@ -3,16 +3,16 @@
 //! A full-screen TUI showing installation progress with animated spinners,
 //! task completion status, and error modals.
 //!
-//! This module provides a thin wrapper around Ferment's `TaskProgressView`.
+//! This module provides a thin wrapper around Teapot's `TaskProgressView`.
 
 use std::sync::Arc;
 
-use ferment::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
-use ferment::runtime::{Cmd, Model, Sub};
-use ferment::terminal::Event;
+use teapot::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
+use teapot::runtime::{Cmd, Model, Sub};
+use teapot::terminal::Event;
 
-// Re-export StepResult from Ferment for convenience
-pub use ferment::components::StepResult;
+// Re-export StepResult from Teapot for convenience
+pub use teapot::components::StepResult;
 
 // ============================================================================
 // Type Aliases

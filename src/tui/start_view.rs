@@ -8,14 +8,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use ferment::components::{
+use teapot::components::{
     FooterHints, Modal, ModalBorder, TaskList, TextInput, TextInputMsg, TitleBar,
 };
-use ferment::runtime::Sub;
-use ferment::style::{Color, RESET, UNDERLINE};
-use ferment::terminal::{Event, KeyCode};
-use ferment::util::WorkerHandle;
-use ferment::{Cmd, Model};
+use teapot::runtime::Sub;
+use teapot::style::{Color, RESET, UNDERLINE};
+use teapot::terminal::{Event, KeyCode};
+use teapot::util::WorkerHandle;
+use teapot::{Cmd, Model};
 
 use super::install_view::{InstallStep, StepExecutor, StepResult};
 
@@ -134,7 +134,7 @@ pub struct DevStartView {
 impl DevStartView {
     /// Create a new start view.
     pub fn new(skip_build: bool) -> Self {
-        let (width, height) = ferment::terminal::size().unwrap_or((80, 24));
+        let (width, height) = teapot::terminal::size().unwrap_or((80, 24));
 
         Self {
             title: "InferaDB Development Cluster".to_string(),
@@ -479,7 +479,7 @@ impl Model for DevStartView {
                     StartPhase::Running => {
                         // Forward tick to task list
                         self.task_list
-                            .update(ferment::components::TaskListMsg::Tick);
+                            .update(teapot::components::TaskListMsg::Tick);
 
                         // Poll for worker result
                         if let Some((index, result)) = self.poll_worker_result() {

@@ -43,7 +43,6 @@ anyhow = "1"
 dirs = "5"
 
 # Terminal UI
-ferment = { path = "../ferment" }
 unicode-width = "0.2"
 
 # Localization (Project Fluent)
@@ -75,6 +74,7 @@ webbrowser = "1"
 async-trait = "0.1"
 futures = "0.3"
 base64 = "0.22.1"
+teapot = "0.1.0-alpha.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
@@ -82,7 +82,6 @@ assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
 wiremock = "0.6"
-ferment = { path = "../ferment" }
 
 [[test]]
 name = "integration"

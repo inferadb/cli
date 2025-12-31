@@ -5,7 +5,7 @@
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::{CheckResult, EnvironmentStatus};
-use ferment::output::error as print_error;
+use teapot::output::error as print_error;
 
 use super::commands::{command_exists, extract_version_string, run_command_optional};
 use super::output::{format_dot_leader, print_hint, print_phase_header, print_styled_header};
@@ -352,8 +352,8 @@ fn doctor_with_spinners() -> Result<()> {
 /// Run doctor with full-screen TUI.
 fn doctor_interactive() -> Result<()> {
     use crate::tui::DevDoctorView;
-    use ferment::output::{terminal_height, terminal_width};
-    use ferment::runtime::{Program, ProgramOptions};
+    use teapot::output::{terminal_height, terminal_width};
+    use teapot::runtime::{Program, ProgramOptions};
 
     let width = terminal_width();
     let height = terminal_height();

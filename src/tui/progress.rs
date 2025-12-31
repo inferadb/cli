@@ -20,10 +20,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use ferment::components::Progress as FermentProgress;
-use ferment::output::{is_ci, is_tty};
-use ferment::style::{Color, CLEAR_LINE, CURSOR_UP};
-use ferment::Model;
+use teapot::components::Progress as TeapotProgress;
+use teapot::output::{is_ci, is_tty};
+use teapot::style::{Color, CLEAR_LINE, CURSOR_UP};
+use teapot::Model;
 
 /// A progress bar handle for tracking operation progress.
 pub struct ProgressBar {
@@ -76,14 +76,14 @@ impl ProgressBar {
         self.stop();
         clear_line();
         let elapsed = format_duration(self.elapsed());
-        ferment::output::success(&format!("{} ({})", message, elapsed));
+        teapot::output::success(&format!("{} ({})", message, elapsed));
     }
 
     /// Finish with an error message.
     pub fn error(mut self, message: &str) {
         self.stop();
         clear_line();
-        ferment::output::error(message);
+        teapot::output::error(message);
     }
 
     /// Finish silently (just clear the progress bar).
@@ -126,7 +126,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
 
     // In non-interactive mode, just print the message
     if !is_tty() || is_ci() {
-        ferment::output::info(&format!("{} (0/{})", message, total));
+        teapot::output::info(&format!("{} (0/{})", message, total));
         return ProgressBar {
             current,
             total,
@@ -151,7 +151,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
             if current_val != last_current {
                 last_current = current_val;
 
-                let progress = FermentProgress::new()
+                let progress = TeapotProgress::new()
                     .total(total)
                     .current(current_val)
                     .message(&message_clone)
@@ -292,7 +292,7 @@ impl MultiProgressBar {
             .count();
 
         if failed > 0 {
-            ferment::output::warning(&format!(
+            teapot::output::warning(&format!(
                 "{} ({}/{} tasks, {} failed, {})",
                 message,
                 completed,
@@ -301,7 +301,7 @@ impl MultiProgressBar {
                 elapsed
             ));
         } else {
-            ferment::output::success(&format!("{} ({} tasks, {})", message, completed, elapsed));
+            teapot::output::success(&format!("{} ({} tasks, {})", message, completed, elapsed));
         }
     }
 

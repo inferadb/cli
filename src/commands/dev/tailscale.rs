@@ -78,7 +78,7 @@ pub fn save_tailscale_credentials(client_id: &str, client_secret: &str) -> Resul
 
 /// Get Tailscale credentials from environment, cache, or prompt.
 pub fn get_tailscale_credentials() -> Result<(String, String)> {
-    use ferment::forms::{Form, Group, InputField, NoteField};
+    use teapot::forms::{Form, Group, InputField, NoteField};
 
     // Try environment variables first
     if let (Ok(id), Ok(secret)) = (

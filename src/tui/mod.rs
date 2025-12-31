@@ -1,11 +1,11 @@
-//! Terminal UI helpers using Ferment.
+//! Terminal UI helpers using Teapot.
 //!
-//! This module provides CLI-friendly wrappers around Ferment components
+//! This module provides CLI-friendly wrappers around Teapot components
 //! for common operations like spinners, progress bars, and confirmations.
 //!
 //! ## View Pattern
 //!
-//! Full-screen TUI views implement the [`ferment::Model`] trait directly:
+//! Full-screen TUI views implement the [`teapot::Model`] trait directly:
 //!
 //! - [`DevStatusView`] - Cluster status with tabs and auto-refresh
 //! - [`DevDoctorView`] - Environment health checks
@@ -48,5 +48,5 @@ use crate::client::Context;
 /// - Output is not a TTY
 /// - Quiet mode is enabled
 pub fn is_interactive(ctx: &Context) -> bool {
-    !ctx.output.is_quiet() && ferment::output::is_tty() && !ferment::output::is_ci()
+    !ctx.output.is_quiet() && teapot::output::is_tty() && !teapot::output::is_ci()
 }

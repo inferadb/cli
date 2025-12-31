@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::InstallStep;
-use ferment::style::{Color, RESET};
+use teapot::style::{Color, RESET};
 
 use super::commands::{command_exists, run_command, run_command_optional};
 use super::constants::{
@@ -660,7 +660,7 @@ fn show_final_success(tailnet_suffix: Option<&str>) {
 /// Start interactive TUI mode.
 fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Result<()> {
     use crate::tui::DevStartView;
-    use ferment::runtime::{Program, ProgramOptions};
+    use teapot::runtime::{Program, ProgramOptions};
 
     let deploy_dir = get_deploy_dir();
     let commit_owned = commit.map(|s| s.to_string());

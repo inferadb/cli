@@ -135,7 +135,7 @@ mod config_tests {
 
 #[cfg(test)]
 mod output_tests {
-    use ferment::components::{Column, Table};
+    use teapot::components::{Column, Table};
     use inferadb_cli::output::OutputFormat;
 
     #[test]

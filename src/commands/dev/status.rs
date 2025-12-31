@@ -5,7 +5,7 @@
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::{ClusterStatus, RefreshResult, TabData};
-use ferment::style::{Color, RESET};
+use teapot::style::{Color, RESET};
 
 use super::commands::run_command_optional;
 use super::constants::{TIP_RESUME_CLUSTER, TIP_START_CLUSTER};
@@ -280,8 +280,8 @@ fn print_urls_status() {
 /// Status interactive TUI mode.
 fn status_interactive() -> Result<()> {
     use crate::tui::DevStatusView;
-    use ferment::output::{terminal_height, terminal_width};
-    use ferment::runtime::{Program, ProgramOptions};
+    use teapot::output::{terminal_height, terminal_width};
+    use teapot::runtime::{Program, ProgramOptions};
 
     let width = terminal_width();
     let height = terminal_height();

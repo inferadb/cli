@@ -1,12 +1,12 @@
 //! Output formatting for the CLI.
 //!
-//! Provides format selection (table/json/yaml/jsonl) and integrates with Ferment
+//! Provides format selection (table/json/yaml/jsonl) and integrates with Teapot
 //! for table rendering. For message output (success, error, warning, info),
-//! use `ferment::output` directly.
+//! use `teapot::output` directly.
 
 use crate::error::Result;
-use ferment::components::{Column, Table};
-use ferment::output as foutput;
+use teapot::components::{Column, Table};
+use teapot::output as toutput;
 use serde::Serialize;
 use std::io::IsTerminal;
 
@@ -51,7 +51,7 @@ pub trait Displayable {
 
 /// Output writer that handles format selection.
 ///
-/// For message output (success, error, warning, info), use `ferment::output` directly.
+/// For message output (success, error, warning, info), use `teapot::output` directly.
 pub struct Output {
     /// The output format.
     pub format: OutputFormat,
@@ -116,7 +116,7 @@ impl Output {
                 if self.color {
                     println!("{}", output);
                 } else {
-                    println!("{}", foutput::strip_ansi(&output));
+                    println!("{}", toutput::strip_ansi(&output));
                 }
                 Ok(())
             }
@@ -156,7 +156,7 @@ impl Output {
                 if self.color {
                     println!("{}", output);
                 } else {
-                    println!("{}", foutput::strip_ansi(&output));
+                    println!("{}", toutput::strip_ansi(&output));
                 }
                 Ok(())
             }
@@ -188,16 +188,16 @@ impl Output {
     }
 
     // -------------------------------------------------------------------------
-    // Message output methods - thin wrappers around ferment::output
-    // These respect the quiet flag before calling Ferment.
+    // Message output methods - thin wrappers around teapot::output
+    // These respect the quiet flag before calling Teapot.
     // -------------------------------------------------------------------------
 
     /// Print an info message (respects quiet mode).
-    /// Wraps `ferment::output::info`.
+    /// Wraps `teapot::output::info`.
     pub fn info(&self, message: &str) {
         if !self.quiet {
             if self.color {
-                foutput::info(message);
+                toutput::info(message);
             } else {
                 eprintln!("- {}", message);
             }
@@ -205,11 +205,11 @@ impl Output {
     }
 
     /// Print a success message (respects quiet mode).
-    /// Wraps `ferment::output::success`.
+    /// Wraps `teapot::output::success`.
     pub fn success(&self, message: &str) {
         if !self.quiet {
             if self.color {
-                foutput::success(message);
+                toutput::success(message);
             } else {
                 eprintln!("+ {}", message);
             }
@@ -217,11 +217,11 @@ impl Output {
     }
 
     /// Print a warning message (respects quiet mode).
-    /// Wraps `ferment::output::warning`.
+    /// Wraps `teapot::output::warning`.
     pub fn warn(&self, message: &str) {
         if !self.quiet {
             if self.color {
-                foutput::warning(message);
+                toutput::warning(message);
             } else {
                 eprintln!("! {}", message);
             }
@@ -229,10 +229,10 @@ impl Output {
     }
 
     /// Print an error message (always shown, even in quiet mode).
-    /// Wraps `ferment::output::error`.
+    /// Wraps `teapot::output::error`.
     pub fn error(&self, message: &str) {
         if self.color {
-            foutput::error(message);
+            toutput::error(message);
         } else {
             eprintln!("x {}", message);
         }

@@ -3,11 +3,11 @@
 //! A full-screen TUI showing progress with animated spinners
 //! when stopping (pausing) or destroying the development cluster.
 //!
-//! This module provides a thin wrapper around Ferment's `TaskProgressView`.
+//! This module provides a thin wrapper around Teapot's `TaskProgressView`.
 
-use ferment::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
-use ferment::runtime::{Cmd, Model, Sub};
-use ferment::terminal::Event;
+use teapot::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
+use teapot::runtime::{Cmd, Model, Sub};
+use teapot::terminal::Event;
 
 // Re-export for backward compatibility
 pub use super::install_view::InstallStep;

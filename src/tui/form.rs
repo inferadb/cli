@@ -1,12 +1,12 @@
 //! Form utilities for multi-field input.
 //!
-//! Provides a wrapper around Ferment's Forms for CLI use.
+//! Provides a wrapper around Teapot's Forms for CLI use.
 //!
 //! # Example
 //!
 //! ```rust,ignore
 //! use inferadb_cli::tui;
-//! use ferment::forms::{Form, Group, InputField};
+//! use teapot::forms::{Form, Group, InputField};
 //!
 //! let form = Form::new()
 //!     .title("Setup Wizard")
@@ -23,8 +23,8 @@
 //! ```
 
 use crate::error::Result;
-use ferment::forms::{Form, FormResults};
-use ferment::output::{is_ci, is_tty};
+use teapot::forms::{Form, FormResults};
+use teapot::output::{is_ci, is_tty};
 
 /// Run a form and return its results.
 ///

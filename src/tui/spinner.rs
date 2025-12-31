@@ -18,10 +18,10 @@ use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use ferment::components::{Spinner, SpinnerStyle};
-use ferment::output::{is_ci, is_tty};
-use ferment::style::{Color, CLEAR_LINE};
-use ferment::Model;
+use teapot::components::{Spinner, SpinnerStyle};
+use teapot::output::{is_ci, is_tty};
+use teapot::style::{Color, CLEAR_LINE};
+use teapot::Model;
 
 /// Handle to control a running spinner.
 pub struct SpinnerHandle {
@@ -42,35 +42,35 @@ impl SpinnerHandle {
     pub fn success(mut self, message: &str) {
         self.stop();
         clear_line();
-        ferment::output::success(message);
+        teapot::output::success(message);
     }
 
     /// Stop with an error message.
     pub fn error(mut self, message: &str) {
         self.stop();
         clear_line();
-        ferment::output::error(message);
+        teapot::output::error(message);
     }
 
     /// Stop with a failure message (alias for error).
     pub fn failure(mut self, message: &str) {
         self.stop();
         clear_line();
-        ferment::output::error(message);
+        teapot::output::error(message);
     }
 
     /// Stop with a warning message.
     pub fn warning(mut self, message: &str) {
         self.stop();
         clear_line();
-        ferment::output::warning(message);
+        teapot::output::warning(message);
     }
 
     /// Stop with an info message.
     pub fn info(mut self, message: &str) {
         self.stop();
         clear_line();
-        ferment::output::info(message);
+        teapot::output::info(message);
     }
 
     /// Stop without any message (clears the line).
@@ -108,7 +108,7 @@ pub fn start(message: impl Into<String>) -> SpinnerHandle {
 
     // In non-interactive mode, just print the message
     if !is_tty() || is_ci() {
-        ferment::output::info(&message);
+        teapot::output::info(&message);
         return SpinnerHandle {
             running,
             join_handle: None,

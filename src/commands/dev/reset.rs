@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::start_spinner;
-use ferment::style::{Color, RESET};
+use teapot::style::{Color, RESET};
 
 use super::commands::{parse_kubectl_apply_line, run_command, run_command_optional};
 use super::constants::{INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS};

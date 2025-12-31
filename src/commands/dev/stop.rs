@@ -8,8 +8,8 @@ use std::process::Command;
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::UninstallInfo;
-use ferment::output::{info as print_info, success as print_success};
-use ferment::style::{Color, RESET};
+use teapot::output::{info as print_info, success as print_success};
+use teapot::style::{Color, RESET};
 
 use super::commands::{run_command, run_command_optional};
 use super::constants::{CLUSTER_NAME, KUBE_CONTEXT, REGISTRY_NAME, TAILSCALE_DEVICE_PREFIX};
@@ -510,7 +510,7 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
 /// Uninstall interactive TUI mode.
 fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     use crate::tui::{DevUninstallView, InstallStep};
-    use ferment::runtime::{Program, ProgramOptions};
+    use teapot::runtime::{Program, ProgramOptions};
 
     let info = gather_uninstall_info();
 

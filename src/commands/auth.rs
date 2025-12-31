@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::t;
 use crate::tui;
 
-use ferment::forms::{Form, Group, InputField};
+use teapot::forms::{Form, Group, InputField};
 
 /// Log in to InferaDB via OAuth.
 pub async fn login(ctx: &Context) -> Result<()> {
