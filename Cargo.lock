@@ -999,6 +999,8 @@ dependencies = [
 [[package]]
 name = "inferadb"
 version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "150dec8858778b9652b1fe82715411a510f5fdd2a5fc8b12dbaceebe4aad7a00"
 dependencies = [
  "async-trait",
  "base64",
