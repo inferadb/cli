@@ -3,16 +3,17 @@
 //! Implements the Authorization Code flow with PKCE for secure
 //! browser-based authentication.
 
-use crate::config::{CredentialStore, Credentials};
-use crate::error::{Error, Result};
+use std::{net::TcpListener, sync::mpsc, thread, time::Duration};
+
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, CsrfToken, PkceCodeChallenge,
-    RedirectUrl, Scope, TokenResponse, TokenUrl,
+    AuthUrl, AuthorizationCode, ClientId, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope,
+    TokenResponse, TokenUrl, basic::BasicClient,
 };
-use std::net::TcpListener;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+
+use crate::{
+    config::{CredentialStore, Credentials},
+    error::{Error, Result},
+};
 
 /// Default OAuth configuration.
 const DEFAULT_AUTH_URL: &str = "https://auth.inferadb.com/oauth/authorize";
@@ -114,10 +115,7 @@ impl OAuthFlow {
                     let body = response.bytes().await.map_err(std::io::Error::other)?;
 
                     Ok::<_, std::io::Error>(
-                        http::Response::builder()
-                            .status(status)
-                            .body(body.to_vec())
-                            .unwrap(),
+                        http::Response::builder().status(status).body(body.to_vec()).unwrap(),
                     )
                 }
             })
@@ -214,14 +212,12 @@ fn wait_for_callback(expected_state: String) -> Result<(String, String)> {
                             }
                         }
                     }
-                }
+                },
                 Err(e) => {
-                    let _ = tx.send(Err(Error::oauth(format!(
-                        "Failed to accept connection: {}",
-                        e
-                    ))));
+                    let _ =
+                        tx.send(Err(Error::oauth(format!("Failed to accept connection: {}", e))));
                     break;
-                }
+                },
             }
         }
     });

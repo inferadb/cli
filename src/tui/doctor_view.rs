@@ -3,11 +3,13 @@
 //! A full-screen TUI for displaying development cluster diagnostics
 //! including dependency checks, service status, and configuration validation.
 
-use teapot::components::{Column, FooterHints, Table, TitleBar};
-use teapot::style::{Color, RESET};
-use teapot::terminal::{Event, KeyCode};
-use teapot::util::{measure_text, ScrollState};
-use teapot::{Cmd, Model};
+use teapot::{
+    Cmd, Model,
+    components::{Column, FooterHints, Table, TitleBar},
+    style::{Color, RESET},
+    terminal::{Event, KeyCode},
+    util::{ScrollState, measure_text},
+};
 
 use super::status_view::EnvironmentStatus;
 
@@ -29,11 +31,7 @@ impl CheckResult {
         component: impl Into<String>,
         status: impl Into<String>,
     ) -> Self {
-        Self {
-            category: category.into(),
-            component: component.into(),
-            status: status.into(),
-        }
+        Self { category: category.into(), component: component.into(), status: status.into() }
     }
 
     /// Create a success result.
@@ -262,29 +260,29 @@ impl Model for DevDoctorView {
         match msg {
             DevDoctorViewMsg::SelectPrev => {
                 self.scroll.select_prev();
-            }
+            },
             DevDoctorViewMsg::SelectNext => {
                 self.scroll.select_next(self.rows.len(), self.visible_rows());
-            }
+            },
             DevDoctorViewMsg::ScrollLeft => {
                 self.scroll.scroll_left(4);
-            }
+            },
             DevDoctorViewMsg::ScrollRight => {
                 self.scroll.scroll_right(4, self.max_h_scroll());
-            }
+            },
             DevDoctorViewMsg::PageUp => {
                 self.scroll.page_up(self.visible_rows());
-            }
+            },
             DevDoctorViewMsg::PageDown => {
                 self.scroll.page_down(self.rows.len(), self.visible_rows());
-            }
+            },
             DevDoctorViewMsg::Quit => {
                 return Some(Cmd::quit());
-            }
+            },
             DevDoctorViewMsg::Resize { width, height } => {
                 self.width = width;
                 self.height = height;
-            }
+            },
         }
         self.clamp_scroll();
         None
@@ -348,10 +346,9 @@ impl Model for DevDoctorView {
                 KeyCode::PageDown => Some(DevDoctorViewMsg::PageDown),
                 _ => None,
             },
-            Event::Resize { width, height } => Some(DevDoctorViewMsg::Resize {
-                width: width as usize,
-                height: height as usize,
-            }),
+            Event::Resize { width, height } => {
+                Some(DevDoctorViewMsg::Resize { width: width as usize, height: height as usize })
+            },
             _ => None,
         }
     }

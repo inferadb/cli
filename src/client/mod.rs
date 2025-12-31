@@ -6,12 +6,16 @@
 pub mod auth;
 
 pub use auth::OAuthFlow;
+use inferadb::{
+    BearerCredentialsConfig, Client, VaultClient,
+    client::OrganizationClient,
+    control::{AccountClient, JwksClient, OrganizationsClient},
+};
 
-use crate::config::{Config, CredentialStore, Credentials, Profile};
-use crate::error::{Error, Result};
-use inferadb::client::OrganizationClient;
-use inferadb::control::{AccountClient, JwksClient, OrganizationsClient};
-use inferadb::{BearerCredentialsConfig, Client, VaultClient};
+use crate::{
+    config::{Config, CredentialStore, Credentials, Profile},
+    error::{Error, Result},
+};
 
 /// CLI client that wraps the InferaDB SDK client.
 pub struct CliClient {
@@ -33,11 +37,7 @@ impl CliClient {
             .build()
             .await?;
 
-        Ok(Self {
-            inner,
-            org_id,
-            vault_id,
-        })
+        Ok(Self { inner, org_id, vault_id })
     }
 
     /// Create a CLI client using configuration and stored credentials.
@@ -174,14 +174,7 @@ impl Context {
 
         let output = crate::output::Output::from_cli(&output_format, &color, quiet)?;
 
-        Ok(Self {
-            config,
-            profile,
-            profile_name,
-            output,
-            yes,
-            debug,
-        })
+        Ok(Self { config, profile, profile_name, output, yes, debug })
     }
 
     /// Create a client using the context configuration.
@@ -226,10 +219,7 @@ impl Context {
 
     /// Get the profile name being used.
     pub fn effective_profile_name(&self) -> &str {
-        self.profile_name
-            .as_deref()
-            .or(self.config.default_profile.as_deref())
-            .unwrap_or("default")
+        self.profile_name.as_deref().or(self.config.default_profile.as_deref()).unwrap_or("default")
     }
 
     /// Get the organization ID from the profile.

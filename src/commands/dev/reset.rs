@@ -4,21 +4,25 @@
 
 use std::time::Duration;
 
-use crate::client::Context;
-use crate::error::{Error, Result};
-use crate::tui::start_spinner;
 use teapot::style::{Color, RESET};
 
-use super::commands::{parse_kubectl_apply_line, run_command, run_command_optional};
-use super::constants::{INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS};
-use super::docker::docker_container_exists;
-use super::kubernetes::{get_fdb_clusters, get_inferadb_deployments, get_pvcs};
-use super::output::{
-    confirm_warning, format_dot_leader, format_reset_dot_leader, print_prefixed_dot_leader,
-    print_section_header, print_styled_header,
+use super::{
+    CLUSTER_NAME,
+    commands::{parse_kubectl_apply_line, run_command, run_command_optional},
+    constants::{INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS},
+    docker::docker_container_exists,
+    kubernetes::{get_fdb_clusters, get_inferadb_deployments, get_pvcs},
+    output::{
+        confirm_warning, format_dot_leader, format_reset_dot_leader, print_prefixed_dot_leader,
+        print_section_header, print_styled_header,
+    },
+    paths::get_deploy_dir,
 };
-use super::paths::get_deploy_dir;
-use super::CLUSTER_NAME;
+use crate::{
+    client::Context,
+    error::{Error, Result},
+    tui::start_spinner,
+};
 
 // ============================================================================
 // Public API
@@ -110,11 +114,7 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
         print_prefixed_dot_leader("○", "InferaDB Control", "fresh deployment");
         print_prefixed_dot_leader("○", "InferaDB Dashboard", "fresh deployment");
     } else {
-        print_prefixed_dot_leader(
-            "!",
-            "Deploy directory",
-            "not found - manual redeploy required",
-        );
+        print_prefixed_dot_leader("!", "Deploy directory", "not found - manual redeploy required");
     }
 
     println!();
@@ -122,11 +122,11 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
         Ok(true) => {
             println!();
             Ok(())
-        }
+        },
         Ok(false) => {
             println!("Aborted.");
             Err(Error::Other("User cancelled".to_string()))
-        }
+        },
         Err(e) => Err(Error::Other(e.to_string())),
     }
 }
@@ -141,13 +141,7 @@ fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) -> Result<()>
         let spin = start_spinner("Deleting FoundationDB Cluster");
         let _ = run_command_optional(
             "kubectl",
-            &[
-                "delete",
-                "foundationdbcluster",
-                "--all",
-                "-n",
-                INFERADB_NAMESPACE,
-            ],
+            &["delete", "foundationdbcluster", "--all", "-n", INFERADB_NAMESPACE],
         );
         spin.success(&format_dot_leader("Deleted FoundationDB Cluster", "OK"));
     }
@@ -167,10 +161,8 @@ fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) -> Result<()>
     // Delete PVCs
     {
         let spin = start_spinner("Deleting Persistent Volumes");
-        let _ = run_command_optional(
-            "kubectl",
-            &["delete", "pvc", "--all", "-n", INFERADB_NAMESPACE],
-        );
+        let _ =
+            run_command_optional("kubectl", &["delete", "pvc", "--all", "-n", INFERADB_NAMESPACE]);
         spin.success(&format_dot_leader("Deleted Persistent Volumes", "OK"));
     }
 
@@ -191,10 +183,7 @@ fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) -> Result<()>
     let reset_color = RESET;
     println!();
     println!("{}✓ Cluster reset complete.{}", green, reset_color);
-    println!(
-        "{}  Applications may take a few minutes to become available.{}",
-        dim, reset_color
-    );
+    println!("{}  Applications may take a few minutes to become available.{}", dim, reset_color);
 
     Ok(())
 }
@@ -206,22 +195,15 @@ fn redeploy_applications(deploy_dir: &std::path::Path) -> Result<()> {
     let spin = start_spinner("Applying Kubernetes manifests");
     let apply_output = run_command(
         "kubectl",
-        &[
-            "apply",
-            "-k",
-            deploy_dir.join("flux/apps/dev").to_str().unwrap(),
-        ],
+        &["apply", "-k", deploy_dir.join("flux/apps/dev").to_str().unwrap()],
     );
     spin.clear();
 
     if let Ok(output) = apply_output {
         for line in output.lines() {
             if let Some((resource, status)) = parse_kubectl_apply_line(line) {
-                let prefix = if status == "created" || status == "configured" {
-                    "✓"
-                } else {
-                    "○"
-                };
+                let prefix =
+                    if status == "created" || status == "configured" { "✓" } else { "○" };
                 println!("  {}", format_reset_dot_leader(prefix, &resource, &status));
             }
         }
@@ -268,13 +250,7 @@ fn redeploy_applications(deploy_dir: &std::path::Path) -> Result<()> {
         let spin = start_spinner("Restarting engine to pick up new cluster file");
         let _ = run_command_optional(
             "kubectl",
-            &[
-                "rollout",
-                "restart",
-                "deployment/dev-inferadb-engine",
-                "-n",
-                INFERADB_NAMESPACE,
-            ],
+            &["rollout", "restart", "deployment/dev-inferadb-engine", "-n", INFERADB_NAMESPACE],
         );
         spin.success(&format_dot_leader("Engine deployment restarted", "OK"));
     }

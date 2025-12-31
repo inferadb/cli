@@ -1,7 +1,6 @@
 //! FluentBundle creation and management.
 
-use fluent_bundle::concurrent::FluentBundle;
-use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
+use fluent_bundle::{FluentArgs, FluentResource, FluentValue, concurrent::FluentBundle};
 use unic_langid::LanguageIdentifier;
 
 /// Embedded locale files.
@@ -34,9 +33,7 @@ impl I18n {
 
         // Use concurrent bundle for thread-safety with OnceLock
         let mut bundle = FluentBundle::new_concurrent(vec![locale.clone()]);
-        bundle
-            .add_resource(resource)
-            .expect("Failed to add FTL resource to bundle");
+        bundle.add_resource(resource).expect("Failed to add FTL resource to bundle");
 
         Self { bundle, locale }
     }
@@ -56,7 +53,7 @@ impl I18n {
                 // Key not found - return key as fallback
                 tracing::warn!(key = key, "Missing translation key");
                 return key.to_string();
-            }
+            },
         };
 
         let pattern = match msg.value() {
@@ -71,8 +68,7 @@ impl I18n {
             for (k, v) in args {
                 fluent_args.set(*k, FluentValue::from(*v));
             }
-            self.bundle
-                .format_pattern(pattern, Some(&fluent_args), &mut errors)
+            self.bundle.format_pattern(pattern, Some(&fluent_args), &mut errors)
         } else {
             self.bundle.format_pattern(pattern, None, &mut errors)
         };
@@ -87,9 +83,7 @@ impl I18n {
 
 impl std::fmt::Debug for I18n {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("I18n")
-            .field("locale", &self.locale.to_string())
-            .finish()
+        f.debug_struct("I18n").field("locale", &self.locale.to_string()).finish()
     }
 }
 

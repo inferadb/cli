@@ -54,14 +54,8 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 
     // Show warning if language not supported (after i18n init so we can use translations)
     if !lang_supported && lang != "en-US" {
-        eprintln!(
-            "Warning: Language '{}' is not supported. Falling back to en-US.",
-            lang
-        );
-        eprintln!(
-            "Supported languages: {}",
-            i18n::SUPPORTED_LOCALES.join(", ")
-        );
+        eprintln!("Warning: Language '{}' is not supported. Falling back to en-US.", lang);
+        eprintln!("Supported languages: {}", i18n::SUPPORTED_LOCALES.join(", "));
     }
 
     // Parse CLI arguments using localized command
@@ -72,7 +66,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
                 e.print().ok();
                 Error::other("")
             })?
-        }
+        },
         Err(e) => {
             // Print clap error (includes help/version)
             e.print().ok();
@@ -82,7 +76,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
                 ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => return Ok(()),
                 _ => return Err(Error::other("")),
             }
-        }
+        },
     };
 
     // Apply profile override from @prefix
@@ -113,7 +107,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 
 /// Initialize tracing/logging for debug mode.
 fn init_logging() {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("inferadb_cli=debug,inferadb=debug"));

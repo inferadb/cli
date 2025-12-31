@@ -7,12 +7,13 @@
 
 use std::sync::Arc;
 
-use teapot::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
-use teapot::runtime::{Cmd, Model, Sub};
-use teapot::terminal::Event;
-
 // Re-export StepResult from Teapot for convenience
 pub use teapot::components::StepResult;
+use teapot::{
+    components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep},
+    runtime::{Cmd, Model, Sub},
+    terminal::Event,
+};
 
 // ============================================================================
 // Type Aliases
@@ -48,10 +49,7 @@ impl std::fmt::Debug for InstallStep {
 impl InstallStep {
     /// Create a new installation step.
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            executor: None,
-        }
+        Self { name: name.into(), executor: None }
     }
 
     /// Create a step with an executor function.
@@ -59,10 +57,7 @@ impl InstallStep {
     where
         F: Fn() -> Result<Option<String>, String> + Send + Sync + 'static,
     {
-        Self {
-            name: name.into(),
-            executor: Some(Arc::new(executor)),
-        }
+        Self { name: name.into(), executor: Some(Arc::new(executor)) }
     }
 }
 

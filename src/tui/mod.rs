@@ -25,12 +25,12 @@ pub mod status_view;
 pub mod stop_view;
 pub mod uninstall_view;
 
-pub use confirm::{confirm, confirm_danger, confirm_with_options, ConfirmOptions, ConfirmResult};
+pub use confirm::{ConfirmOptions, ConfirmResult, confirm, confirm_danger, confirm_with_options};
 pub use doctor_view::{CheckResult, DevDoctorView, DevDoctorViewMsg};
 pub use form::{is_accessible, run_form};
 pub use install_view::{DevInstallView, DevInstallViewMsg, InstallStep, StepExecutor, StepResult};
-pub use progress::{multi_progress, progress, MultiProgressBar, ProgressBar};
-pub use spinner::{spin, spin_result, start as start_spinner, SpinnerHandle};
+pub use progress::{MultiProgressBar, ProgressBar, multi_progress, progress};
+pub use spinner::{SpinnerHandle, spin, spin_result, start as start_spinner};
 pub use start_view::{DevStartView, DevStartViewMsg, StartPhase};
 pub use status_view::{
     ClusterStatus, DevStatusView, DevStatusViewMsg, EnvironmentStatus, RefreshFn, RefreshResult,

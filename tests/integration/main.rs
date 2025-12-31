@@ -11,10 +11,7 @@ use predicates::prelude::*;
 #[test]
 fn test_help() {
     let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("--help")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("InferaDB"));
+    cmd.arg("--help").assert().success().stdout(predicate::str::contains("InferaDB"));
 }
 
 /// Test that the CLI shows version.
@@ -38,10 +35,7 @@ fn test_unknown_command() {
 #[test]
 fn test_whoami_without_auth() {
     let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("whoami")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Authenticated: no"));
+    cmd.arg("whoami").assert().success().stdout(predicate::str::contains("Authenticated: no"));
 }
 
 /// Test profiles list creates default profile when no config exists.
@@ -74,10 +68,7 @@ fn test_check_help() {
 #[test]
 fn test_cheatsheet() {
     let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("cheatsheet")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Cheatsheet"));
+    cmd.arg("cheatsheet").assert().success().stdout(predicate::str::contains("Cheatsheet"));
 }
 
 /// Test @profile prefix parsing.
@@ -85,11 +76,7 @@ fn test_cheatsheet() {
 fn test_profile_prefix() {
     use inferadb_cli::cli::parse_profile_prefix;
 
-    let args = vec![
-        "inferadb".to_string(),
-        "@prod".to_string(),
-        "check".to_string(),
-    ];
+    let args = vec!["inferadb".to_string(), "@prod".to_string(), "check".to_string()];
     let (profile, remaining) = parse_profile_prefix(args);
     assert_eq!(profile, Some("prod".to_string()));
     assert_eq!(remaining.len(), 2);
@@ -106,10 +93,9 @@ mod config_tests {
         let config_path = temp_dir.path().join("cli.yaml");
 
         let mut config = Config::default();
-        config.profiles.insert(
-            "test".to_string(),
-            Profile::new("https://example.com", "org123", "vault456"),
-        );
+        config
+            .profiles
+            .insert("test".to_string(), Profile::new("https://example.com", "org123", "vault456"));
         config.default_profile = Some("test".to_string());
 
         // Save
@@ -135,8 +121,8 @@ mod config_tests {
 
 #[cfg(test)]
 mod output_tests {
-    use teapot::components::{Column, Table};
     use inferadb_cli::output::OutputFormat;
+    use teapot::components::{Column, Table};
 
     #[test]
     fn test_output_format_parse() {

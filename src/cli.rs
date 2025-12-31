@@ -3,8 +3,9 @@
 //! Uses clap with derive macros for type-safe argument parsing.
 //! Help text is localized at runtime using the i18n system.
 
-use crate::t;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+
+use crate::t;
 
 /// InferaDB CLI - Authorization Engine
 #[derive(Parser, Debug)]
@@ -1734,10 +1735,8 @@ pub fn parse_profile_prefix(args: Vec<String>) -> (Option<String>, Vec<String>) 
         let remaining: Vec<String> = std::iter::once(binary).chain(iter).collect();
         (Some(profile), remaining)
     } else {
-        let remaining: Vec<String> = std::iter::once(binary)
-            .chain(std::iter::once(second))
-            .chain(iter)
-            .collect();
+        let remaining: Vec<String> =
+            std::iter::once(binary).chain(std::iter::once(second)).chain(iter).collect();
         (None, remaining)
     }
 }
@@ -1748,11 +1747,7 @@ mod tests {
 
     #[test]
     fn test_parse_profile_prefix() {
-        let args = vec![
-            "inferadb".to_string(),
-            "@prod".to_string(),
-            "check".to_string(),
-        ];
+        let args = vec!["inferadb".to_string(), "@prod".to_string(), "check".to_string()];
         let (profile, remaining) = parse_profile_prefix(args);
         assert_eq!(profile, Some("prod".to_string()));
         assert_eq!(remaining, vec!["inferadb", "check"]);

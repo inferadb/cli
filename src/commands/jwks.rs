@@ -1,7 +1,6 @@
 //! JWKS (JSON Web Key Set) commands for debugging JWT verification.
 
-use crate::client::Context;
-use crate::error::Result;
+use crate::{client::Context, error::Result};
 
 /// Get the full JWKS from the control plane.
 pub async fn get(ctx: &Context) -> Result<()> {
@@ -56,7 +55,7 @@ pub async fn get_key(ctx: &Context, kid: &str) -> Result<()> {
             println!();
             println!("Full key:");
             println!("{}", serde_json::to_string_pretty(&key)?);
-        }
+        },
         None => {
             ctx.output.error(&format!("Key not found: {}", kid));
             ctx.output.info("Available keys:");
@@ -65,7 +64,7 @@ pub async fn get_key(ctx: &Context, kid: &str) -> Result<()> {
                     println!("  - {}", kid);
                 }
             }
-        }
+        },
     }
 
     Ok(())
@@ -76,8 +75,7 @@ pub async fn well_known(ctx: &Context) -> Result<()> {
     let client = ctx.client().await?;
     let jwks_client = client.jwks();
 
-    ctx.output
-        .info("Fetching JWKS from .well-known endpoint...");
+    ctx.output.info("Fetching JWKS from .well-known endpoint...");
 
     let jwks = jwks_client.get_well_known().await?;
 

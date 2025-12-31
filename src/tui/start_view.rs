@@ -5,17 +5,16 @@
 //! - Credentials input modal
 //! - Step-by-step progress with animated spinners
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use teapot::components::{
-    FooterHints, Modal, ModalBorder, TaskList, TextInput, TextInputMsg, TitleBar,
+use teapot::{
+    Cmd, Model,
+    components::{FooterHints, Modal, ModalBorder, TaskList, TextInput, TextInputMsg, TitleBar},
+    runtime::Sub,
+    style::{Color, RESET, UNDERLINE},
+    terminal::{Event, KeyCode},
+    util::WorkerHandle,
 };
-use teapot::runtime::Sub;
-use teapot::style::{Color, RESET, UNDERLINE};
-use teapot::terminal::{Event, KeyCode};
-use teapot::util::WorkerHandle;
-use teapot::{Cmd, Model};
 
 use super::install_view::{InstallStep, StepExecutor, StepResult};
 
@@ -25,10 +24,7 @@ use super::install_view::{InstallStep, StepExecutor, StepResult};
 /// Terminals that don't support it will just show the underlined text without the link.
 fn hyperlink(url: &str, text: &str) -> String {
     // OSC 8 for hyperlink + underline styling to indicate clickability
-    format!(
-        "\x1b]8;;{}\x07{}{}{}\x1b]8;;\x07",
-        url, UNDERLINE, text, RESET
-    )
+    format!("\x1b]8;;{}\x07{}{}{}\x1b]8;;\x07", url, UNDERLINE, text, RESET)
 }
 
 /// Phase of the start view.
@@ -232,10 +228,7 @@ impl DevStartView {
             StartPhase::Failed => "Failed",
         };
 
-        TitleBar::new(&self.title)
-            .subtitle(subtitle)
-            .width(self.width as usize)
-            .render()
+        TitleBar::new(&self.title).subtitle(subtitle).width(self.width as usize).render()
     }
 
     /// Render the footer with right-aligned hints.
@@ -244,17 +237,13 @@ impl DevStartView {
             StartPhase::SetupInstructions => vec![("enter", "continue"), ("q", "cancel")],
             StartPhase::CredentialsInput => {
                 vec![("tab", "switch"), ("enter", "submit"), ("q", "cancel")]
-            }
+            },
             StartPhase::Running => vec![("q", "cancel")],
             StartPhase::Completed | StartPhase::Failed => vec![("q", "quit")],
             _ => vec![("q", "cancel")],
         };
 
-        FooterHints::new()
-            .hints(hints)
-            .width(self.width as usize)
-            .with_separator()
-            .render()
+        FooterHints::new().hints(hints).width(self.width as usize).with_separator().render()
     }
 
     /// Render the setup instructions content.
@@ -337,11 +326,7 @@ Step 3: Create OAuth client
             .title("Tailscale Credentials")
             .title_color(Color::Cyan)
             .content(content)
-            .footer_hints(vec![
-                ("tab", "switch"),
-                ("enter", "submit"),
-                ("esc", "back"),
-            ]);
+            .footer_hints(vec![("tab", "switch"), ("enter", "submit"), ("esc", "back")]);
 
         // Create empty background
         let mut background = String::new();
@@ -426,9 +411,7 @@ impl Model for DevStartView {
 
     fn init(&self) -> Option<Cmd<Self::Message>> {
         // Start by checking prerequisites
-        Some(Cmd::tick(Duration::from_millis(100), |_| {
-            DevStartViewMsg::Tick
-        }))
+        Some(Cmd::tick(Duration::from_millis(100), |_| DevStartViewMsg::Tick))
     }
 
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
@@ -455,11 +438,11 @@ impl Model for DevStartView {
                                     }
                                     // No credentials, show setup
                                     self.phase = StartPhase::SetupInstructions;
-                                }
+                                },
                                 Err(e) => {
                                     self.error_modal = Some(("Prerequisites".to_string(), e));
                                     self.phase = StartPhase::Failed;
-                                }
+                                },
                             }
                         } else {
                             // No prereq checker, skip to credentials check
@@ -475,21 +458,20 @@ impl Model for DevStartView {
                             }
                             self.phase = StartPhase::SetupInstructions;
                         }
-                    }
+                    },
                     StartPhase::Running => {
                         // Forward tick to task list
-                        self.task_list
-                            .update(teapot::components::TaskListMsg::Tick);
+                        self.task_list.update(teapot::components::TaskListMsg::Tick);
 
                         // Poll for worker result
                         if let Some((index, result)) = self.poll_worker_result() {
                             match &result {
                                 StepResult::Success(detail) => {
                                     self.task_list.complete_task(index, detail.clone());
-                                }
+                                },
                                 StepResult::Skipped(reason) => {
                                     self.task_list.skip_task(index, Some(reason.clone()));
-                                }
+                                },
                                 StepResult::Failure(error) => {
                                     self.task_list.fail_task(index, Some(error.clone()));
                                     if let Some(task) = self.task_list.get(index) {
@@ -497,7 +479,7 @@ impl Model for DevStartView {
                                     }
                                     self.phase = StartPhase::Failed;
                                     return None;
-                                }
+                                },
                             }
 
                             // Start next step
@@ -510,11 +492,11 @@ impl Model for DevStartView {
                                 self.phase = StartPhase::Completed;
                             }
                         }
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
                 None
-            }
+            },
 
             DevStartViewMsg::PrereqsChecked(result) => {
                 match result {
@@ -531,28 +513,26 @@ impl Model for DevStartView {
                             }
                         }
                         self.phase = StartPhase::SetupInstructions;
-                    }
+                    },
                     Err(e) => {
                         self.error_modal = Some(("Prerequisites".to_string(), e));
                         self.phase = StartPhase::Failed;
-                    }
+                    },
                 }
                 None
-            }
+            },
 
             DevStartViewMsg::CredentialsFound(id, secret) => {
                 self.tailscale_credentials = Some((id, secret));
                 self.phase = StartPhase::Running;
                 self.initialize_steps();
-                Some(Cmd::tick(Duration::from_millis(100), |_| {
-                    DevStartViewMsg::StartRunning
-                }))
-            }
+                Some(Cmd::tick(Duration::from_millis(100), |_| DevStartViewMsg::StartRunning))
+            },
 
             DevStartViewMsg::CredentialsNotFound => {
                 self.phase = StartPhase::SetupInstructions;
                 None
-            }
+            },
 
             DevStartViewMsg::ContinueToCredentials => {
                 self.phase = StartPhase::CredentialsInput;
@@ -560,32 +540,31 @@ impl Model for DevStartView {
                 self.client_id_input.set_focused(true);
                 self.client_secret_input.set_focused(false);
                 None
-            }
+            },
 
             DevStartViewMsg::BackToInstructions => {
                 self.phase = StartPhase::SetupInstructions;
                 self.client_id_input.set_focused(false);
                 self.client_secret_input.set_focused(false);
                 None
-            }
+            },
 
             DevStartViewMsg::ClientIdInput(input_msg) => {
                 self.client_id_input.update(input_msg);
                 None
-            }
+            },
 
             DevStartViewMsg::ClientSecretInput(input_msg) => {
                 self.client_secret_input.update(input_msg);
                 None
-            }
+            },
 
             DevStartViewMsg::SwitchFocus => {
                 self.focused_field = (self.focused_field + 1) % 2;
                 self.client_id_input.set_focused(self.focused_field == 0);
-                self.client_secret_input
-                    .set_focused(self.focused_field == 1);
+                self.client_secret_input.set_focused(self.focused_field == 1);
                 None
-            }
+            },
 
             DevStartViewMsg::SubmitCredentials => {
                 let client_id = self.client_id_input.get_value().trim().to_string();
@@ -600,8 +579,7 @@ impl Model for DevStartView {
                 }
 
                 if client_secret.is_empty() {
-                    self.client_secret_input
-                        .set_error("Client Secret is required");
+                    self.client_secret_input.set_error("Client Secret is required");
                     self.focused_field = 1;
                     self.client_id_input.set_focused(false);
                     self.client_secret_input.set_focused(true);
@@ -619,23 +597,19 @@ impl Model for DevStartView {
                 self.tailscale_credentials = Some((client_id, client_secret));
                 self.phase = StartPhase::Running;
                 self.initialize_steps();
-                Some(Cmd::tick(Duration::from_millis(100), |_| {
-                    DevStartViewMsg::StartRunning
-                }))
-            }
+                Some(Cmd::tick(Duration::from_millis(100), |_| DevStartViewMsg::StartRunning))
+            },
 
             DevStartViewMsg::CredentialsValidated(result) => match result {
                 Ok(()) => {
                     self.phase = StartPhase::Running;
                     self.initialize_steps();
-                    Some(Cmd::tick(Duration::from_millis(100), |_| {
-                        DevStartViewMsg::StartRunning
-                    }))
-                }
+                    Some(Cmd::tick(Duration::from_millis(100), |_| DevStartViewMsg::StartRunning))
+                },
                 Err(e) => {
                     self.error_modal = Some(("Credentials".to_string(), e));
                     None
-                }
+                },
             },
 
             DevStartViewMsg::StartRunning => {
@@ -643,17 +617,15 @@ impl Model for DevStartView {
                     self.current_step = 0;
                     self.task_list.start_task(0);
                     self.worker = Some(self.spawn_step_worker(0));
-                    return Some(Cmd::tick(Duration::from_millis(80), |_| {
-                        DevStartViewMsg::Tick
-                    }));
+                    return Some(Cmd::tick(Duration::from_millis(80), |_| DevStartViewMsg::Tick));
                 }
                 None
-            }
+            },
 
             DevStartViewMsg::CloseModal => {
                 self.error_modal = None;
                 None
-            }
+            },
 
             DevStartViewMsg::Quit => {
                 if self.error_modal.is_some() {
@@ -666,13 +638,13 @@ impl Model for DevStartView {
                     }
                     Some(Cmd::quit())
                 }
-            }
+            },
 
             DevStartViewMsg::Resize(w, h) => {
                 self.width = w;
                 self.height = h;
                 None
-            }
+            },
         }
     }
 
@@ -681,12 +653,8 @@ impl Model for DevStartView {
             StartPhase::SetupInstructions => self.render_setup_instructions(),
             StartPhase::CredentialsInput => {
                 let view = self.render_credentials_input();
-                if self.error_modal.is_some() {
-                    self.render_error_modal(&view)
-                } else {
-                    view
-                }
-            }
+                if self.error_modal.is_some() { self.render_error_modal(&view) } else { view }
+            },
             StartPhase::CheckingPrereqs
             | StartPhase::Running
             | StartPhase::Completed
@@ -738,12 +706,8 @@ impl Model for DevStartView {
                 }
 
                 // Error modal overlay
-                if self.error_modal.is_some() {
-                    self.render_error_modal(&output)
-                } else {
-                    output
-                }
-            }
+                if self.error_modal.is_some() { self.render_error_modal(&output) } else { output }
+            },
         }
     }
 
@@ -783,20 +747,20 @@ impl Model for DevStartView {
                                     DevStartViewMsg::ClientSecretInput(msg)
                                 }
                             })
-                        }
+                        },
                     },
                     StartPhase::Running | StartPhase::Completed | StartPhase::Failed => {
                         match key.code {
                             KeyCode::Char('q') => Some(DevStartViewMsg::Quit),
                             _ => None,
                         }
-                    }
+                    },
                     StartPhase::CheckingPrereqs => match key.code {
                         KeyCode::Char('q') => Some(DevStartViewMsg::Quit),
                         _ => None,
                     },
                 }
-            }
+            },
             Event::Resize { width, height } => Some(DevStartViewMsg::Resize(width, height)),
             _ => None,
         }
@@ -805,10 +769,8 @@ impl Model for DevStartView {
     fn subscriptions(&self) -> Sub<Self::Message> {
         match self.phase {
             StartPhase::CheckingPrereqs | StartPhase::Running => {
-                Sub::interval("start-tick", Duration::from_millis(80), || {
-                    DevStartViewMsg::Tick
-                })
-            }
+                Sub::interval("start-tick", Duration::from_millis(80), || DevStartViewMsg::Tick)
+            },
             _ => Sub::none(),
         }
     }

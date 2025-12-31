@@ -46,27 +46,19 @@ pub fn run_command_optional(cmd: &str, args: &[&str]) -> Option<String> {
 /// Run a command with live output streaming.
 pub fn run_command_streaming(cmd: &str, args: &[&str], env_vars: &[(&str, &str)]) -> Result<()> {
     let mut command = Command::new(cmd);
-    command
-        .args(args)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+    command.args(args).stdout(Stdio::inherit()).stderr(Stdio::inherit());
 
     for (key, value) in env_vars {
         command.env(key, value);
     }
 
-    let status = command
-        .status()
-        .map_err(|e| Error::Other(format!("Failed to run {}: {}", cmd, e)))?;
+    let status =
+        command.status().map_err(|e| Error::Other(format!("Failed to run {}: {}", cmd, e)))?;
 
     if status.success() {
         Ok(())
     } else {
-        Err(Error::Other(format!(
-            "{} exited with code {}",
-            cmd,
-            status.code().unwrap_or(-1)
-        )))
+        Err(Error::Other(format!("{} exited with code {}", cmd, status.code().unwrap_or(-1))))
     }
 }
 
@@ -93,12 +85,7 @@ pub fn normalize_version(raw: &str) -> String {
     // Ensure it starts with 'v'
     if version.starts_with('v') {
         version.to_string()
-    } else if version
-        .chars()
-        .next()
-        .map(|c| c.is_ascii_digit())
-        .unwrap_or(false)
-    {
+    } else if version.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
         format!("v{}", version)
     } else {
         raw.to_string()
@@ -116,19 +103,15 @@ pub fn extract_version_string(output: &str, command: &str) -> String {
                 .find(|line| line.contains("Talos v") || line.contains("Tag:"))
                 .map(|line| line.trim().trim_start_matches("Tag:").trim().to_string())
                 .unwrap_or_else(|| "installed".to_string())
-        }
+        },
         "kubectl" => {
             // Output: "Client Version: v1.34.1\nKustomize Version: v5.7.1"
             output
                 .lines()
                 .find(|line| line.starts_with("Client Version:"))
-                .map(|line| {
-                    line.trim_start_matches("Client Version:")
-                        .trim()
-                        .to_string()
-                })
+                .map(|line| line.trim_start_matches("Client Version:").trim().to_string())
                 .unwrap_or_else(|| "installed".to_string())
-        }
+        },
         _ => {
             // Default: take first non-empty line
             output
@@ -136,13 +119,14 @@ pub fn extract_version_string(output: &str, command: &str) -> String {
                 .find(|line| !line.trim().is_empty())
                 .map(|line| line.trim().to_string())
                 .unwrap_or_else(|| "installed".to_string())
-        }
+        },
     };
     normalize_version(&raw)
 }
 
 /// Parse a kubectl apply output line into (resource, status).
-/// Example: "deployment.apps/inferadb-control created" -> ("deployment.apps/inferadb-control", "created")
+/// Example: "deployment.apps/inferadb-control created" -> ("deployment.apps/inferadb-control",
+/// "created")
 pub fn parse_kubectl_apply_line(line: &str) -> Option<(String, String)> {
     let line = line.trim();
     if line.is_empty() {
@@ -155,10 +139,7 @@ pub fn parse_kubectl_apply_line(line: &str) -> Option<(String, String)> {
     if parts.len() == 2 {
         let status = parts[0].to_lowercase();
         let resource = parts[1].to_string();
-        if matches!(
-            status.as_str(),
-            "created" | "configured" | "unchanged" | "deleted"
-        ) {
+        if matches!(status.as_str(), "created" | "configured" | "unchanged" | "deleted") {
             return Some((resource, status));
         }
     }

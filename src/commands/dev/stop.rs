@@ -2,29 +2,34 @@
 //!
 //! Handles pausing containers and destroying the cluster.
 
-use std::fs;
-use std::process::Command;
+use std::{fs, process::Command};
 
-use crate::client::Context;
-use crate::error::{Error, Result};
-use crate::tui::UninstallInfo;
-use teapot::output::{info as print_info, success as print_success};
-use teapot::style::{Color, RESET};
+use teapot::{
+    output::{info as print_info, success as print_success},
+    style::{Color, RESET},
+};
 
-use super::commands::{run_command, run_command_optional};
-use super::constants::{CLUSTER_NAME, KUBE_CONTEXT, REGISTRY_NAME, TAILSCALE_DEVICE_PREFIX};
-use super::docker::{
-    cluster_exists, docker_container_exists, get_cluster_containers, get_dev_docker_images,
-    get_expected_cluster_containers, is_container_paused, registry_exists, remove_image,
+use super::{
+    commands::{run_command, run_command_optional},
+    constants::{CLUSTER_NAME, KUBE_CONTEXT, REGISTRY_NAME, TAILSCALE_DEVICE_PREFIX},
+    docker::{
+        cluster_exists, docker_container_exists, get_cluster_containers, get_dev_docker_images,
+        get_expected_cluster_containers, is_container_paused, registry_exists, remove_image,
+    },
+    output::{
+        StepOutcome, confirm_prompt, format_dot_leader, print_destroy_skipped, print_hint,
+        print_styled_header, run_destroy_step,
+    },
+    paths::{
+        get_config_dir, get_data_dir, get_deploy_dir, get_state_dir, get_tailscale_creds_file,
+    },
+    tailscale::load_tailscale_credentials,
 };
-use super::output::{
-    confirm_prompt, format_dot_leader, print_destroy_skipped, print_hint, print_styled_header,
-    run_destroy_step, StepOutcome,
+use crate::{
+    client::Context,
+    error::{Error, Result},
+    tui::UninstallInfo,
 };
-use super::paths::{
-    get_config_dir, get_data_dir, get_deploy_dir, get_state_dir, get_tailscale_creds_file,
-};
-use super::tailscale::load_tailscale_credentials;
 
 // ============================================================================
 // Public API
@@ -93,9 +98,7 @@ fn stop_with_spinners() -> Result<()> {
 fn pause_container_with_spinner(container: &str) -> bool {
     use crate::tui::start_spinner;
 
-    let display_name = container
-        .strip_prefix(&format!("{}-", CLUSTER_NAME))
-        .unwrap_or(container);
+    let display_name = container.strip_prefix(&format!("{}-", CLUSTER_NAME)).unwrap_or(container);
     let in_progress = format!("Pausing {}", display_name);
     let completed = format!("Paused {}", display_name);
     let mut spin = start_spinner(&in_progress);
@@ -116,7 +119,7 @@ fn pause_container_with_spinner(container: &str) -> bool {
         Ok(_) => {
             spin.success(&format_dot_leader(&completed, "OK"));
             true
-        }
+        },
         Err(e) => {
             let err_str = e.to_string();
             if err_str.contains("already paused")
@@ -130,7 +133,7 @@ fn pause_container_with_spinner(container: &str) -> bool {
                 spin.failure(&err_str);
                 false
             }
-        }
+        },
     }
 }
 
@@ -150,14 +153,7 @@ pub fn gather_uninstall_info() -> UninstallInfo {
 
     let has_cluster = cluster_exists();
     let cluster_status = if has_cluster {
-        Some(
-            if are_containers_paused() {
-                "paused"
-            } else {
-                "running"
-            }
-            .to_string(),
-        )
+        Some(if are_containers_paused() { "paused" } else { "running" }.to_string())
     } else {
         None
     };
@@ -257,10 +253,7 @@ fn cleanup_stale_contexts() {
     );
 
     // Clean talosctl context
-    let _ = run_command_optional(
-        "talosctl",
-        &["config", "remove", CLUSTER_NAME, "--noconfirm"],
-    );
+    let _ = run_command_optional("talosctl", &["config", "remove", CLUSTER_NAME, "--noconfirm"]);
 }
 
 /// Step: Remove Docker images.
@@ -277,11 +270,7 @@ fn step_remove_docker_images() -> std::result::Result<Option<String>, String> {
         }
     }
 
-    Ok(Some(format!(
-        "Removed {} of {} images",
-        removed,
-        dev_images.len()
-    )))
+    Ok(Some(format!("Removed {} of {} images", removed, dev_images.len())))
 }
 
 /// Step: Remove state directory.
@@ -335,11 +324,7 @@ fn cleanup_tailscale_devices() -> Result<()> {
     let response = String::from_utf8_lossy(&output.stdout);
     let token: Option<String> = serde_json::from_str::<serde_json::Value>(&response)
         .ok()
-        .and_then(|v| {
-            v.get("access_token")
-                .and_then(|t| t.as_str())
-                .map(String::from)
-        });
+        .and_then(|v| v.get("access_token").and_then(|t| t.as_str()).map(String::from));
 
     let token = match token {
         Some(t) => t,
@@ -361,10 +346,7 @@ fn cleanup_tailscale_devices() -> Result<()> {
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
         if let Some(devices) = json.get("devices").and_then(|d| d.as_array()) {
             for device in devices {
-                let name = device
-                    .get("hostname")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("");
+                let name = device.get("hostname").and_then(|n| n.as_str()).unwrap_or("");
                 let id = device.get("id").and_then(|i| i.as_str()).unwrap_or("");
 
                 if name.starts_with(TAILSCALE_DEVICE_PREFIX) && !id.is_empty() {
@@ -415,11 +397,11 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
                 Ok(false) => {
                     println!("Aborted.");
                     return Ok(());
-                }
+                },
                 Err(_) => {
                     println!("Aborted.");
                     return Ok(());
-                }
+                },
             }
         }
     } else {
@@ -428,21 +410,9 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
 
     let mut did_work = false;
 
-    did_work |= run_destroy_step(
-        "Removing registry",
-        "Removed registry",
-        step_remove_registry,
-    );
-    did_work |= run_destroy_step(
-        "Destroying cluster",
-        "Destroyed cluster",
-        step_destroy_cluster,
-    );
-    did_work |= run_destroy_step(
-        "Cleaning contexts",
-        "Cleaned contexts",
-        step_cleanup_contexts,
-    );
+    did_work |= run_destroy_step("Removing registry", "Removed registry", step_remove_registry);
+    did_work |= run_destroy_step("Destroying cluster", "Destroyed cluster", step_destroy_cluster);
+    did_work |= run_destroy_step("Cleaning contexts", "Cleaned contexts", step_cleanup_contexts);
 
     let dev_images = get_dev_docker_images();
     if dev_images.is_empty() {
@@ -509,8 +479,9 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
 
 /// Uninstall interactive TUI mode.
 fn uninstall_interactive(with_credentials: bool) -> Result<()> {
-    use crate::tui::{DevUninstallView, InstallStep};
     use teapot::runtime::{Program, ProgramOptions};
+
+    use crate::tui::{DevUninstallView, InstallStep};
 
     let info = gather_uninstall_info();
 
@@ -552,36 +523,27 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     }
 
     if info.dev_image_count > 0 {
-        steps.push(InstallStep::with_executor(
-            "Removing Docker images",
-            step_remove_docker_images,
-        ));
+        steps.push(InstallStep::with_executor("Removing Docker images", step_remove_docker_images));
     }
 
     if info.has_state_dir {
-        steps.push(InstallStep::with_executor(
-            "Removing state directory",
-            || {
-                step_remove_state_dir().map(|r| match r {
-                    StepOutcome::Success => Some("Removed".to_string()),
-                    StepOutcome::Skipped => Some("Skipped".to_string()),
-                    _ => None,
-                })
-            },
-        ));
+        steps.push(InstallStep::with_executor("Removing state directory", || {
+            step_remove_state_dir().map(|r| match r {
+                StepOutcome::Success => Some("Removed".to_string()),
+                StepOutcome::Skipped => Some("Skipped".to_string()),
+                _ => None,
+            })
+        }));
     }
 
     if with_credentials && info.has_creds_file {
-        steps.push(InstallStep::with_executor(
-            "Removing Tailscale credentials",
-            || {
-                step_remove_tailscale_creds().map(|r| match r {
-                    StepOutcome::Success => Some("Removed".to_string()),
-                    StepOutcome::Skipped => Some("Skipped".to_string()),
-                    _ => None,
-                })
-            },
-        ));
+        steps.push(InstallStep::with_executor("Removing Tailscale credentials", || {
+            step_remove_tailscale_creds().map(|r| match r {
+                StepOutcome::Success => Some("Removed".to_string()),
+                StepOutcome::Skipped => Some("Skipped".to_string()),
+                _ => None,
+            })
+        }));
     }
 
     let view = DevUninstallView::new(steps, info, with_credentials);

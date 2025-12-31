@@ -1,8 +1,8 @@
 //! Interactive shell (REPL) for InferaDB.
 
-use crate::client::Context;
-use crate::error::Result;
 use std::io::{self, BufRead, Write};
+
+use crate::{client::Context, error::Result};
 
 /// Start an interactive shell.
 pub async fn shell(ctx: &Context) -> Result<()> {
@@ -21,7 +21,7 @@ pub async fn shell(ctx: &Context) -> Result<()> {
             Err(e) => {
                 ctx.output.error(&format!("Read error: {}", e));
                 break;
-            }
+            },
         };
 
         let line = line.trim();
@@ -40,49 +40,46 @@ pub async fn shell(ctx: &Context) -> Result<()> {
         match parts[0] {
             "help" | "?" => {
                 print_help();
-            }
+            },
             "exit" | "quit" | "q" => {
                 println!("Goodbye!");
                 break;
-            }
+            },
             "check" => {
                 if parts.len() < 4 {
                     println!("Usage: check <subject> <permission> <resource>");
                 } else {
                     execute_check(ctx, parts[1], parts[2], parts[3]).await;
                 }
-            }
+            },
             "add" | "write" => {
                 if parts.len() < 4 {
                     println!("Usage: add <subject> <relation> <resource>");
                 } else {
                     execute_add(ctx, parts[1], parts[2], parts[3]).await;
                 }
-            }
+            },
             "delete" | "rm" => {
                 if parts.len() < 4 {
                     println!("Usage: delete <subject> <relation> <resource>");
                 } else {
                     execute_delete(ctx, parts[1], parts[2], parts[3]).await;
                 }
-            }
+            },
             "list" | "ls" => {
                 execute_list(ctx, parts.get(1).copied()).await;
-            }
+            },
             "status" => {
                 execute_status(ctx).await;
-            }
+            },
             "clear" => {
                 // ANSI escape to clear screen
                 print!("\x1B[2J\x1B[1;1H");
                 let _ = io::stdout().flush();
-            }
+            },
             cmd => {
-                println!(
-                    "Unknown command: {}. Type 'help' for available commands.",
-                    cmd
-                );
-            }
+                println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+            },
         }
 
         print_prompt();
@@ -139,15 +136,15 @@ async fn execute_check(ctx: &Context, subject: &str, permission: &str, resource:
                     } else {
                         println!("DENIED: {} cannot {} {}", subject, permission, resource);
                     }
-                }
+                },
                 Err(e) => {
                     println!("Error: {}", e);
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             println!("Connection error: {}", e);
-        }
+        },
     }
 }
 
@@ -160,15 +157,15 @@ async fn execute_add(ctx: &Context, subject: &str, relation: &str, resource: &st
             match rels.write(relationship).await {
                 Ok(_) => {
                     println!("Added: {} -[{}]-> {}", subject, relation, resource);
-                }
+                },
                 Err(e) => {
                     println!("Error: {}", e);
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             println!("Connection error: {}", e);
-        }
+        },
     }
 }
 
@@ -181,15 +178,15 @@ async fn execute_delete(ctx: &Context, subject: &str, relation: &str, resource: 
             match rels.delete(relationship).await {
                 Ok(_) => {
                     println!("Deleted: {} -[{}]-> {}", subject, relation, resource);
-                }
+                },
                 Err(e) => {
                     println!("Error: {}", e);
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             println!("Connection error: {}", e);
-        }
+        },
     }
 }
 
@@ -221,15 +218,15 @@ async fn execute_list(ctx: &Context, resource_type: Option<&str>) {
                             println!("... (more results available)");
                         }
                     }
-                }
+                },
                 Err(e) => {
                     println!("Error: {}", e);
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             println!("Connection error: {}", e);
-        }
+        },
     }
 }
 
@@ -249,14 +246,14 @@ async fn execute_status(ctx: &Context) {
             match client.health().await {
                 Ok(health) => {
                     println!("Service Status: {}", health.status);
-                }
+                },
                 Err(e) => {
                     println!("Service Status: Error - {}", e);
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             println!("Connection: Error - {}", e);
-        }
+        },
     }
 }

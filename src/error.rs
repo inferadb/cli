@@ -3,10 +3,11 @@
 //! This module provides structured error handling with semantic exit codes
 //! following the CLI specification.
 
-use crate::t;
-use std::borrow::Cow;
-use std::io;
+use std::{borrow::Cow, io};
+
 use thiserror::Error;
+
+use crate::t;
 
 /// CLI-specific error type.
 #[derive(Debug, Error)]
@@ -200,13 +201,13 @@ impl Error {
             Error::AuthRequired => Cow::Owned(t!("error-auth-required")),
             Error::ProfileNotFound(name) => {
                 Cow::Owned(t!("error-profile-not-found", "name" => name))
-            }
+            },
             Error::OrgNotSpecified => Cow::Owned(t!("error-org-required")),
             Error::VaultNotSpecified => Cow::Owned(t!("error-vault-required")),
             Error::Config(details) => Cow::Owned(t!("error-config-parse", "details" => details)),
             Error::InvalidArgument(details) => {
                 Cow::Owned(t!("error-invalid-argument", "details" => details))
-            }
+            },
             Error::AccessDenied => Cow::Owned(t!("error-permission-denied")),
             Error::Cancelled => Cow::Borrowed("Operation cancelled"),
             Error::Indeterminate => Cow::Borrowed("Authorization check indeterminate"),
@@ -225,7 +226,7 @@ impl Error {
             Error::Parse(details) => Cow::Owned(format!("Parse error: {}", details)),
             Error::Credential(details) => {
                 Cow::Owned(format!("Credential storage error: {}", details))
-            }
+            },
             Error::OAuth(details) => Cow::Owned(format!("Authentication error: {}", details)),
 
             // Other errors pass through

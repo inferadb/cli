@@ -8,30 +8,22 @@ use crate::config::Config;
 
 /// Get the deploy directory path (~/.local/share/inferadb/deploy).
 pub fn get_deploy_dir() -> PathBuf {
-    Config::data_dir()
-        .unwrap_or_else(|| PathBuf::from(".local/share/inferadb"))
-        .join("deploy")
+    Config::data_dir().unwrap_or_else(|| PathBuf::from(".local/share/inferadb")).join("deploy")
 }
 
 /// Get the engine directory path (~/.local/share/inferadb/engine).
 pub fn get_engine_dir() -> PathBuf {
-    Config::data_dir()
-        .unwrap_or_else(|| PathBuf::from(".local/share/inferadb"))
-        .join("engine")
+    Config::data_dir().unwrap_or_else(|| PathBuf::from(".local/share/inferadb")).join("engine")
 }
 
 /// Get the control directory path (~/.local/share/inferadb/control).
 pub fn get_control_dir() -> PathBuf {
-    Config::data_dir()
-        .unwrap_or_else(|| PathBuf::from(".local/share/inferadb"))
-        .join("control")
+    Config::data_dir().unwrap_or_else(|| PathBuf::from(".local/share/inferadb")).join("control")
 }
 
 /// Get the dashboard directory path (~/.local/share/inferadb/dashboard).
 pub fn get_dashboard_dir() -> PathBuf {
-    Config::data_dir()
-        .unwrap_or_else(|| PathBuf::from(".local/share/inferadb"))
-        .join("dashboard")
+    Config::data_dir().unwrap_or_else(|| PathBuf::from(".local/share/inferadb")).join("dashboard")
 }
 
 /// Get the Tailscale credentials file path.

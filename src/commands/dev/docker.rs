@@ -2,21 +2,16 @@
 //!
 //! Provides utilities for working with Docker containers, images, and the local registry.
 
-use super::commands::{run_command, run_command_optional};
-use super::constants::{CLUSTER_NAME, REGISTRY_NAME};
+use super::{
+    commands::{run_command, run_command_optional},
+    constants::{CLUSTER_NAME, REGISTRY_NAME},
+};
 
 /// Check if a Docker container exists.
 pub fn docker_container_exists(name: &str) -> bool {
     run_command_optional(
         "docker",
-        &[
-            "ps",
-            "-a",
-            "--filter",
-            &format!("name={}", name),
-            "--format",
-            "{{.Names}}",
-        ],
+        &["ps", "-a", "--filter", &format!("name={}", name), "--format", "{{.Names}}"],
     )
     .map(|output| output.lines().any(|line| line.contains(name)))
     .unwrap_or(false)
@@ -24,43 +19,24 @@ pub fn docker_container_exists(name: &str) -> bool {
 
 /// Check if a specific container is paused.
 pub fn is_container_paused(container: &str) -> bool {
-    run_command_optional(
-        "docker",
-        &["inspect", container, "--format", "{{.State.Paused}}"],
-    )
-    .map(|output| output.trim() == "true")
-    .unwrap_or(false)
+    run_command_optional("docker", &["inspect", container, "--format", "{{.State.Paused}}"])
+        .map(|output| output.trim() == "true")
+        .unwrap_or(false)
 }
 
 /// Get all Docker containers for the cluster.
 pub fn get_cluster_containers() -> Vec<String> {
     run_command_optional(
         "docker",
-        &[
-            "ps",
-            "-a",
-            "--filter",
-            &format!("name={}", CLUSTER_NAME),
-            "--format",
-            "{{.Names}}",
-        ],
+        &["ps", "-a", "--filter", &format!("name={}", CLUSTER_NAME), "--format", "{{.Names}}"],
     )
-    .map(|output| {
-        output
-            .lines()
-            .filter(|line| !line.is_empty())
-            .map(String::from)
-            .collect()
-    })
+    .map(|output| output.lines().filter(|line| !line.is_empty()).map(String::from).collect())
     .unwrap_or_default()
 }
 
 /// Get expected cluster container names.
 pub fn get_expected_cluster_containers() -> Vec<String> {
-    vec![
-        format!("{}-controlplane-1", CLUSTER_NAME),
-        format!("{}-worker-1", CLUSTER_NAME),
-    ]
+    vec![format!("{}-controlplane-1", CLUSTER_NAME), format!("{}-worker-1", CLUSTER_NAME)]
 }
 
 /// Check if cluster containers are paused.
@@ -104,12 +80,7 @@ pub fn get_dev_docker_images() -> Vec<String> {
     // Get inferadb-* images
     if let Some(output) = run_command_optional(
         "docker",
-        &[
-            "images",
-            "--format",
-            "{{.Repository}}:{{.Tag}}",
-            "inferadb-*",
-        ],
+        &["images", "--format", "{{.Repository}}:{{.Tag}}", "inferadb-*"],
     ) {
         for line in output.lines() {
             if !line.is_empty() && !line.contains("<none>") {
@@ -119,10 +90,9 @@ pub fn get_dev_docker_images() -> Vec<String> {
     }
 
     // Get Talos-related images
-    if let Some(output) = run_command_optional(
-        "docker",
-        &["images", "--format", "{{.Repository}}:{{.Tag}}"],
-    ) {
+    if let Some(output) =
+        run_command_optional("docker", &["images", "--format", "{{.Repository}}:{{.Tag}}"])
+    {
         for line in output.lines() {
             if (line.contains("ghcr.io/siderolabs/") || line.contains("registry.k8s.io/"))
                 && !line.contains("<none>")
@@ -171,7 +141,5 @@ pub fn is_docker_running() -> bool {
 
 /// Pull a Docker image.
 pub fn pull_image(image: &str) -> Result<(), String> {
-    run_command("docker", &["pull", image])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    run_command("docker", &["pull", image]).map(|_| ()).map_err(|e| e.to_string())
 }

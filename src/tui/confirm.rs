@@ -14,10 +14,12 @@
 
 use std::io::{self, BufRead, Write};
 
-use teapot::components::Confirm as TeapotConfirm;
-use teapot::output::{is_ci, is_tty};
-use teapot::style::{Color, RESET};
-use teapot::Model;
+use teapot::{
+    Model,
+    components::Confirm as TeapotConfirm,
+    output::{is_ci, is_tty},
+    style::{Color, RESET},
+};
 
 /// Result of a confirmation prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,21 +52,14 @@ pub struct ConfirmOptions {
 
 impl Default for ConfirmOptions {
     fn default() -> Self {
-        Self {
-            default: false,
-            yes_label: "Yes".to_string(),
-            no_label: "No".to_string(),
-        }
+        Self { default: false, yes_label: "Yes".to_string(), no_label: "No".to_string() }
     }
 }
 
 impl ConfirmOptions {
     /// Create a new confirm options with default value true.
     pub fn default_yes() -> Self {
-        Self {
-            default: true,
-            ..Default::default()
-        }
+        Self { default: true, ..Default::default() }
     }
 }
 

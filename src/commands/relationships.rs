@@ -1,10 +1,9 @@
 //! Relationship management commands.
 
-use crate::client::Context;
-use crate::error::Result;
-use crate::output::Displayable;
 use inferadb::Relationship;
 use serde::Serialize;
+
+use crate::{client::Context, error::Result, output::Displayable};
 
 #[derive(Debug, Clone, Serialize)]
 struct RelationshipRow {
@@ -15,11 +14,7 @@ struct RelationshipRow {
 
 impl Displayable for RelationshipRow {
     fn table_row(&self) -> Vec<String> {
-        vec![
-            self.resource.clone(),
-            self.relation.clone(),
-            self.subject.clone(),
-        ]
+        vec![self.resource.clone(), self.relation.clone(), self.subject.clone()]
     }
 
     fn table_headers() -> Vec<&'static str> {
@@ -78,10 +73,7 @@ pub async fn relationships_list(
     ctx.output.table(&rows)?;
 
     if !ctx.output.is_quiet() && rows.len() == limit as usize {
-        ctx.output.info(&format!(
-            "\nShowing {} results. Use --cursor for pagination.",
-            limit
-        ));
+        ctx.output.info(&format!("\nShowing {} results. Use --cursor for pagination.", limit));
     }
 
     Ok(())
@@ -106,9 +98,8 @@ pub async fn relationships_add(
 
     match result {
         Ok(_) => {
-            ctx.output
-                .success(&format!("Added: {} {} {}", subject, relation, resource));
-        }
+            ctx.output.success(&format!("Added: {} {} {}", subject, relation, resource));
+        },
         Err(e) => {
             // Check if it's a duplicate error
             if if_not_exists && e.kind() == inferadb::ErrorKind::Conflict {
@@ -116,7 +107,7 @@ pub async fn relationships_add(
                 return Ok(());
             }
             return Err(e.into());
-        }
+        },
     }
 
     Ok(())
@@ -139,16 +130,15 @@ pub async fn relationships_delete(
 
     match result {
         Ok(_) => {
-            ctx.output
-                .success(&format!("Deleted: {} {} {}", subject, relation, resource));
-        }
+            ctx.output.success(&format!("Deleted: {} {} {}", subject, relation, resource));
+        },
         Err(e) => {
             if if_exists && e.kind() == inferadb::ErrorKind::NotFound {
                 ctx.output.info("Relationship does not exist.");
                 return Ok(());
             }
             return Err(e.into());
-        }
+        },
     }
 
     Ok(())
@@ -169,17 +159,15 @@ pub async fn history(
 pub async fn validate(ctx: &Context, file: Option<&str>) -> Result<()> {
     match file {
         Some(f) => {
-            ctx.output
-                .info(&format!("Validating relationships in '{}'...", f));
+            ctx.output.info(&format!("Validating relationships in '{}'...", f));
             // TODO: Read file and validate
             ctx.output.info("Validation not yet implemented.");
-        }
+        },
         None => {
-            ctx.output
-                .info("Validating relationships in current vault...");
+            ctx.output.info("Validating relationships in current vault...");
             // TODO: Validate against active schema
             ctx.output.info("Validation not yet implemented.");
-        }
+        },
     }
     Ok(())
 }

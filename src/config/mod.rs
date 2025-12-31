@@ -8,12 +8,15 @@
 
 mod profile;
 
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
+
 pub use profile::{CredentialStore, Credentials, Profile};
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 /// Main CLI configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -53,10 +56,7 @@ fn default_color() -> String {
 
 impl Default for OutputConfig {
     fn default() -> Self {
-        Self {
-            format: default_format(),
-            color: default_color(),
-        }
+        Self { format: default_format(), color: default_color() }
     }
 }
 
@@ -92,9 +92,7 @@ impl Config {
 
         // Auto-create default profile if none exist
         if config.profiles.is_empty() {
-            config
-                .profiles
-                .insert("default".to_string(), Profile::default());
+            config.profiles.insert("default".to_string(), Profile::default());
             config.default_profile = Some("default".to_string());
         }
 
@@ -104,19 +102,11 @@ impl Config {
     /// Load configuration from a YAML file.
     pub fn load_from_file(path: &Path) -> Result<Self> {
         let contents = std::fs::read_to_string(path).map_err(|e| {
-            Error::config(format!(
-                "Failed to read config file {}: {}",
-                path.display(),
-                e
-            ))
+            Error::config(format!("Failed to read config file {}: {}", path.display(), e))
         })?;
 
         serde_yaml::from_str(&contents).map_err(|e| {
-            Error::config(format!(
-                "Failed to parse config file {}: {}",
-                path.display(),
-                e
-            ))
+            Error::config(format!("Failed to parse config file {}: {}", path.display(), e))
         })
     }
 
@@ -281,9 +271,7 @@ impl Config {
 
     /// Get the default profile.
     pub fn get_default_profile(&self) -> Option<&Profile> {
-        self.default_profile
-            .as_ref()
-            .and_then(|name| self.profiles.get(name))
+        self.default_profile.as_ref().and_then(|name| self.profiles.get(name))
     }
 
     /// Get the effective profile, considering overrides.
@@ -378,9 +366,8 @@ mod tests {
             },
         );
 
-        let profile = config
-            .get_effective_profile(Some("test"), None, Some("override789"))
-            .unwrap();
+        let profile =
+            config.get_effective_profile(Some("test"), None, Some("override789")).unwrap();
 
         assert_eq!(profile.org, Some("org123".to_string()));
         assert_eq!(profile.vault, Some("override789".to_string()));

@@ -24,18 +24,12 @@ pub struct Profile {
 impl Profile {
     /// Create a new profile with all fields specified.
     pub fn new(url: impl Into<String>, org: impl Into<String>, vault: impl Into<String>) -> Self {
-        Self {
-            url: Some(url.into()),
-            org: Some(org.into()),
-            vault: Some(vault.into()),
-        }
+        Self { url: Some(url.into()), org: Some(org.into()), vault: Some(vault.into()) }
     }
 
     /// Get the URL, returning an error if not set.
     pub fn url(&self) -> crate::Result<&str> {
-        self.url
-            .as_deref()
-            .ok_or_else(|| crate::error::Error::config("API URL not configured"))
+        self.url.as_deref().ok_or_else(|| crate::error::Error::config("API URL not configured"))
     }
 
     /// Get the URL or a default value.
@@ -45,16 +39,12 @@ impl Profile {
 
     /// Get the organization ID, returning an error if not set.
     pub fn org(&self) -> crate::Result<&str> {
-        self.org
-            .as_deref()
-            .ok_or(crate::error::Error::OrgNotSpecified)
+        self.org.as_deref().ok_or(crate::error::Error::OrgNotSpecified)
     }
 
     /// Get the vault ID, returning an error if not set.
     pub fn vault(&self) -> crate::Result<&str> {
-        self.vault
-            .as_deref()
-            .ok_or(crate::error::Error::VaultNotSpecified)
+        self.vault.as_deref().ok_or(crate::error::Error::VaultNotSpecified)
     }
 
     /// Check if the profile has enough information to connect.
@@ -96,11 +86,7 @@ pub struct Credentials {
 impl Credentials {
     /// Create new credentials with just an access token.
     pub fn new(access_token: impl Into<String>) -> Self {
-        Self {
-            access_token: access_token.into(),
-            refresh_token: None,
-            expires_at: None,
-        }
+        Self { access_token: access_token.into(), refresh_token: None, expires_at: None }
     }
 
     /// Create credentials with all fields.
@@ -149,9 +135,7 @@ pub struct CredentialStore {
 impl CredentialStore {
     /// Create a new credential store.
     pub fn new() -> Self {
-        Self {
-            service: "inferadb-cli".to_string(),
-        }
+        Self { service: "inferadb-cli".to_string() }
     }
 
     /// Get the keyring entry for a profile.
@@ -194,12 +178,8 @@ impl CredentialStore {
                     .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                     .map(|dt| dt.with_timezone(&chrono::Utc));
 
-                Ok(Some(Credentials {
-                    access_token,
-                    refresh_token,
-                    expires_at,
-                }))
-            }
+                Ok(Some(Credentials { access_token, refresh_token, expires_at }))
+            },
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(e.into()),
         }
@@ -217,9 +197,7 @@ impl CredentialStore {
 
     /// Check if credentials exist for a profile.
     pub fn exists(&self, profile: &str) -> bool {
-        self.entry(profile)
-            .map(|e| e.get_password().is_ok())
-            .unwrap_or(false)
+        self.entry(profile).map(|e| e.get_password().is_ok()).unwrap_or(false)
     }
 }
 

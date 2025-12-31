@@ -1,9 +1,8 @@
 //! Organization management commands.
 
-use crate::client::Context;
-use crate::error::Result;
-use crate::output::Displayable;
 use serde::Serialize;
+
+use crate::{client::Context, error::Result, output::Displayable};
 
 // ============================================================================
 // Display types
@@ -19,12 +18,7 @@ struct OrgRow {
 
 impl Displayable for OrgRow {
     fn table_row(&self) -> Vec<String> {
-        vec![
-            self.id.clone(),
-            self.name.clone(),
-            self.display_name.clone(),
-            self.created_at.clone(),
-        ]
+        vec![self.id.clone(), self.name.clone(), self.display_name.clone(), self.created_at.clone()]
     }
 
     fn table_headers() -> Vec<&'static str> {
@@ -92,12 +86,7 @@ struct VaultRow {
 
 impl Displayable for VaultRow {
     fn table_row(&self) -> Vec<String> {
-        vec![
-            self.id.clone(),
-            self.name.clone(),
-            self.description.clone(),
-            self.status.clone(),
-        ]
+        vec![self.id.clone(), self.name.clone(), self.description.clone(), self.status.clone()]
     }
 
     fn table_headers() -> Vec<&'static str> {
@@ -138,12 +127,7 @@ struct ClientRow {
 
 impl Displayable for ClientRow {
     fn table_row(&self) -> Vec<String> {
-        vec![
-            self.id.clone(),
-            self.name.clone(),
-            self.status.clone(),
-            self.created_at.clone(),
-        ]
+        vec![self.id.clone(), self.name.clone(), self.status.clone(), self.created_at.clone()]
     }
 
     fn table_headers() -> Vec<&'static str> {
@@ -235,8 +219,7 @@ pub async fn create(ctx: &Context, name: &str, tier: Option<&str>) -> Result<()>
 
     let client = ctx.client().await?;
 
-    ctx.output
-        .info(&format!("Creating organization '{}'...", name));
+    ctx.output.info(&format!("Creating organization '{}'...", name));
 
     let request = CreateOrganizationRequest::new(name);
 
@@ -246,8 +229,7 @@ pub async fn create(ctx: &Context, name: &str, tier: Option<&str>) -> Result<()>
 
     let org = client.organizations().create(request).await?;
 
-    ctx.output
-        .success(&format!("Organization '{}' created.", org.name));
+    ctx.output.success(&format!("Organization '{}' created.", org.name));
     ctx.output.info(&format!("ID: {}", org.id));
 
     Ok(())
@@ -260,18 +242,14 @@ pub async fn get(ctx: &Context, id: Option<&str>) -> Result<()> {
     let org_id = id.or(ctx.profile_org_id());
 
     if org_id.is_none() {
-        ctx.output
-            .error("No organization specified. Use --org or configure a profile.");
+        ctx.output.error("No organization specified. Use --org or configure a profile.");
         return Ok(());
     }
 
     let org_id = org_id.unwrap();
 
     let page = client.organizations().list().await?;
-    let org = page
-        .items
-        .iter()
-        .find(|o| o.id == org_id || o.name == org_id);
+    let org = page.items.iter().find(|o| o.id == org_id || o.name == org_id);
 
     match org {
         Some(info) => {
@@ -282,11 +260,10 @@ pub async fn get(ctx: &Context, id: Option<&str>) -> Result<()> {
             }
             println!("Created: {}", info.created_at.format("%Y-%m-%d %H:%M:%S"));
             println!("Updated: {}", info.updated_at.format("%Y-%m-%d %H:%M:%S"));
-        }
+        },
         None => {
-            ctx.output
-                .error(&format!("Organization '{}' not found.", org_id));
-        }
+            ctx.output.error(&format!("Organization '{}' not found.", org_id));
+        },
     }
 
     Ok(())
@@ -296,54 +273,42 @@ pub async fn get(ctx: &Context, id: Option<&str>) -> Result<()> {
 pub async fn update(ctx: &Context, id: Option<&str>, name: Option<&str>) -> Result<()> {
     let org_id = id.or(ctx.profile_org_id());
     if org_id.is_none() {
-        ctx.output
-            .error("No organization specified. Use --org or configure a profile.");
+        ctx.output.error("No organization specified. Use --org or configure a profile.");
         return Ok(());
     }
 
-    ctx.output
-        .warn("Organization update not yet supported via CLI.");
+    ctx.output.warn("Organization update not yet supported via CLI.");
     if let Some(n) = name {
         ctx.output.info(&format!("Would update name to: {}", n));
     }
-    ctx.output
-        .info("Use the web dashboard to update organizations.");
+    ctx.output.info("Use the web dashboard to update organizations.");
 
     Ok(())
 }
 
 /// Delete organization.
 pub async fn delete(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Organization deletion not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would delete organization: {}", id));
-    ctx.output
-        .info("Use the web dashboard to delete organizations.");
+    ctx.output.warn("Organization deletion not yet supported via CLI.");
+    ctx.output.info(&format!("Would delete organization: {}", id));
+    ctx.output.info("Use the web dashboard to delete organizations.");
 
     Ok(())
 }
 
 /// Suspend organization.
 pub async fn suspend(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Organization suspension not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would suspend organization: {}", id));
-    ctx.output
-        .info("Use the web dashboard to suspend organizations.");
+    ctx.output.warn("Organization suspension not yet supported via CLI.");
+    ctx.output.info(&format!("Would suspend organization: {}", id));
+    ctx.output.info("Use the web dashboard to suspend organizations.");
 
     Ok(())
 }
 
 /// Resume organization.
 pub async fn resume(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Organization resume not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would resume organization: {}", id));
-    ctx.output
-        .info("Use the web dashboard to resume organizations.");
+    ctx.output.warn("Organization resume not yet supported via CLI.");
+    ctx.output.info(&format!("Would resume organization: {}", id));
+    ctx.output.info("Use the web dashboard to resume organizations.");
 
     Ok(())
 }
@@ -351,8 +316,7 @@ pub async fn resume(ctx: &Context, id: &str) -> Result<()> {
 /// Leave organization.
 pub async fn leave(ctx: &Context, id: &str, yes: bool) -> Result<()> {
     if !yes {
-        ctx.output
-            .warn("Leaving an organization will revoke your access.");
+        ctx.output.warn("Leaving an organization will revoke your access.");
         let confirmed = ctx.confirm(&format!("Leave organization '{}'?", id))?;
         if !confirmed {
             ctx.output.info("Cancelled.");
@@ -360,12 +324,9 @@ pub async fn leave(ctx: &Context, id: &str, yes: bool) -> Result<()> {
         }
     }
 
-    ctx.output
-        .warn("Leave organization not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would leave organization: {}", id));
-    ctx.output
-        .info("Use the web dashboard to leave organizations.");
+    ctx.output.warn("Leave organization not yet supported via CLI.");
+    ctx.output.info(&format!("Would leave organization: {}", id));
+    ctx.output.info("Use the web dashboard to leave organizations.");
 
     Ok(())
 }
@@ -416,12 +377,9 @@ pub async fn members_update_role(ctx: &Context, member_id: &str, role: &str) -> 
         "admin" => OrgRole::Admin,
         "member" => OrgRole::Member,
         _ => {
-            ctx.output.error(&format!(
-                "Invalid role: {}. Use owner, admin, or member.",
-                role
-            ));
+            ctx.output.error(&format!("Invalid role: {}. Use owner, admin, or member.", role));
             return Ok(());
-        }
+        },
     };
 
     let org = client.organization(&org_id);
@@ -430,8 +388,7 @@ pub async fn members_update_role(ctx: &Context, member_id: &str, role: &str) -> 
     let request = UpdateMemberRequest::new().with_role(parsed_role);
     members.update(member_id, request).await?;
 
-    ctx.output
-        .success(&format!("Member role updated to {}.", role));
+    ctx.output.success(&format!("Member role updated to {}.", role));
 
     Ok(())
 }
@@ -503,25 +460,19 @@ pub async fn invitations_create(ctx: &Context, email: &str, role: &str) -> Resul
         "admin" => OrgRole::Admin,
         "member" => OrgRole::Member,
         _ => {
-            ctx.output.error(&format!(
-                "Invalid role: {}. Use owner, admin, or member.",
-                role
-            ));
+            ctx.output.error(&format!("Invalid role: {}. Use owner, admin, or member.", role));
             return Ok(());
-        }
+        },
     };
 
-    ctx.output
-        .info(&format!("Inviting {} as {}...", email, role));
+    ctx.output.info(&format!("Inviting {} as {}...", email, role));
 
     let org = client.organization(&org_id);
     let request = InviteMemberRequest::new(email, parsed_role);
     let invitation = org.members().invite(request).await?;
 
-    ctx.output
-        .success(&format!("Invitation sent to {}.", email));
-    ctx.output
-        .info(&format!("Invitation ID: {}", invitation.id));
+    ctx.output.success(&format!("Invitation sent to {}.", email));
+    ctx.output.info(&format!("Invitation ID: {}", invitation.id));
 
     Ok(())
 }
@@ -562,12 +513,9 @@ pub async fn invitations_resend(ctx: &Context, id: &str) -> Result<()> {
 
 /// Accept an invitation (using token from email).
 pub async fn invitations_accept(ctx: &Context, token: &str) -> Result<()> {
-    ctx.output
-        .info(&format!("Token: {}...", &token[..token.len().min(20)]));
-    ctx.output
-        .warn("Invitation acceptance requires clicking the link in the email.");
-    ctx.output
-        .info("Use the invitation link to join the organization.");
+    ctx.output.info(&format!("Token: {}...", &token[..token.len().min(20)]));
+    ctx.output.warn("Invitation acceptance requires clicking the link in the email.");
+    ctx.output.info("Use the invitation link to join the organization.");
 
     Ok(())
 }
@@ -584,8 +532,7 @@ pub async fn roles_list(ctx: &Context) -> Result<()> {
 
 /// Grant a role to a user.
 pub async fn roles_grant(ctx: &Context, user_id: &str, role: &str) -> Result<()> {
-    ctx.output
-        .warn("Role grant via CLI is done through invitations or member updates.");
+    ctx.output.warn("Role grant via CLI is done through invitations or member updates.");
     ctx.output.info(&format!(
         "To invite a user: inferadb orgs invitations create <email> --role {}",
         role
@@ -658,8 +605,7 @@ pub async fn vaults_create(ctx: &Context, name: &str, description: Option<&str>)
 
     let vault = org.vaults().create(request).await?;
 
-    ctx.output
-        .success(&format!("Vault '{}' created.", vault.name));
+    ctx.output.success(&format!("Vault '{}' created.", vault.name));
     ctx.output.info(&format!("ID: {}", vault.id));
 
     Ok(())
@@ -672,8 +618,7 @@ pub async fn vaults_get(ctx: &Context, id: Option<&str>) -> Result<()> {
 
     let vault_id = id.or(ctx.profile_vault_id());
     if vault_id.is_none() {
-        ctx.output
-            .error("No vault specified. Use --vault or configure a profile.");
+        ctx.output.error("No vault specified. Use --vault or configure a profile.");
         return Ok(());
     }
     let vault_id = vault_id.unwrap();
@@ -728,8 +673,7 @@ pub async fn vaults_delete(ctx: &Context, id: &str) -> Result<()> {
     let org_id = ctx.require_org_id()?;
 
     if !ctx.yes {
-        ctx.output
-            .warn("Deleting a vault will permanently remove all schemas and relationships.");
+        ctx.output.warn("Deleting a vault will permanently remove all schemas and relationships.");
         let confirmed = ctx.confirm(&format!("Delete vault '{}'?", id))?;
         if !confirmed {
             ctx.output.info("Cancelled.");
@@ -752,14 +696,11 @@ pub async fn vaults_delete(ctx: &Context, id: &str) -> Result<()> {
 /// List vault user role assignments.
 pub async fn vault_roles_list(ctx: &Context, vault: Option<&str>) -> Result<()> {
     let vault_id = vault.or(ctx.profile_vault_id());
-    ctx.output
-        .warn("Vault role listing not yet supported via CLI.");
+    ctx.output.warn("Vault role listing not yet supported via CLI.");
     if let Some(v) = vault_id {
-        ctx.output
-            .info(&format!("Would list roles for vault: {}", v));
+        ctx.output.info(&format!("Would list roles for vault: {}", v));
     }
-    ctx.output
-        .info("Use the web dashboard to view vault roles.");
+    ctx.output.info("Use the web dashboard to view vault roles.");
 
     Ok(())
 }
@@ -772,38 +713,28 @@ pub async fn vault_roles_grant(
     vault: Option<&str>,
 ) -> Result<()> {
     let vault_id = vault.or(ctx.profile_vault_id());
+    ctx.output.warn("Vault role granting not yet supported via CLI.");
     ctx.output
-        .warn("Vault role granting not yet supported via CLI.");
-    ctx.output.info(&format!(
-        "Would grant {} role to user {} on vault {:?}",
-        role, user_id, vault_id
-    ));
-    ctx.output
-        .info("Use the web dashboard to manage vault roles.");
+        .info(&format!("Would grant {} role to user {} on vault {:?}", role, user_id, vault_id));
+    ctx.output.info("Use the web dashboard to manage vault roles.");
 
     Ok(())
 }
 
 /// Update a vault role assignment.
 pub async fn vault_roles_update(ctx: &Context, id: &str, role: &str) -> Result<()> {
-    ctx.output
-        .warn("Vault role updating not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would update role assignment {} to {}", id, role));
-    ctx.output
-        .info("Use the web dashboard to manage vault roles.");
+    ctx.output.warn("Vault role updating not yet supported via CLI.");
+    ctx.output.info(&format!("Would update role assignment {} to {}", id, role));
+    ctx.output.info("Use the web dashboard to manage vault roles.");
 
     Ok(())
 }
 
 /// Revoke a vault role assignment.
 pub async fn vault_roles_revoke(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Vault role revoking not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would revoke role assignment: {}", id));
-    ctx.output
-        .info("Use the web dashboard to manage vault roles.");
+    ctx.output.warn("Vault role revoking not yet supported via CLI.");
+    ctx.output.info(&format!("Would revoke role assignment: {}", id));
+    ctx.output.info("Use the web dashboard to manage vault roles.");
 
     Ok(())
 }
@@ -811,14 +742,11 @@ pub async fn vault_roles_revoke(ctx: &Context, id: &str) -> Result<()> {
 /// List vault team role assignments.
 pub async fn vault_team_roles_list(ctx: &Context, vault: Option<&str>) -> Result<()> {
     let vault_id = vault.or(ctx.profile_vault_id());
-    ctx.output
-        .warn("Vault team role listing not yet supported via CLI.");
+    ctx.output.warn("Vault team role listing not yet supported via CLI.");
     if let Some(v) = vault_id {
-        ctx.output
-            .info(&format!("Would list team roles for vault: {}", v));
+        ctx.output.info(&format!("Would list team roles for vault: {}", v));
     }
-    ctx.output
-        .info("Use the web dashboard to view vault team roles.");
+    ctx.output.info("Use the web dashboard to view vault team roles.");
 
     Ok(())
 }
@@ -831,40 +759,28 @@ pub async fn vault_team_roles_grant(
     vault: Option<&str>,
 ) -> Result<()> {
     let vault_id = vault.or(ctx.profile_vault_id());
+    ctx.output.warn("Vault team role granting not yet supported via CLI.");
     ctx.output
-        .warn("Vault team role granting not yet supported via CLI.");
-    ctx.output.info(&format!(
-        "Would grant {} role to team {} on vault {:?}",
-        role, team_id, vault_id
-    ));
-    ctx.output
-        .info("Use the web dashboard to manage vault team roles.");
+        .info(&format!("Would grant {} role to team {} on vault {:?}", role, team_id, vault_id));
+    ctx.output.info("Use the web dashboard to manage vault team roles.");
 
     Ok(())
 }
 
 /// Update a vault team role assignment.
 pub async fn vault_team_roles_update(ctx: &Context, id: &str, role: &str) -> Result<()> {
-    ctx.output
-        .warn("Vault team role updating not yet supported via CLI.");
-    ctx.output.info(&format!(
-        "Would update team role assignment {} to {}",
-        id, role
-    ));
-    ctx.output
-        .info("Use the web dashboard to manage vault team roles.");
+    ctx.output.warn("Vault team role updating not yet supported via CLI.");
+    ctx.output.info(&format!("Would update team role assignment {} to {}", id, role));
+    ctx.output.info("Use the web dashboard to manage vault team roles.");
 
     Ok(())
 }
 
 /// Revoke a vault team role assignment.
 pub async fn vault_team_roles_revoke(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Vault team role revoking not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would revoke team role assignment: {}", id));
-    ctx.output
-        .info("Use the web dashboard to manage vault team roles.");
+    ctx.output.warn("Vault team role revoking not yet supported via CLI.");
+    ctx.output.info(&format!("Would revoke team role assignment: {}", id));
+    ctx.output.info("Use the web dashboard to manage vault team roles.");
 
     Ok(())
 }
@@ -919,8 +835,7 @@ pub async fn teams_create(ctx: &Context, name: &str, description: Option<&str>) 
 
     let team = org.teams().create(request).await?;
 
-    ctx.output
-        .success(&format!("Team '{}' created.", team.name));
+    ctx.output.success(&format!("Team '{}' created.", team.name));
     ctx.output.info(&format!("ID: {}", team.id));
 
     Ok(())
@@ -1005,10 +920,8 @@ pub async fn team_members_list(ctx: &Context, team_id: &str) -> Result<()> {
     println!("Members: {}", team.member_count);
     println!();
 
-    ctx.output
-        .warn("Detailed team member listing not yet available via CLI.");
-    ctx.output
-        .info("Use the web dashboard to view team members.");
+    ctx.output.warn("Detailed team member listing not yet available via CLI.");
+    ctx.output.info("Use the web dashboard to view team members.");
 
     Ok(())
 }
@@ -1027,8 +940,7 @@ pub async fn team_members_add(
     let org = client.organization(&org_id);
     org.teams().add_member(team_id, user_id).await?;
 
-    ctx.output
-        .success(&format!("User {} added to team.", user_id));
+    ctx.output.success(&format!("User {} added to team.", user_id));
 
     Ok(())
 }
@@ -1040,14 +952,9 @@ pub async fn team_members_update_role(
     user_id: &str,
     role: &str,
 ) -> Result<()> {
-    ctx.output
-        .warn("Team member role update not yet supported via CLI.");
-    ctx.output.info(&format!(
-        "Would update {} in team {} to role {}",
-        user_id, team_id, role
-    ));
-    ctx.output
-        .info("Use the web dashboard to update team member roles.");
+    ctx.output.warn("Team member role update not yet supported via CLI.");
+    ctx.output.info(&format!("Would update {} in team {} to role {}", user_id, team_id, role));
+    ctx.output.info("Use the web dashboard to update team member roles.");
 
     Ok(())
 }
@@ -1079,38 +986,27 @@ pub async fn team_members_remove(ctx: &Context, team_id: &str, user_id: &str) ->
 
 /// List team permissions.
 pub async fn team_permissions_list(ctx: &Context, team_id: &str) -> Result<()> {
-    ctx.output
-        .warn("Team permission listing not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would list permissions for team: {}", team_id));
-    ctx.output
-        .info("Use the web dashboard to view team permissions.");
+    ctx.output.warn("Team permission listing not yet supported via CLI.");
+    ctx.output.info(&format!("Would list permissions for team: {}", team_id));
+    ctx.output.info("Use the web dashboard to view team permissions.");
 
     Ok(())
 }
 
 /// Grant permission to team.
 pub async fn team_permissions_grant(ctx: &Context, team_id: &str, permission: &str) -> Result<()> {
-    ctx.output
-        .warn("Team permission granting not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would grant {} to team {}", permission, team_id));
-    ctx.output
-        .info("Use the web dashboard to manage team permissions.");
+    ctx.output.warn("Team permission granting not yet supported via CLI.");
+    ctx.output.info(&format!("Would grant {} to team {}", permission, team_id));
+    ctx.output.info("Use the web dashboard to manage team permissions.");
 
     Ok(())
 }
 
 /// Revoke permission from team.
 pub async fn team_permissions_revoke(ctx: &Context, team_id: &str, permission: &str) -> Result<()> {
-    ctx.output
-        .warn("Team permission revoking not yet supported via CLI.");
-    ctx.output.info(&format!(
-        "Would revoke {} from team {}",
-        permission, team_id
-    ));
-    ctx.output
-        .info("Use the web dashboard to manage team permissions.");
+    ctx.output.warn("Team permission revoking not yet supported via CLI.");
+    ctx.output.info(&format!("Would revoke {} from team {}", permission, team_id));
+    ctx.output.info("Use the web dashboard to manage team permissions.");
 
     Ok(())
 }
@@ -1121,12 +1017,9 @@ pub async fn team_permissions_revoke(ctx: &Context, team_id: &str, permission: &
 
 /// List team vault grants.
 pub async fn team_grants_list(ctx: &Context, team_id: &str) -> Result<()> {
-    ctx.output
-        .warn("Team vault grant listing not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would list vault grants for team: {}", team_id));
-    ctx.output
-        .info("Use the web dashboard to view team vault grants.");
+    ctx.output.warn("Team vault grant listing not yet supported via CLI.");
+    ctx.output.info(&format!("Would list vault grants for team: {}", team_id));
+    ctx.output.info("Use the web dashboard to view team vault grants.");
 
     Ok(())
 }
@@ -1138,37 +1031,28 @@ pub async fn team_grants_create(
     vault: &str,
     role: &str,
 ) -> Result<()> {
+    ctx.output.warn("Team vault grant creation not yet supported via CLI.");
     ctx.output
-        .warn("Team vault grant creation not yet supported via CLI.");
-    ctx.output.info(&format!(
-        "Would grant {} access to vault {} for team {}",
-        role, vault, team_id
-    ));
-    ctx.output
-        .info("Use the web dashboard to create team vault grants.");
+        .info(&format!("Would grant {} access to vault {} for team {}", role, vault, team_id));
+    ctx.output.info("Use the web dashboard to create team vault grants.");
 
     Ok(())
 }
 
 /// Update a vault grant.
 pub async fn team_grants_update(ctx: &Context, id: &str, role: &str) -> Result<()> {
-    ctx.output
-        .warn("Team vault grant update not yet supported via CLI.");
-    ctx.output
-        .info(&format!("Would update grant {} to role {}", id, role));
-    ctx.output
-        .info("Use the web dashboard to update team vault grants.");
+    ctx.output.warn("Team vault grant update not yet supported via CLI.");
+    ctx.output.info(&format!("Would update grant {} to role {}", id, role));
+    ctx.output.info("Use the web dashboard to update team vault grants.");
 
     Ok(())
 }
 
 /// Delete a vault grant.
 pub async fn team_grants_delete(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Team vault grant deletion not yet supported via CLI.");
+    ctx.output.warn("Team vault grant deletion not yet supported via CLI.");
     ctx.output.info(&format!("Would delete grant: {}", id));
-    ctx.output
-        .info("Use the web dashboard to delete team vault grants.");
+    ctx.output.info("Use the web dashboard to delete team vault grants.");
 
     Ok(())
 }
@@ -1213,8 +1097,7 @@ pub async fn clients_create(ctx: &Context, name: &str, vault: Option<&str>) -> R
     let client = ctx.client().await?;
     let org_id = ctx.require_org_id()?;
 
-    ctx.output
-        .info(&format!("Creating API client '{}'...", name));
+    ctx.output.info(&format!("Creating API client '{}'...", name));
 
     let org = client.organization(&org_id);
     let request = CreateApiClientRequest::new(name);
@@ -1223,11 +1106,9 @@ pub async fn clients_create(ctx: &Context, name: &str, vault: Option<&str>) -> R
 
     let api_client = org.clients().create(request).await?;
 
-    ctx.output
-        .success(&format!("API client '{}' created.", api_client.name));
+    ctx.output.success(&format!("API client '{}' created.", api_client.name));
     ctx.output.info(&format!("ID: {}", api_client.id));
-    ctx.output
-        .warn("Remember to add a certificate for authentication.");
+    ctx.output.warn("Remember to add a certificate for authentication.");
 
     Ok(())
 }
@@ -1246,14 +1127,8 @@ pub async fn clients_get(ctx: &Context, id: &str) -> Result<()> {
     if let Some(desc) = &api_client.description {
         println!("Description: {}", desc);
     }
-    println!(
-        "Created: {}",
-        api_client.created_at.format("%Y-%m-%d %H:%M:%S")
-    );
-    println!(
-        "Updated: {}",
-        api_client.updated_at.format("%Y-%m-%d %H:%M:%S")
-    );
+    println!("Created: {}", api_client.created_at.format("%Y-%m-%d %H:%M:%S"));
+    println!("Updated: {}", api_client.updated_at.format("%Y-%m-%d %H:%M:%S"));
 
     Ok(())
 }
@@ -1285,8 +1160,7 @@ pub async fn clients_delete(ctx: &Context, id: &str) -> Result<()> {
     let org_id = ctx.require_org_id()?;
 
     if !ctx.yes {
-        ctx.output
-            .warn("Deleting an API client will revoke all its credentials.");
+        ctx.output.warn("Deleting an API client will revoke all its credentials.");
         let confirmed = ctx.confirm(&format!("Delete API client '{}'?", id))?;
         if !confirmed {
             ctx.output.info("Cancelled.");
@@ -1369,29 +1243,22 @@ pub async fn certificates_add(ctx: &Context, client_id: &str) -> Result<()> {
     // Note: AddCertificateRequest::new() requires a PEM-encoded public key.
     // CLI certificate addition requires the public key to be passed as an argument.
     // For now, provide guidance to use the SDK or dashboard.
-    ctx.output
-        .warn("Certificate addition requires a PEM-encoded public key.");
+    ctx.output.warn("Certificate addition requires a PEM-encoded public key.");
     ctx.output.info(&format!("Client ID: {}", client_id));
     ctx.output.info("");
-    ctx.output
-        .info("To add a certificate, generate a key pair and provide the public key:");
-    ctx.output
-        .info("  1. Generate key pair: openssl genrsa -out private.pem 2048");
-    ctx.output
-        .info("  2. Extract public key: openssl rsa -in private.pem -pubout -out public.pem");
-    ctx.output
-        .info("  3. Use the dashboard or SDK to add the public key");
+    ctx.output.info("To add a certificate, generate a key pair and provide the public key:");
+    ctx.output.info("  1. Generate key pair: openssl genrsa -out private.pem 2048");
+    ctx.output.info("  2. Extract public key: openssl rsa -in private.pem -pubout -out public.pem");
+    ctx.output.info("  3. Use the dashboard or SDK to add the public key");
 
     Ok(())
 }
 
 /// Get certificate details.
 pub async fn certificates_get(ctx: &Context, id: &str) -> Result<()> {
-    ctx.output
-        .warn("Certificate details not yet available via CLI.");
+    ctx.output.warn("Certificate details not yet available via CLI.");
     ctx.output.info(&format!("Certificate ID: {}", id));
-    ctx.output
-        .info("Use the web dashboard to view certificate details.");
+    ctx.output.info("Use the web dashboard to view certificate details.");
 
     Ok(())
 }
@@ -1400,16 +1267,13 @@ pub async fn certificates_get(ctx: &Context, id: &str) -> Result<()> {
 pub async fn certificates_rotate(ctx: &Context, id: &str, grace_period: u32) -> Result<()> {
     // Note: RotateCertificateRequest::new() requires a new PEM-encoded public key.
     // CLI certificate rotation requires the new public key to be passed as an argument.
-    ctx.output
-        .warn("Certificate rotation requires a new PEM-encoded public key.");
+    ctx.output.warn("Certificate rotation requires a new PEM-encoded public key.");
     ctx.output.info(&format!("Certificate ID: {}", id));
-    ctx.output
-        .info(&format!("Requested grace period: {}h", grace_period));
+    ctx.output.info(&format!("Requested grace period: {}h", grace_period));
     ctx.output.info("");
     ctx.output.info("To rotate a certificate:");
     ctx.output.info("  1. Generate a new key pair");
-    ctx.output
-        .info("  2. Use the dashboard or SDK to rotate with the new public key");
+    ctx.output.info("  2. Use the dashboard or SDK to rotate with the new public key");
     ctx.output
         .info("  3. The grace period allows both old and new keys to be valid during transition");
 
@@ -1419,8 +1283,7 @@ pub async fn certificates_rotate(ctx: &Context, id: &str, grace_period: u32) -> 
 /// Revoke certificate.
 pub async fn certificates_revoke(ctx: &Context, id: &str) -> Result<()> {
     if !ctx.yes {
-        ctx.output
-            .warn("Revoking a certificate will immediately invalidate it.");
+        ctx.output.warn("Revoking a certificate will immediately invalidate it.");
         let confirmed = ctx.confirm(&format!("Revoke certificate '{}'?", id))?;
         if !confirmed {
             ctx.output.info("Cancelled.");
@@ -1428,12 +1291,9 @@ pub async fn certificates_revoke(ctx: &Context, id: &str) -> Result<()> {
         }
     }
 
-    ctx.output
-        .warn("Certificate revocation requires the client ID.");
-    ctx.output
-        .info(&format!("Would revoke certificate: {}", id));
-    ctx.output
-        .info("Use the web dashboard to revoke certificates.");
+    ctx.output.warn("Certificate revocation requires the client ID.");
+    ctx.output.info(&format!("Would revoke certificate: {}", id));
+    ctx.output.info("Use the web dashboard to revoke certificates.");
 
     Ok(())
 }

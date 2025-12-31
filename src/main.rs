@@ -26,6 +26,6 @@ async fn main() -> ExitCode {
             // Return appropriate exit code
             let code = e.exit_code();
             ExitCode::from(code as u8)
-        }
+        },
     }
 }

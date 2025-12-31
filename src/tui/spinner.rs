@@ -13,15 +13,21 @@
 //! }).await;
 //! ```
 
-use std::future::Future;
-use std::io::{self, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::{
+    future::Future,
+    io::{self, Write},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
-use teapot::components::{Spinner, SpinnerStyle};
-use teapot::output::{is_ci, is_tty};
-use teapot::style::{Color, CLEAR_LINE};
-use teapot::Model;
+use teapot::{
+    Model,
+    components::{Spinner, SpinnerStyle},
+    output::{is_ci, is_tty},
+    style::{CLEAR_LINE, Color},
+};
 
 /// Handle to control a running spinner.
 pub struct SpinnerHandle {
@@ -109,17 +115,12 @@ pub fn start(message: impl Into<String>) -> SpinnerHandle {
     // In non-interactive mode, just print the message
     if !is_tty() || is_ci() {
         teapot::output::info(&message);
-        return SpinnerHandle {
-            running,
-            join_handle: None,
-        };
+        return SpinnerHandle { running, join_handle: None };
     }
 
     let join_handle = std::thread::spawn(move || {
-        let mut spinner = Spinner::new()
-            .style(SpinnerStyle::Dots)
-            .color(Color::Cyan)
-            .message(&message);
+        let mut spinner =
+            Spinner::new().style(SpinnerStyle::Dots).color(Color::Cyan).message(&message);
 
         let sleep_duration = SpinnerStyle::Dots.interval();
 
@@ -137,10 +138,7 @@ pub fn start(message: impl Into<String>) -> SpinnerHandle {
         let _ = io::stderr().flush();
     });
 
-    SpinnerHandle {
-        running,
-        join_handle: Some(join_handle),
-    }
+    SpinnerHandle { running, join_handle: Some(join_handle) }
 }
 
 /// Run an async operation with a spinner.
@@ -195,11 +193,11 @@ where
         Ok(value) => {
             handle.success(&success_msg);
             Ok(value)
-        }
+        },
         Err(e) => {
             handle.error(&e.to_string());
             Err(e)
-        }
+        },
     }
 }
 
@@ -213,8 +211,9 @@ fn clear_line() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use super::*;
 
     #[test]
     fn test_spinner_creation() {

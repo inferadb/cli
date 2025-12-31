@@ -15,15 +15,21 @@
 //! progress.finish("Import complete");
 //! ```
 
-use std::io::{self, Write};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    io::{self, Write},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
-use teapot::components::Progress as TeapotProgress;
-use teapot::output::{is_ci, is_tty};
-use teapot::style::{Color, CLEAR_LINE, CURSOR_UP};
-use teapot::Model;
+use teapot::{
+    Model,
+    components::Progress as TeapotProgress,
+    output::{is_ci, is_tty},
+    style::{CLEAR_LINE, CURSOR_UP, Color},
+};
 
 /// A progress bar handle for tracking operation progress.
 pub struct ProgressBar {
@@ -127,14 +133,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
     // In non-interactive mode, just print the message
     if !is_tty() || is_ci() {
         teapot::output::info(&format!("{} (0/{})", message, total));
-        return ProgressBar {
-            current,
-            total,
-            message,
-            running,
-            join_handle: None,
-            start_time,
-        };
+        return ProgressBar { current, total, message, running, join_handle: None, start_time };
     }
 
     let current_clone = current.clone();
@@ -172,14 +171,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
         let _ = io::stderr().flush();
     });
 
-    ProgressBar {
-        current,
-        total,
-        message,
-        running,
-        join_handle: Some(join_handle),
-        start_time,
-    }
+    ProgressBar { current, total, message, running, join_handle: Some(join_handle), start_time }
 }
 
 /// Create a multi-progress tracker for parallel operations.
@@ -245,8 +237,7 @@ impl MultiProgressBar {
     /// Set progress for a task.
     pub fn set_progress(&self, id: &str, current: u64) {
         if let Some(task) = self.tasks.iter().find(|t| t.id == id) {
-            task.current
-                .store(current.min(task.total), Ordering::SeqCst);
+            task.current.store(current.min(task.total), Ordering::SeqCst);
             *task.status.lock().unwrap() = TaskState::InProgress;
         }
     }

@@ -2,10 +2,9 @@
 //!
 //! Manage the authenticated user's account, emails, and sessions.
 
-use crate::client::Context;
-use crate::error::Result;
-use crate::output::Displayable;
 use serde::Serialize;
+
+use crate::{client::Context, error::Result, output::Displayable};
 
 // ============================================================================
 // Display types
@@ -21,12 +20,7 @@ struct EmailRow {
 
 impl Displayable for EmailRow {
     fn table_row(&self) -> Vec<String> {
-        vec![
-            self.id.clone(),
-            self.address.clone(),
-            self.primary.clone(),
-            self.verified.clone(),
-        ]
+        vec![self.id.clone(), self.address.clone(), self.primary.clone(), self.verified.clone()]
     }
 
     fn table_headers() -> Vec<&'static str> {
@@ -77,14 +71,8 @@ pub async fn show(ctx: &Context) -> Result<()> {
     println!("Name: {}", account.name.as_deref().unwrap_or("-"));
     println!("Email: {}", account.email);
     println!("Status: {:?}", account.status);
-    println!(
-        "Created: {}",
-        account.created_at.format("%Y-%m-%d %H:%M:%S")
-    );
-    println!(
-        "Updated: {}",
-        account.updated_at.format("%Y-%m-%d %H:%M:%S")
-    );
+    println!("Created: {}", account.created_at.format("%Y-%m-%d %H:%M:%S"));
+    println!("Updated: {}", account.updated_at.format("%Y-%m-%d %H:%M:%S"));
 
     Ok(())
 }
@@ -94,8 +82,7 @@ pub async fn update(ctx: &Context, name: Option<&str>) -> Result<()> {
     use inferadb::control::UpdateAccountRequest;
 
     if name.is_none() {
-        ctx.output
-            .error("No updates specified. Use --name to update.");
+        ctx.output.error("No updates specified. Use --name to update.");
         return Ok(());
     }
 
@@ -118,11 +105,9 @@ pub async fn update(ctx: &Context, name: Option<&str>) -> Result<()> {
 /// Delete account.
 pub async fn delete(ctx: &Context, yes: bool) -> Result<()> {
     if !yes {
-        ctx.output
-            .warn("Account deletion is permanent and cannot be undone.");
+        ctx.output.warn("Account deletion is permanent and cannot be undone.");
         ctx.output.warn("This will:");
-        ctx.output
-            .warn("  - Remove your account and all associated data");
+        ctx.output.warn("  - Remove your account and all associated data");
         ctx.output.warn("  - Revoke access to all organizations");
         ctx.output.warn("  - Delete all your sessions");
         println!();
@@ -136,12 +121,9 @@ pub async fn delete(ctx: &Context, yes: bool) -> Result<()> {
 
     // Account deletion is typically a sensitive operation that may require
     // additional confirmation or use a different API endpoint
-    ctx.output
-        .warn("Account deletion requires additional confirmation.");
-    ctx.output
-        .info("Please use the web dashboard to delete your account.");
-    ctx.output
-        .info("This ensures proper verification and data export options.");
+    ctx.output.warn("Account deletion requires additional confirmation.");
+    ctx.output.info("Please use the web dashboard to delete your account.");
+    ctx.output.info("This ensures proper verification and data export options.");
 
     Ok(())
 }
@@ -185,8 +167,7 @@ pub async fn emails_add(ctx: &Context, email: &str, set_primary: bool) -> Result
 
     let result = emails_client.add(email).await?;
 
-    ctx.output
-        .success(&format!("Email '{}' added.", result.address));
+    ctx.output.success(&format!("Email '{}' added.", result.address));
 
     if !result.verified {
         ctx.output.info("A verification email has been sent.");
@@ -196,8 +177,7 @@ pub async fn emails_add(ctx: &Context, email: &str, set_primary: bool) -> Result
     }
 
     if set_primary && !result.verified {
-        ctx.output
-            .warn("Email must be verified before it can be set as primary.");
+        ctx.output.warn("Email must be verified before it can be set as primary.");
     }
 
     Ok(())
@@ -213,10 +193,7 @@ pub async fn emails_verify(ctx: &Context, token: &str) -> Result<()> {
     // by clicking a link. We can resend the verification email instead.
     ctx.output
         .warn("Email verification is typically completed by clicking the link in your email.");
-    ctx.output.info(&format!(
-        "Token received: {}...",
-        &token[..token.len().min(10)]
-    ));
+    ctx.output.info(&format!("Token received: {}...", &token[..token.len().min(10)]));
     ctx.output.info(
         "If you need a new verification email, use 'inferadb account emails resend <email>'.",
     );
@@ -229,14 +206,12 @@ pub async fn emails_resend(ctx: &Context, email: &str) -> Result<()> {
     let client = ctx.client().await?;
     let emails_client = client.account().emails();
 
-    ctx.output
-        .info(&format!("Resending verification to: {}", email));
+    ctx.output.info(&format!("Resending verification to: {}", email));
 
     emails_client.resend_verification(email).await?;
 
     ctx.output.success("Verification email sent.");
-    ctx.output
-        .info("Check your inbox for the verification link.");
+    ctx.output.info("Check your inbox for the verification link.");
 
     Ok(())
 }
@@ -266,8 +241,7 @@ pub async fn emails_set_primary(ctx: &Context, email_id: &str) -> Result<()> {
     let client = ctx.client().await?;
     let emails_client = client.account().emails();
 
-    ctx.output
-        .info(&format!("Setting primary email: {}", email_id));
+    ctx.output.info(&format!("Setting primary email: {}", email_id));
 
     emails_client.set_primary(email_id).await?;
 
@@ -297,10 +271,7 @@ pub async fn sessions_list(ctx: &Context) -> Result<()> {
         .iter()
         .map(|s| SessionRow {
             id: s.id.clone(),
-            device: s
-                .user_agent
-                .clone()
-                .unwrap_or_else(|| "Unknown".to_string()),
+            device: s.user_agent.clone().unwrap_or_else(|| "Unknown".to_string()),
             ip_address: s.ip_address.clone().unwrap_or_else(|| "-".to_string()),
             last_active: s.created_at.format("%Y-%m-%d %H:%M").to_string(),
             current: if s.current { "yes" } else { "no" }.to_string(),
@@ -369,18 +340,14 @@ pub async fn password_reset(
         let email = match email {
             Some(e) => e.to_string(),
             None => {
-                ctx.output
-                    .error("Email required for password reset request.");
-                ctx.output
-                    .info("Usage: inferadb account password reset --request --email <email>");
+                ctx.output.error("Email required for password reset request.");
+                ctx.output.info("Usage: inferadb account password reset --request --email <email>");
                 return Ok(());
-            }
+            },
         };
 
-        ctx.output
-            .info(&format!("Requesting password reset for: {}", email));
-        ctx.output
-            .info("If an account exists with this email, a reset link will be sent.");
+        ctx.output.info(&format!("Requesting password reset for: {}", email));
+        ctx.output.info("If an account exists with this email, a reset link will be sent.");
 
         // Password reset initiation typically happens through the auth service
         // The SDK may not expose this directly
@@ -393,32 +360,25 @@ pub async fn password_reset(
         let token = match token {
             Some(t) => t,
             None => {
-                ctx.output
-                    .error("Token required for password reset confirmation.");
-                ctx.output
-                    .info("Usage: inferadb account password reset --confirm --token <token>");
+                ctx.output.error("Token required for password reset confirmation.");
+                ctx.output.info("Usage: inferadb account password reset --confirm --token <token>");
                 return Ok(());
-            }
+            },
         };
 
         ctx.output.info("Confirming password reset...");
-        ctx.output
-            .info(&format!("Token: {}...", &token[..token.len().min(10)]));
+        ctx.output.info(&format!("Token: {}...", &token[..token.len().min(10)]));
 
         // Password reset confirmation typically requires entering a new password
-        ctx.output
-            .warn("Password reset confirmation requires the web dashboard.");
-        ctx.output
-            .info("Please click the link in your email to complete the reset.");
+        ctx.output.warn("Password reset confirmation requires the web dashboard.");
+        ctx.output.info("Please click the link in your email to complete the reset.");
 
         Ok(())
     } else {
         ctx.output.error("Specify --request or --confirm.");
         ctx.output.info("Usage:");
-        ctx.output
-            .info("  inferadb account password reset --request --email <email>");
-        ctx.output
-            .info("  inferadb account password reset --confirm --token <token>");
+        ctx.output.info("  inferadb account password reset --request --email <email>");
+        ctx.output.info("  inferadb account password reset --confirm --token <token>");
         Ok(())
     }
 }

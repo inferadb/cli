@@ -1,11 +1,9 @@
 //! Token management commands.
 
-use crate::client::Context;
-use crate::config::CredentialStore;
-use crate::error::Result;
-use crate::output::Displayable;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Serialize;
+
+use crate::{client::Context, config::CredentialStore, error::Result, output::Displayable};
 
 #[derive(Debug, Clone, Serialize)]
 struct TokenRow {
@@ -34,10 +32,8 @@ impl Displayable for TokenRow {
 ///
 /// Note: Tokens are obtained via the OAuth login flow, not generated directly.
 pub async fn generate(ctx: &Context, ttl: Option<&str>, role: Option<&str>) -> Result<()> {
-    ctx.output
-        .warn("Token generation is not supported via CLI.");
-    ctx.output
-        .info("Use 'inferadb login' to authenticate and obtain tokens.");
+    ctx.output.warn("Token generation is not supported via CLI.");
+    ctx.output.info("Use 'inferadb login' to authenticate and obtain tokens.");
 
     if let Some(t) = ttl {
         ctx.output.info(&format!("Requested TTL: {}", t));
@@ -46,8 +42,7 @@ pub async fn generate(ctx: &Context, ttl: Option<&str>, role: Option<&str>) -> R
         ctx.output.info(&format!("Requested role: {}", r));
     }
 
-    ctx.output
-        .info("For API clients with custom tokens, use the web dashboard.");
+    ctx.output.info("For API clients with custom tokens, use the web dashboard.");
 
     Ok(())
 }
@@ -84,12 +79,7 @@ pub async fn list(ctx: &Context) -> Result<()> {
             can_refresh = "-".to_string();
         }
 
-        rows.push(TokenRow {
-            profile: name.clone(),
-            status,
-            expires,
-            can_refresh,
-        });
+        rows.push(TokenRow { profile: name.clone(), status, expires, can_refresh });
     }
 
     // Also check "default" if not in profiles
@@ -110,12 +100,7 @@ pub async fn list(ctx: &Context) -> Result<()> {
 
             let can_refresh = if creds.can_refresh() { "yes" } else { "no" }.to_string();
 
-            rows.push(TokenRow {
-                profile: "default".to_string(),
-                status,
-                expires,
-                can_refresh,
-            });
+            rows.push(TokenRow { profile: "default".to_string(), status, expires, can_refresh });
         }
     }
 
@@ -133,8 +118,7 @@ pub async fn revoke(ctx: &Context, id: &str) -> Result<()> {
     let store = CredentialStore::new();
 
     if !store.exists(id) {
-        ctx.output
-            .error(&format!("No credentials found for profile '{}'.", id));
+        ctx.output.error(&format!("No credentials found for profile '{}'.", id));
         return Ok(());
     }
 
@@ -144,8 +128,7 @@ pub async fn revoke(ctx: &Context, id: &str) -> Result<()> {
     }
 
     store.delete(id)?;
-    ctx.output
-        .success(&format!("Token for profile '{}' has been revoked.", id));
+    ctx.output.success(&format!("Token for profile '{}' has been revoked.", id));
 
     Ok(())
 }
@@ -158,22 +141,19 @@ pub async fn refresh(ctx: &Context) -> Result<()> {
     let creds = match store.load(profile_name)? {
         Some(c) => c,
         None => {
-            ctx.output
-                .error("Not authenticated. Run 'inferadb login' first.");
+            ctx.output.error("Not authenticated. Run 'inferadb login' first.");
             return Ok(());
-        }
+        },
     };
 
     if !creds.can_refresh() {
         ctx.output.error("Current token cannot be refreshed.");
-        ctx.output
-            .info("Run 'inferadb login' to obtain a new token.");
+        ctx.output.info("Run 'inferadb login' to obtain a new token.");
         return Ok(());
     }
 
     ctx.output.warn("Token refresh not yet implemented.");
-    ctx.output
-        .info("Run 'inferadb login' to obtain a fresh token.");
+    ctx.output.info("Run 'inferadb login' to obtain a fresh token.");
 
     // TODO: Implement OAuth2 token refresh flow
     // This would require:
@@ -196,12 +176,11 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
             match store.load(profile_name)? {
                 Some(creds) => creds.access_token,
                 None => {
-                    ctx.output
-                        .error("Not authenticated. Run 'inferadb login' first.");
+                    ctx.output.error("Not authenticated. Run 'inferadb login' first.");
                     return Ok(());
-                }
+                },
             }
-        }
+        },
     };
 
     // Decode JWT token (without verification)
@@ -216,10 +195,10 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
     match decode_jwt_part(parts[0]) {
         Ok(header) => {
             println!("{}", serde_json::to_string_pretty(&header)?);
-        }
+        },
         Err(e) => {
             ctx.output.error(&format!("Failed to decode header: {}", e));
-        }
+        },
     }
 
     println!();
@@ -260,19 +239,16 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
                     println!("Issued: {}", dt.format("%Y-%m-%d %H:%M:%S UTC"));
                 }
             }
-        }
+        },
         Err(e) => {
-            ctx.output
-                .error(&format!("Failed to decode payload: {}", e));
-        }
+            ctx.output.error(&format!("Failed to decode payload: {}", e));
+        },
     }
 
     if verify {
         println!();
-        ctx.output
-            .warn("Signature verification not yet implemented.");
-        ctx.output
-            .info("The token signature was not verified against the JWKS.");
+        ctx.output.warn("Signature verification not yet implemented.");
+        ctx.output.info("The token signature was not verified against the JWKS.");
     }
 
     Ok(())

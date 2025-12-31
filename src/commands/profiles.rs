@@ -1,10 +1,13 @@
 //! Profile management commands.
 
-use crate::client::Context;
-use crate::config::Profile;
-use crate::error::{Error, Result};
-use crate::output::Displayable;
 use serde::Serialize;
+
+use crate::{
+    client::Context,
+    config::Profile,
+    error::{Error, Result},
+    output::Displayable,
+};
 
 #[derive(Debug, Clone, Serialize)]
 struct ProfileRow {
@@ -128,10 +131,7 @@ pub async fn profiles_show(ctx: &Context, name: Option<&str>) -> Result<()> {
         if let Some(ref vault) = details.vault {
             println!("Vault: {}", vault);
         }
-        println!(
-            "Authenticated: {}",
-            if authenticated { "yes" } else { "no" }
-        );
+        println!("Authenticated: {}", if authenticated { "yes" } else { "no" });
     } else {
         ctx.output.value(&details)?;
     }
@@ -186,10 +186,8 @@ pub async fn profiles_update(
 ) -> Result<()> {
     let mut config = ctx.config.clone();
 
-    let profile = config
-        .profiles
-        .get_mut(name)
-        .ok_or_else(|| Error::ProfileNotFound(name.to_string()))?;
+    let profile =
+        config.profiles.get_mut(name).ok_or_else(|| Error::ProfileNotFound(name.to_string()))?;
 
     if let Some(u) = url {
         profile.url = Some(u.to_string());
@@ -217,10 +215,7 @@ pub async fn profiles_rename(ctx: &Context, old_name: &str, new_name: &str) -> R
     let mut config = ctx.config.clone();
 
     if config.profiles.contains_key(new_name) {
-        return Err(Error::config(format!(
-            "Profile '{}' already exists",
-            new_name
-        )));
+        return Err(Error::config(format!("Profile '{}' already exists", new_name)));
     }
 
     let profile = config
@@ -244,10 +239,7 @@ pub async fn profiles_rename(ctx: &Context, old_name: &str, new_name: &str) -> R
         let _ = store.delete(old_name);
     }
 
-    ctx.output.success(&format!(
-        "Profile '{}' renamed to '{}'.",
-        old_name, new_name
-    ));
+    ctx.output.success(&format!("Profile '{}' renamed to '{}'.", old_name, new_name));
 
     Ok(())
 }
@@ -295,16 +287,14 @@ pub async fn profiles_default(ctx: &Context, name: Option<&str>) -> Result<()> {
             config.set_default(Some(n.to_string()));
             config.save()?;
 
-            ctx.output
-                .success(&format!("Default profile set to '{}'.", n));
-        }
+            ctx.output.success(&format!("Default profile set to '{}'.", n));
+        },
         None => match &ctx.config.default_profile {
             Some(p) => println!("{}", p),
             None => {
                 ctx.output.info("No default profile set.");
-                ctx.output
-                    .info("Set one with 'inferadb profiles default <name>'.");
-            }
+                ctx.output.info("Set one with 'inferadb profiles default <name>'.");
+            },
         },
     }
 

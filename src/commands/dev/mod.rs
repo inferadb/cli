@@ -33,15 +33,17 @@ mod stop;
 pub mod tailscale;
 
 // Re-export public items from submodules for convenience
-pub use constants::*;
-pub use doctor::doctor;
-
-use commands::run_command_streaming;
-use docker::cluster_exists;
 use std::process::Command;
 
-use crate::client::Context;
-use crate::error::{Error, Result};
+use commands::run_command_streaming;
+pub use constants::*;
+use docker::cluster_exists;
+pub use doctor::doctor;
+
+use crate::{
+    client::Context,
+    error::{Error, Result},
+};
 
 // ============================================================================
 // Public Command Functions
@@ -57,16 +59,8 @@ pub async fn start(
     force: bool,
     commit: Option<&str>,
 ) -> Result<()> {
-    start::start(
-        ctx,
-        skip_build,
-        interactive,
-        tailscale_client,
-        tailscale_secret,
-        force,
-        commit,
-    )
-    .await
+    start::start(ctx, skip_build, interactive, tailscale_client, tailscale_secret, force, commit)
+        .await
 }
 
 /// Run dev stop - pause or destroy the cluster.
@@ -158,9 +152,7 @@ pub async fn dashboard(_ctx: &Context) -> Result<()> {
                 let _ = Command::new("cmd").args(["/C", "start", &url]).spawn();
             }
             Ok(())
-        }
-        _ => Err(Error::Other(
-            "Dashboard ingress not found. Is the cluster running?".to_string(),
-        )),
+        },
+        _ => Err(Error::Other("Dashboard ingress not found. Is the cluster running?".to_string())),
     }
 }

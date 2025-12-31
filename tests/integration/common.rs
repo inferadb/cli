@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 use std::path::PathBuf;
+
 use tempfile::TempDir;
 
 /// Create a temporary configuration directory for tests.

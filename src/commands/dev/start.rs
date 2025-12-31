@@ -2,41 +2,45 @@
 //!
 //! Handles creating, resuming, and setting up the local development cluster.
 
-use std::fs;
-use std::io::Write as IoWrite;
-use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::{
+    fs,
+    io::Write as IoWrite,
+    process::{Command, Stdio},
+    time::Duration,
+};
 
-use crate::client::Context;
-use crate::error::{Error, Result};
-use crate::tui::InstallStep;
 use teapot::style::{Color, RESET};
 
-use super::commands::{command_exists, run_command, run_command_optional};
-use super::constants::{
-    CLUSTER_NAME, CONTAINER_STABILIZE_DELAY_SECS, CONTROL_REPO_URL, DASHBOARD_REPO_URL,
-    DEPLOY_REPO_URL, ENGINE_REPO_URL, HELM_TAILSCALE_REPO, HELM_TAILSCALE_URL, KUBERNETES_VERSION,
-    KUBE_CONTEXT, REGISTRY_NAME, REGISTRY_PORT, TALOS_CONTROLPLANES, TALOS_PROVISIONER,
-    TALOS_WAIT_TIMEOUT, TALOS_WORKERS,
+use super::{
+    commands::{command_exists, run_command, run_command_optional},
+    constants::{
+        CLUSTER_NAME, CONTAINER_STABILIZE_DELAY_SECS, CONTROL_REPO_URL, DASHBOARD_REPO_URL,
+        DEPLOY_REPO_URL, ENGINE_REPO_URL, HELM_TAILSCALE_REPO, HELM_TAILSCALE_URL, KUBE_CONTEXT,
+        KUBERNETES_VERSION, REGISTRY_NAME, REGISTRY_PORT, TALOS_CONTROLPLANES, TALOS_PROVISIONER,
+        TALOS_WAIT_TIMEOUT, TALOS_WORKERS,
+    },
+    docker::{
+        are_containers_paused, docker_container_exists, get_cluster_containers, get_container_ip,
+        is_container_paused, is_docker_running, pull_image,
+    },
+    kubernetes::{
+        ensure_namespace, helm_repo_add, helm_repo_exists, helm_repo_update,
+        kubectl_current_context, kubectl_use_context, wait_for_deployment,
+    },
+    output::{
+        StartStep, StepOutcome, print_hint, print_phase_header, print_styled_header, run_step,
+        run_step_with_result,
+    },
+    paths::{get_config_dir, get_control_dir, get_dashboard_dir, get_deploy_dir, get_engine_dir},
+    tailscale::{
+        get_tailnet_info, get_tailscale_credentials, load_tailscale_credentials,
+        save_tailscale_credentials,
+    },
 };
-use super::docker::{
-    are_containers_paused, docker_container_exists, get_cluster_containers, get_container_ip,
-    is_container_paused, is_docker_running, pull_image,
-};
-use super::kubernetes::{
-    ensure_namespace, helm_repo_add, helm_repo_exists, helm_repo_update, kubectl_current_context,
-    kubectl_use_context, wait_for_deployment,
-};
-use super::output::{
-    print_hint, print_phase_header, print_styled_header, run_step, run_step_with_result, StartStep,
-    StepOutcome,
-};
-use super::paths::{
-    get_config_dir, get_control_dir, get_dashboard_dir, get_deploy_dir, get_engine_dir,
-};
-use super::tailscale::{
-    get_tailnet_info, get_tailscale_credentials, load_tailscale_credentials,
-    save_tailscale_credentials,
+use crate::{
+    client::Context,
+    error::{Error, Result},
+    tui::InstallStep,
 };
 
 // ============================================================================
@@ -97,13 +101,7 @@ fn clone_repo(
     let clone_ok = if commit.is_some() {
         run_command_optional(
             "git",
-            &[
-                "clone",
-                "--recurse-submodules",
-                "--quiet",
-                repo_url,
-                target_dir.to_str().unwrap(),
-            ],
+            &["clone", "--recurse-submodules", "--quiet", repo_url, target_dir.to_str().unwrap()],
         )
         .is_some()
     } else {
@@ -128,11 +126,8 @@ fn clone_repo(
     }
 
     if let Some(ref_spec) = commit {
-        if run_command_optional(
-            "git",
-            &["-C", target_dir.to_str().unwrap(), "checkout", ref_spec],
-        )
-        .is_none()
+        if run_command_optional("git", &["-C", target_dir.to_str().unwrap(), "checkout", ref_spec])
+            .is_none()
         {
             return Err(format!("Failed to checkout '{}'", ref_spec));
         }
@@ -222,10 +217,7 @@ fn cleanup_stale_contexts() {
     );
 
     // Clean talosctl context
-    let _ = run_command_optional(
-        "talosctl",
-        &["config", "remove", CLUSTER_NAME, "--noconfirm"],
-    );
+    let _ = run_command_optional("talosctl", &["config", "remove", CLUSTER_NAME, "--noconfirm"]);
 }
 
 // ============================================================================
@@ -278,11 +270,8 @@ fn setup_container_registry() -> Result<String> {
             let registry_ip = get_container_ip(REGISTRY_NAME)
                 .ok_or_else(|| "Failed to get registry IP".to_string())?;
 
-            let outcome = if registry_existed {
-                StepOutcome::Skipped
-            } else {
-                StepOutcome::Success
-            };
+            let outcome =
+                if registry_existed { StepOutcome::Skipped } else { StepOutcome::Success };
 
             Ok((outcome, registry_ip))
         },
@@ -308,12 +297,7 @@ fn build_and_push_images(_registry_ip: &str) -> std::result::Result<StepOutcome,
         if dockerfile.exists() {
             run_command(
                 "docker",
-                &[
-                    "build",
-                    "-t",
-                    &format!("{}:latest", name),
-                    dir.to_str().unwrap(),
-                ],
+                &["build", "-t", &format!("{}:latest", name), dir.to_str().unwrap()],
             )
             .map_err(|e| e.to_string())?;
             run_command(
@@ -327,10 +311,7 @@ fn build_and_push_images(_registry_ip: &str) -> std::result::Result<StepOutcome,
             .map_err(|e| e.to_string())?;
             run_command(
                 "docker",
-                &[
-                    "push",
-                    &format!("localhost:{}/{}:latest", REGISTRY_PORT, name),
-                ],
+                &["push", &format!("localhost:{}/{}:latest", REGISTRY_PORT, name)],
             )
             .map_err(|e| e.to_string())?;
             built_count += 1;
@@ -355,9 +336,7 @@ fn apply_yaml(yaml: &str) -> std::result::Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(yaml.as_bytes())
-            .map_err(|e| e.to_string())?;
+        stdin.write_all(yaml.as_bytes()).map_err(|e| e.to_string())?;
     }
     child.wait().map_err(|e| e.to_string())?;
     Ok(())
@@ -367,12 +346,7 @@ fn apply_yaml(yaml: &str) -> std::result::Result<(), String> {
 #[allow(clippy::unnecessary_wraps)]
 fn setup_kubernetes_resources(_registry_ip: &str) -> std::result::Result<StepOutcome, String> {
     // Create namespaces
-    let namespaces = [
-        "inferadb",
-        "fdb-system",
-        "local-path-storage",
-        "tailscale-system",
-    ];
+    let namespaces = ["inferadb", "fdb-system", "local-path-storage", "tailscale-system"];
     for ns in &namespaces {
         ensure_namespace(ns)?;
     }
@@ -462,32 +436,17 @@ fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
     )
     .map_err(|e| e.to_string())?;
 
+    run_command("kubectl", &["apply", "-f", &format!("{}/rbac/cluster_role.yaml", fdb_url)])
+        .map_err(|e| e.to_string())?;
     run_command(
         "kubectl",
-        &[
-            "apply",
-            "-f",
-            &format!("{}/rbac/cluster_role.yaml", fdb_url),
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-    run_command(
-        "kubectl",
-        &[
-            "apply",
-            "-f",
-            &format!("{}/rbac/role.yaml", fdb_url),
-            "-n",
-            "fdb-system",
-        ],
+        &["apply", "-f", &format!("{}/rbac/role.yaml", fdb_url), "-n", "fdb-system"],
     )
     .map_err(|e| e.to_string())?;
 
-    let manager_yaml = run_command(
-        "curl",
-        &["-s", &format!("{}/deployment/manager.yaml", fdb_url)],
-    )
-    .map_err(|e| e.to_string())?;
+    let manager_yaml =
+        run_command("curl", &["-s", &format!("{}/deployment/manager.yaml", fdb_url)])
+            .map_err(|e| e.to_string())?;
     let yaml_with_sa_fix = manager_yaml.replace(
         "serviceAccountName: fdb-kubernetes-operator-controller-manager",
         "serviceAccountName: controller-manager",
@@ -519,18 +478,13 @@ fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
         .map_err(|e| e.to_string())?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(modified_lines.join("\n").as_bytes())
-            .map_err(|e| e.to_string())?;
+        stdin.write_all(modified_lines.join("\n").as_bytes()).map_err(|e| e.to_string())?;
     }
     child.wait().map_err(|e| e.to_string())?;
 
     for (name, role) in &[
         ("fdb-operator-manager-role-global", "manager-role"),
-        (
-            "fdb-operator-manager-clusterrolebinding",
-            "manager-clusterrole",
-        ),
+        ("fdb-operator-manager-clusterrolebinding", "manager-clusterrole"),
     ] {
         let binding_yaml = format!(
             r#"apiVersion: rbac.authorization.k8s.io/v1
@@ -610,15 +564,8 @@ spec:
     let patch_file = deploy_dir.join("flux/apps/dev/registry-patch.yaml");
     fs::write(&patch_file, &registry_patch).map_err(|e| e.to_string())?;
 
-    run_command(
-        "kubectl",
-        &[
-            "apply",
-            "-k",
-            deploy_dir.join("flux/apps/dev").to_str().unwrap(),
-        ],
-    )
-    .map_err(|e| e.to_string())?;
+    run_command("kubectl", &["apply", "-k", deploy_dir.join("flux/apps/dev").to_str().unwrap()])
+        .map_err(|e| e.to_string())?;
 
     std::thread::sleep(Duration::from_secs(10));
 
@@ -659,8 +606,9 @@ fn show_final_success(tailnet_suffix: Option<&str>) {
 
 /// Start interactive TUI mode.
 fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Result<()> {
-    use crate::tui::DevStartView;
     use teapot::runtime::{Program, ProgramOptions};
+
+    use crate::tui::DevStartView;
 
     let deploy_dir = get_deploy_dir();
     let commit_owned = commit.map(|s| s.to_string());
@@ -715,9 +663,7 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
             }
         });
 
-    let result = Program::new(view)
-        .with_options(ProgramOptions::fullscreen())
-        .run();
+    let result = Program::new(view).with_options(ProgramOptions::fullscreen()).run();
 
     match result {
         Ok(view) if view.is_success() => {
@@ -725,7 +671,7 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
             let tailnet_suffix = get_tailnet_info();
             show_final_success(tailnet_suffix.as_deref());
             Ok(())
-        }
+        },
         Ok(view) if view.was_cancelled() => Err(Error::Other("Cancelled".to_string())),
         Ok(_) => Err(Error::Other("Start failed".to_string())),
         Err(e) => Err(Error::Other(e.to_string())),
@@ -753,82 +699,57 @@ fn build_start_steps(
         let containers = get_cluster_containers();
         for container in containers {
             let container_name = container.clone();
-            steps.push(InstallStep::with_executor(
-                format!("Resuming {}", container),
-                move || {
-                    run_command("docker", &["unpause", &container_name])
-                        .map(|_| None)
-                        .or_else(|e| {
-                            if e.to_string().contains("not paused") {
-                                Ok(None)
-                            } else {
-                                Err(e.to_string())
-                            }
-                        })
-                },
-            ));
+            steps.push(InstallStep::with_executor(format!("Resuming {}", container), move || {
+                run_command("docker", &["unpause", &container_name]).map(|_| None).or_else(|e| {
+                    if e.to_string().contains("not paused") { Ok(None) } else { Err(e.to_string()) }
+                })
+            }));
         }
 
         // Resume registry
         if docker_container_exists(REGISTRY_NAME) {
-            steps.push(InstallStep::with_executor(
-                format!("Resuming {}", REGISTRY_NAME),
-                || {
-                    let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
-                    Ok(None)
-                },
-            ));
+            steps.push(InstallStep::with_executor(format!("Resuming {}", REGISTRY_NAME), || {
+                let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
+                Ok(None)
+            }));
         }
 
-        steps.push(InstallStep::with_executor(
-            "Waiting for containers to stabilize",
-            || {
-                std::thread::sleep(Duration::from_secs(CONTAINER_STABILIZE_DELAY_SECS));
-                Ok(Some("ready".to_string()))
-            },
-        ));
+        steps.push(InstallStep::with_executor("Waiting for containers to stabilize", || {
+            std::thread::sleep(Duration::from_secs(CONTAINER_STABILIZE_DELAY_SECS));
+            Ok(Some("ready".to_string()))
+        }));
     }
 
     // Phase 1: Conditioning environment
-    steps.push(InstallStep::with_executor(
-        "Cloning deployment repository",
-        {
-            let deploy_dir = deploy_dir_owned.clone();
-            let commit = commit_owned.clone();
-            move || step_clone_repo(&deploy_dir, force, commit.as_deref())
-        },
-    ));
+    steps.push(InstallStep::with_executor("Cloning deployment repository", {
+        let deploy_dir = deploy_dir_owned.clone();
+        let commit = commit_owned.clone();
+        move || step_clone_repo(&deploy_dir, force, commit.as_deref())
+    }));
     steps.push(InstallStep::with_executor(
         "Creating configuration directory",
         step_create_config_dir,
     ));
-    steps.push(InstallStep::with_executor(
-        "Setting up Helm repositories",
-        step_setup_helm,
-    ));
+    steps.push(InstallStep::with_executor("Setting up Helm repositories", step_setup_helm));
 
     // Phase 2: Setting up cluster
-    steps.push(InstallStep::with_executor(
-        "Cleaning stale contexts",
-        || {
-            let _ = run_command_optional("talosctl", &["config", "context", ""]);
-            if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
-                for line in contexts.lines() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
-                        let _ = run_command_optional(
-                            "talosctl",
-                            &["config", "remove", parts[1], "--noconfirm"],
-                        );
-                    }
+    steps.push(InstallStep::with_executor("Cleaning stale contexts", || {
+        let _ = run_command_optional("talosctl", &["config", "context", ""]);
+        if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
+            for line in contexts.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
+                    let _ = run_command_optional(
+                        "talosctl",
+                        &["config", "remove", parts[1], "--noconfirm"],
+                    );
                 }
             }
-            Ok(Some("Cleaned".to_string()))
-        },
-    ));
-    steps.push(InstallStep::with_executor(
-        "Creating Talos cluster",
-        || match run_command(
+        }
+        Ok(Some("Cleaned".to_string()))
+    }));
+    steps.push(InstallStep::with_executor("Creating Talos cluster", || {
+        match run_command(
             "talosctl",
             &[
                 "cluster",
@@ -849,22 +770,20 @@ fn build_start_steps(
         ) {
             Ok(_) => Ok(Some("Created".to_string())),
             Err(e) => Err(e.to_string()),
-        },
-    ));
-    steps.push(InstallStep::with_executor(
-        "Setting kubectl context",
-        || match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
+        }
+    }));
+    steps.push(InstallStep::with_executor("Setting kubectl context", || {
+        match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
             Ok(_) => Ok(Some("Set".to_string())),
             Err(e) => Err(e.to_string()),
-        },
-    ));
-    steps.push(InstallStep::with_executor(
-        "Verifying cluster is ready",
-        || match run_command("kubectl", &["get", "nodes"]) {
+        }
+    }));
+    steps.push(InstallStep::with_executor("Verifying cluster is ready", || {
+        match run_command("kubectl", &["get", "nodes"]) {
             Ok(_) => Ok(Some("Verified".to_string())),
             Err(e) => Err(e.to_string()),
-        },
-    ));
+        }
+    }));
 
     steps
 }
@@ -929,10 +848,7 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
         }
 
         run_step(
-            &StartStep::with_ok(
-                "Waiting for containers to stabilize",
-                "Containers stabilized",
-            ),
+            &StartStep::with_ok("Waiting for containers to stabilize", "Containers stabilized"),
             || {
                 std::thread::sleep(Duration::from_secs(CONTAINER_STABILIZE_DELAY_SECS));
                 Ok(StepOutcome::Success)
@@ -948,10 +864,7 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     print_phase_header("Conditioning environment");
 
     run_step(
-        &StartStep::with_ok(
-            "Cloning deployment repository",
-            "Cloned deployment repository",
-        ),
+        &StartStep::with_ok("Cloning deployment repository", "Cloned deployment repository"),
         || match step_clone_repo(&deploy_dir, force, commit) {
             Ok(Some(_)) => Ok(StepOutcome::Skipped),
             Ok(None) => Ok(StepOutcome::Success),
@@ -960,10 +873,9 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     )?;
 
     let engine_dir = get_engine_dir();
-    run_step(
-        &StartStep::with_ok("Cloning engine repository", "Cloned engine repository"),
-        || step_clone_component("engine", ENGINE_REPO_URL, &engine_dir, force),
-    )?;
+    run_step(&StartStep::with_ok("Cloning engine repository", "Cloned engine repository"), || {
+        step_clone_component("engine", ENGINE_REPO_URL, &engine_dir, force)
+    })?;
 
     let control_dir = get_control_dir();
     run_step(
@@ -973,18 +885,12 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
 
     let dashboard_dir = get_dashboard_dir();
     run_step(
-        &StartStep::with_ok(
-            "Cloning dashboard repository",
-            "Cloned dashboard repository",
-        ),
+        &StartStep::with_ok("Cloning dashboard repository", "Cloned dashboard repository"),
         || step_clone_component("dashboard", DASHBOARD_REPO_URL, &dashboard_dir, force),
     )?;
 
     run_step(
-        &StartStep::with_ok(
-            "Creating configuration directory",
-            "Created configuration directory",
-        ),
+        &StartStep::with_ok("Creating configuration directory", "Created configuration directory"),
         || match step_create_config_dir() {
             Ok(Some(_)) => Ok(StepOutcome::Skipped),
             Ok(None) => Ok(StepOutcome::Success),
@@ -1011,47 +917,38 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     )?;
 
     run_step(
-        &StartStep::with_ok(
-            "Pulling Docker registry image",
-            "Pulled Docker registry image",
-        ),
+        &StartStep::with_ok("Pulling Docker registry image", "Pulled Docker registry image"),
         || pull_image("registry:2").map(|()| StepOutcome::Success),
     )?;
 
     // Phase 2: Setting up cluster
     print_phase_header("Setting up cluster");
 
-    run_step(
-        &StartStep::with_ok("Checking prerequisites", "Checked prerequisites"),
-        || {
-            for cmd in &["docker", "talosctl", "kubectl", "helm"] {
-                if !command_exists(cmd) {
-                    return Err(format!(
-                        "{} is not installed. Run 'inferadb dev doctor' for setup instructions.",
-                        cmd
-                    ));
-                }
+    run_step(&StartStep::with_ok("Checking prerequisites", "Checked prerequisites"), || {
+        for cmd in &["docker", "talosctl", "kubectl", "helm"] {
+            if !command_exists(cmd) {
+                return Err(format!(
+                    "{} is not installed. Run 'inferadb dev doctor' for setup instructions.",
+                    cmd
+                ));
             }
-            if !is_docker_running() {
-                return Err("Docker daemon is not running. Please start Docker first.".to_string());
-            }
-            Ok(StepOutcome::Success)
-        },
-    )?;
+        }
+        if !is_docker_running() {
+            return Err("Docker daemon is not running. Please start Docker first.".to_string());
+        }
+        Ok(StepOutcome::Success)
+    })?;
 
     let (ts_client_id, ts_client_secret) = get_tailscale_credentials()?;
     let cluster_already_exists = docker_container_exists(CLUSTER_NAME);
 
-    run_step(
-        &StartStep::with_ok("Cleaning stale contexts", "Cleaned stale contexts"),
-        || {
-            if cluster_already_exists {
-                return Ok(StepOutcome::Skipped);
-            }
-            cleanup_stale_contexts();
-            Ok(StepOutcome::Success)
-        },
-    )?;
+    run_step(&StartStep::with_ok("Cleaning stale contexts", "Cleaned stale contexts"), || {
+        if cluster_already_exists {
+            return Ok(StepOutcome::Skipped);
+        }
+        cleanup_stale_contexts();
+        Ok(StepOutcome::Success)
+    })?;
 
     run_step(
         &StartStep::with_ok("Provisioning Talos cluster", "Provisioned Talos cluster"),
@@ -1088,17 +985,14 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
         },
     )?;
 
-    run_step(
-        &StartStep::with_ok("Setting kubectl context", "Set kubectl context"),
-        || {
-            if let Some(current) = kubectl_current_context() {
-                if current == KUBE_CONTEXT {
-                    return Ok(StepOutcome::Skipped);
-                }
+    run_step(&StartStep::with_ok("Setting kubectl context", "Set kubectl context"), || {
+        if let Some(current) = kubectl_current_context() {
+            if current == KUBE_CONTEXT {
+                return Ok(StepOutcome::Skipped);
             }
-            kubectl_use_context(KUBE_CONTEXT).map(|()| StepOutcome::Success)
-        },
-    )?;
+        }
+        kubectl_use_context(KUBE_CONTEXT).map(|()| StepOutcome::Success)
+    })?;
 
     run_step(
         &StartStep::with_ok("Verifying cluster is ready", "Verified cluster is ready"),
@@ -1122,26 +1016,17 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     }
 
     run_step(
-        &StartStep::with_ok(
-            "Setting up Kubernetes resources",
-            "Set up Kubernetes resources",
-        ),
+        &StartStep::with_ok("Setting up Kubernetes resources", "Set up Kubernetes resources"),
         || setup_kubernetes_resources(&registry_ip),
     )?;
 
     run_step(
-        &StartStep::with_ok(
-            "Installing Tailscale operator",
-            "Installed Tailscale operator",
-        ),
+        &StartStep::with_ok("Installing Tailscale operator", "Installed Tailscale operator"),
         || install_tailscale_operator(&ts_client_id, &ts_client_secret),
     )?;
 
     run_step(
-        &StartStep::with_ok(
-            "Installing FoundationDB operator",
-            "Installed FoundationDB operator",
-        ),
+        &StartStep::with_ok("Installing FoundationDB operator", "Installed FoundationDB operator"),
         install_fdb_operator,
     )?;
 

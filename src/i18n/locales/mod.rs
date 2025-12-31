@@ -68,7 +68,7 @@ pub fn resolve_locale(locale: &str) -> &'static str {
                 // Add more language fallbacks here
                 _ => "en-US",
             }
-        }
+        },
     }
 }
 

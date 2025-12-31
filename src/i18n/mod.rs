@@ -20,10 +20,10 @@
 mod bundle;
 mod locales;
 
+use std::sync::OnceLock;
+
 pub use bundle::I18n;
 pub use locales::SUPPORTED_LOCALES;
-
-use std::sync::OnceLock;
 
 /// Global i18n instance, initialized once at startup.
 static I18N: OnceLock<I18n> = OnceLock::new();
@@ -70,8 +70,7 @@ pub fn init_auto() -> bool {
 ///
 /// Panics if `init()` has not been called.
 pub fn get() -> &'static I18n {
-    I18N.get()
-        .expect("i18n not initialized - call i18n::init() first")
+    I18N.get().expect("i18n not initialized - call i18n::init() first")
 }
 
 /// Try to get the global i18n instance without panicking.

@@ -5,15 +5,14 @@
 //!
 //! This module provides a thin wrapper around Teapot's `TaskProgressView`.
 
-use std::any::Any;
-use std::path::PathBuf;
+use std::{any::Any, path::PathBuf};
 
-use teapot::components::{
-    ConfirmationConfig, Phase, TaskProgressMsg, TaskProgressView, TaskStep,
+use teapot::{
+    components::{ConfirmationConfig, Phase, TaskProgressMsg, TaskProgressView, TaskStep},
+    runtime::{Cmd, Model, Sub},
+    style::Color,
+    terminal::Event,
 };
-use teapot::runtime::{Cmd, Model, Sub};
-use teapot::style::Color;
-use teapot::terminal::Event;
 
 use super::install_view::InstallStep;
 
@@ -142,10 +141,7 @@ impl DevUninstallView {
     pub fn new(steps: Vec<InstallStep>, info: UninstallInfo, with_credentials: bool) -> Self {
         let task_steps: Vec<TaskStep> = steps.into_iter().map(|s| s.into()).collect();
 
-        let context = UninstallContext {
-            info: info.clone(),
-            with_credentials,
-        };
+        let context = UninstallContext { info: info.clone(), with_credentials };
 
         let inner = TaskProgressView::with_context(task_steps, context)
             .title("InferaDB Development Cluster")
@@ -176,10 +172,7 @@ impl DevUninstallView {
 
     /// Set custom title.
     pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.inner = TaskProgressView::builder(vec![])
-            .title(title)
-            .subtitle("Uninstall")
-            .build();
+        self.inner = TaskProgressView::builder(vec![]).title(title).subtitle("Uninstall").build();
         self
     }
 

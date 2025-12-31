@@ -2,14 +2,18 @@
 //!
 //! Provides dependency checking, Docker daemon status, and environment verification.
 
-use crate::client::Context;
-use crate::error::{Error, Result};
-use crate::tui::{CheckResult, EnvironmentStatus};
 use teapot::output::error as print_error;
 
-use super::commands::{command_exists, extract_version_string, run_command_optional};
-use super::output::{format_dot_leader, print_hint, print_phase_header, print_styled_header};
-use super::paths::get_tailscale_creds_file;
+use super::{
+    commands::{command_exists, extract_version_string, run_command_optional},
+    output::{format_dot_leader, print_hint, print_phase_header, print_styled_header},
+    paths::get_tailscale_creds_file,
+};
+use crate::{
+    client::Context,
+    error::{Error, Result},
+    tui::{CheckResult, EnvironmentStatus},
+};
 
 /// Dependency information for doctor command.
 pub struct Dependency {
@@ -103,10 +107,7 @@ pub fn check_dependency(dep: &Dependency) -> (CheckResult, bool) {
     };
 
     if exists {
-        (
-            CheckResult::success("Dependencies", dep.name, version),
-            true,
-        )
+        (CheckResult::success("Dependencies", dep.name, version), true)
     } else if dep.required {
         (
             CheckResult::failure(
@@ -117,10 +118,7 @@ pub fn check_dependency(dep: &Dependency) -> (CheckResult, bool) {
             false,
         )
     } else {
-        (
-            CheckResult::optional("Dependencies", dep.name, "not found (optional)"),
-            true,
-        )
+        (CheckResult::optional("Dependencies", dep.name, "not found (optional)"), true)
     }
 }
 
@@ -131,16 +129,9 @@ pub fn check_docker_daemon() -> Option<(CheckResult, bool)> {
     }
 
     match run_command_optional("docker", &["info"]) {
-        Some(_) => Some((
-            CheckResult::success("Services", "Docker daemon", "RUNNING"),
-            true,
-        )),
+        Some(_) => Some((CheckResult::success("Services", "Docker daemon", "RUNNING"), true)),
         None => Some((
-            CheckResult::failure(
-                "Services",
-                "Docker daemon",
-                "not running → start Docker Desktop",
-            ),
+            CheckResult::failure("Services", "Docker daemon", "not running → start Docker Desktop"),
             false,
         )),
     }
@@ -157,13 +148,9 @@ pub fn check_tailscale_connection() -> Option<CheckResult> {
             if output.contains("\"BackendState\"") && output.contains("\"Running\"") {
                 Some(CheckResult::success("Services", "Tailscale", "CONNECTED"))
             } else {
-                Some(CheckResult::optional(
-                    "Services",
-                    "Tailscale",
-                    "not connected → tailscale up",
-                ))
+                Some(CheckResult::optional("Services", "Tailscale", "not connected → tailscale up"))
             }
-        }
+        },
         None => None,
     }
 }
@@ -184,10 +171,7 @@ pub fn check_tailscale_credentials() -> CheckResult {
 
 /// Extract the detail from a CheckResult status string.
 pub fn extract_status_detail(status: &str) -> &str {
-    status
-        .trim_start_matches("✓ ")
-        .trim_start_matches("✗ ")
-        .trim_start_matches("○ ")
+    status.trim_start_matches("✓ ").trim_start_matches("✗ ").trim_start_matches("○ ")
 }
 
 /// Format a check result with component name and dot leaders.
@@ -225,11 +209,8 @@ pub fn run_all_checks() -> (Vec<CheckResult>, EnvironmentStatus) {
     // Check Tailscale credentials
     results.push(check_tailscale_credentials());
 
-    let status = if all_required_ok {
-        EnvironmentStatus::Ready
-    } else {
-        EnvironmentStatus::NotReady
-    };
+    let status =
+        if all_required_ok { EnvironmentStatus::Ready } else { EnvironmentStatus::NotReady };
 
     (results, status)
 }
@@ -351,18 +332,19 @@ fn doctor_with_spinners() -> Result<()> {
 
 /// Run doctor with full-screen TUI.
 fn doctor_interactive() -> Result<()> {
+    use teapot::{
+        output::{terminal_height, terminal_width},
+        runtime::{Program, ProgramOptions},
+    };
+
     use crate::tui::DevDoctorView;
-    use teapot::output::{terminal_height, terminal_width};
-    use teapot::runtime::{Program, ProgramOptions};
 
     let width = terminal_width();
     let height = terminal_height();
 
     let (results, status) = run_all_checks();
 
-    let view = DevDoctorView::new(width, height)
-        .with_status(status)
-        .with_results(results);
+    let view = DevDoctorView::new(width, height).with_status(status).with_results(results);
 
     let is_ready = view.is_ready();
 
@@ -371,9 +353,5 @@ fn doctor_interactive() -> Result<()> {
         .run()
         .map_err(|e| Error::Other(e.to_string()))?;
 
-    if is_ready {
-        Ok(())
-    } else {
-        Err(Error::Other("Missing required dependencies".to_string()))
-    }
+    if is_ready { Ok(()) } else { Err(Error::Other("Missing required dependencies".to_string())) }
 }

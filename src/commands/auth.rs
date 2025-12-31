@@ -1,11 +1,12 @@
 //! Authentication commands: login, logout, register.
 
-use crate::client::{auth, Context, OAuthFlow};
-use crate::error::Result;
-use crate::t;
-use crate::tui;
-
 use teapot::forms::{Form, Group, InputField};
+
+use crate::{
+    client::{Context, OAuthFlow, auth},
+    error::Result,
+    t, tui,
+};
 
 /// Log in to InferaDB via OAuth.
 pub async fn login(ctx: &Context) -> Result<()> {
@@ -29,8 +30,7 @@ pub async fn logout(ctx: &Context) -> Result<()> {
     let profile_name = ctx.effective_profile_name().to_string();
 
     if !auth::has_credentials(&profile_name) {
-        ctx.output
-            .info(&t!("msg-not-logged-in", "profile" => &profile_name));
+        ctx.output.info(&t!("msg-not-logged-in", "profile" => &profile_name));
         return Ok(());
     }
 
@@ -40,8 +40,7 @@ pub async fn logout(ctx: &Context) -> Result<()> {
     }
 
     auth::clear_credentials(&profile_name)?;
-    ctx.output
-        .success(&t!("msg-logout-success", "profile" => &profile_name));
+    ctx.output.success(&t!("msg-logout-success", "profile" => &profile_name));
     Ok(())
 }
 
@@ -52,9 +51,8 @@ pub async fn register(ctx: &Context, email: Option<&str>, name: Option<&str>) ->
         (e.to_string(), n.to_string())
     } else {
         // Build a form for missing fields
-        let mut form = Form::new()
-            .title("Registration")
-            .description("Create your InferaDB account");
+        let mut form =
+            Form::new().title("Registration").description("Create your InferaDB account");
 
         let mut group = Group::new();
 
@@ -85,7 +83,7 @@ pub async fn register(ctx: &Context, email: Option<&str>, name: Option<&str>) ->
             None => {
                 ctx.output.info("Registration cancelled.");
                 return Ok(());
-            }
+            },
         };
 
         let email = email
@@ -102,14 +100,11 @@ pub async fn register(ctx: &Context, email: Option<&str>, name: Option<&str>) ->
     };
 
     if email.is_empty() || name.is_empty() {
-        return Err(crate::error::Error::invalid_arg(t!(
-            "msg-email-name-required"
-        )));
+        return Err(crate::error::Error::invalid_arg(t!("msg-email-name-required")));
     }
 
     ctx.output.info(&t!("msg-registration-not-implemented"));
-    ctx.output
-        .info(&t!("msg-registration-email-name", "email" => &email, "name" => &name));
+    ctx.output.info(&t!("msg-registration-email-name", "email" => &email, "name" => &name));
 
     Ok(())
 }

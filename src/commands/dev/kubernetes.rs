@@ -2,8 +2,10 @@
 //!
 //! Provides kubectl abstractions for common operations.
 
-use super::commands::{run_command, run_command_optional};
-use super::constants::INFERADB_NAMESPACE;
+use super::{
+    commands::{run_command, run_command_optional},
+    constants::INFERADB_NAMESPACE,
+};
 
 /// Get JSON output from kubectl for a resource type.
 ///
@@ -22,9 +24,7 @@ pub fn kubectl_get_json_with_selector(
 ) -> Option<serde_json::Value> {
     let output = run_command_optional(
         "kubectl",
-        &[
-            "get", resource, "-n", namespace, "-l", selector, "-o", "json",
-        ],
+        &["get", resource, "-n", namespace, "-l", selector, "-o", "json"],
     )?;
     serde_json::from_str(&output).ok()
 }
@@ -112,10 +112,7 @@ pub fn ensure_namespace(namespace: &str) -> Result<(), String> {
 /// Returns: Vec<(name, process_count, version)>
 pub fn get_fdb_clusters() -> Vec<(String, String, String)> {
     kubectl_list("foundationdbcluster", INFERADB_NAMESPACE, |item| {
-        let name = item
-            .pointer("/metadata/name")
-            .and_then(|v| v.as_str())?
-            .to_string();
+        let name = item.pointer("/metadata/name").and_then(|v| v.as_str())?.to_string();
 
         // Sum up all process counts
         let total_processes: i64 = item
@@ -147,10 +144,7 @@ pub fn get_inferadb_deployments() -> Vec<(String, String, String)> {
         "app.kubernetes.io/name in (inferadb-engine,inferadb-control,inferadb-dashboard)";
 
     kubectl_list_with_selector("deployments", INFERADB_NAMESPACE, selector, |item| {
-        let name = item
-            .pointer("/metadata/name")
-            .and_then(|v| v.as_str())?
-            .to_string();
+        let name = item.pointer("/metadata/name").and_then(|v| v.as_str())?.to_string();
 
         let replicas = item
             .pointer("/spec/replicas")
@@ -180,10 +174,7 @@ pub fn get_inferadb_deployments() -> Vec<(String, String, String)> {
 /// Returns: Vec<(name, size, status)>
 pub fn get_pvcs() -> Vec<(String, String, String)> {
     kubectl_list("pvc", INFERADB_NAMESPACE, |item| {
-        let name = item
-            .pointer("/metadata/name")
-            .and_then(|v| v.as_str())?
-            .to_string();
+        let name = item.pointer("/metadata/name").and_then(|v| v.as_str())?.to_string();
 
         let size = item
             .pointer("/spec/resources/requests/storage")
@@ -191,11 +182,8 @@ pub fn get_pvcs() -> Vec<(String, String, String)> {
             .unwrap_or("unknown")
             .to_string();
 
-        let status = item
-            .pointer("/status/phase")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
+        let status =
+            item.pointer("/status/phase").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
 
         Some((name, size, status))
     })

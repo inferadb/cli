@@ -3,18 +3,19 @@
 //! A full-screen TUI for viewing cluster status with tabs for
 //! URLs, Services, Nodes, and Pods.
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use teapot::components::{
-    BadgeVariant, Column, FooterHints, Modal, ModalBorder, StatusBadge, Tab, TabBar, Table,
-    TitleBar,
+use teapot::{
+    Cmd, Model,
+    components::{
+        BadgeVariant, Column, FooterHints, Modal, ModalBorder, StatusBadge, Tab, TabBar, Table,
+        TitleBar,
+    },
+    runtime::Sub,
+    style::{Color, RESET},
+    terminal::{Event, KeyCode},
+    util::{ScrollState, measure_text},
 };
-use teapot::runtime::Sub;
-use teapot::style::{Color, RESET};
-use teapot::terminal::{Event, KeyCode};
-use teapot::util::{measure_text, ScrollState};
-use teapot::{Cmd, Model};
 
 /// Data returned by a refresh callback.
 #[derive(Clone)]
@@ -81,12 +82,7 @@ impl StatusTab {
 
     /// All tabs in order.
     pub fn all() -> &'static [StatusTab] {
-        &[
-            StatusTab::Urls,
-            StatusTab::Services,
-            StatusTab::Nodes,
-            StatusTab::Pods,
-        ]
+        &[StatusTab::Urls, StatusTab::Services, StatusTab::Nodes, StatusTab::Pods]
     }
 
     /// Create from ID string.
@@ -199,9 +195,7 @@ impl EnvironmentStatus {
 
     /// Get a StatusBadge for this status.
     pub fn badge(&self) -> StatusBadge {
-        StatusBadge::new(self.text())
-            .icon(self.indicator())
-            .color(self.color())
+        StatusBadge::new(self.text()).icon(self.indicator()).color(self.color())
     }
 }
 
@@ -292,10 +286,8 @@ pub struct DevStatusView {
 impl DevStatusView {
     /// Create a new status view.
     pub fn new(width: usize, height: usize) -> Self {
-        let tabs: Vec<Tab> = StatusTab::all()
-            .iter()
-            .map(|t| Tab::new(t.id(), t.label()).key(t.key()))
-            .collect();
+        let tabs: Vec<Tab> =
+            StatusTab::all().iter().map(|t| Tab::new(t.id(), t.label()).key(t.key())).collect();
 
         let tab_bar = TabBar::new()
             .tabs(tabs)
@@ -414,11 +406,7 @@ impl DevStatusView {
                     h.clone()
                 };
                 let col = Column::new(&header_text);
-                if i == 0 {
-                    col.grow()
-                } else {
-                    col
-                }
+                if i == 0 { col.grow() } else { col }
             })
             .collect();
 
@@ -430,11 +418,7 @@ impl DevStatusView {
                 let a_val = a.get(col).map(|s| s.as_str()).unwrap_or("");
                 let b_val = b.get(col).map(|s| s.as_str()).unwrap_or("");
                 let cmp = a_val.cmp(b_val);
-                if self.sort_ascending {
-                    cmp
-                } else {
-                    cmp.reverse()
-                }
+                if self.sort_ascending { cmp } else { cmp.reverse() }
             });
         }
         self.rows = sorted_rows;
@@ -572,55 +556,54 @@ impl Model for DevStatusView {
         match msg {
             DevStatusViewMsg::SelectPrev => {
                 self.scroll.select_prev();
-            }
+            },
             DevStatusViewMsg::SelectNext => {
                 self.scroll.select_next(self.rows.len(), self.visible_rows());
-            }
+            },
             DevStatusViewMsg::ScrollLeft => {
                 self.scroll.scroll_left(4);
-            }
+            },
             DevStatusViewMsg::ScrollRight => {
                 self.scroll.scroll_right(4, self.max_h_scroll());
-            }
+            },
             DevStatusViewMsg::PageUp => {
                 self.scroll.page_up(self.visible_rows());
-            }
+            },
             DevStatusViewMsg::PageDown => {
                 self.scroll.page_down(self.rows.len(), self.visible_rows());
-            }
+            },
             DevStatusViewMsg::SwitchTab(id) => {
                 self.tab_bar.set_selected(&id);
                 self.handle_tab_switch();
-            }
+            },
             DevStatusViewMsg::NextTab => {
                 self.tab_bar.update(teapot::components::TabBarMsg::Next);
                 self.handle_tab_switch();
-            }
+            },
             DevStatusViewMsg::PrevTab => {
-                self.tab_bar
-                    .update(teapot::components::TabBarMsg::Previous);
+                self.tab_bar.update(teapot::components::TabBarMsg::Previous);
                 self.handle_tab_switch();
-            }
+            },
             DevStatusViewMsg::CycleSort => {
                 self.cycle_sort();
-            }
+            },
             DevStatusViewMsg::CloseModal => {
                 self.show_offline_modal = false;
-            }
+            },
             DevStatusViewMsg::Quit => {
                 return Some(Cmd::quit());
-            }
+            },
             DevStatusViewMsg::Resize { width, height } => {
                 self.width = width;
                 self.height = height;
-            }
+            },
             DevStatusViewMsg::Tick => {
                 // Trigger data refresh if callback is available
                 if let Some(ref refresh_fn) = self.refresh_fn {
                     let f = Arc::clone(refresh_fn);
                     return Some(Cmd::perform(move || DevStatusViewMsg::RefreshData(f())));
                 }
-            }
+            },
             DevStatusViewMsg::RefreshData(result) => {
                 // Apply the refreshed data
                 self.cluster_status = result.cluster_status;
@@ -629,7 +612,7 @@ impl Model for DevStatusView {
                 self.nodes_data = result.nodes;
                 self.pods_data = result.pods;
                 self.sync_current_tab_data();
-            }
+            },
         }
         self.clamp_scroll();
         None
@@ -693,11 +676,7 @@ impl Model for DevStatusView {
         }
 
         // Overlay modal if showing
-        if self.show_offline_modal {
-            self.render_offline_modal(&output)
-        } else {
-            output
-        }
+        if self.show_offline_modal { self.render_offline_modal(&output) } else { output }
     }
 
     fn handle_event(&self, event: Event) -> Option<Self::Message> {
@@ -727,26 +706,23 @@ impl Model for DevStatusView {
                                 return Some(DevStatusViewMsg::SwitchTab(id.to_string()));
                             }
                             None
-                        }
+                        },
                         _ => None,
                     }
                 }
-            }
-            Event::Resize { width, height } => Some(DevStatusViewMsg::Resize {
-                width: width as usize,
-                height: height as usize,
-            }),
+            },
+            Event::Resize { width, height } => {
+                Some(DevStatusViewMsg::Resize { width: width as usize, height: height as usize })
+            },
             _ => None,
         }
     }
 
     fn subscriptions(&self) -> Sub<Self::Message> {
         if self.refresh_fn.is_some() {
-            Sub::interval(
-                "status-refresh",
-                Duration::from_secs(self.refresh_interval_secs),
-                || DevStatusViewMsg::Tick,
-            )
+            Sub::interval("status-refresh", Duration::from_secs(self.refresh_interval_secs), || {
+                DevStatusViewMsg::Tick
+            })
         } else {
             Sub::none()
         }

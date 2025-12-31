@@ -1,9 +1,10 @@
 //! Bulk export and import operations.
 
-use crate::client::Context;
-use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{client::Context, error::Result};
 
 /// A relationship for export/import.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,10 +55,8 @@ pub async fn export(
 
     // If there are more, notify user
     if page.has_more() {
-        ctx.output
-            .warn("More relationships available. Only first 1000 exported.");
-        ctx.output
-            .info("Use pagination to export more (not yet implemented).");
+        ctx.output.warn("More relationships available. Only first 1000 exported.");
+        ctx.output.info("Use pagination to export more (not yet implemented).");
     }
 
     if relationships.is_empty() {
@@ -65,14 +64,10 @@ pub async fn export(
         return Ok(());
     }
 
-    ctx.output
-        .info(&format!("Found {} relationships.", relationships.len()));
+    ctx.output.info(&format!("Found {} relationships.", relationships.len()));
 
     // Format the data
-    let export_data = ExportData {
-        version: "1.0".to_string(),
-        relationships,
-    };
+    let export_data = ExportData { version: "1.0".to_string(), relationships };
 
     let content = match format {
         "json" => serde_json::to_string_pretty(&export_data)?,
@@ -80,20 +75,14 @@ pub async fn export(
         "csv" => {
             let mut csv = String::from("resource,relation,subject\n");
             for rel in &export_data.relationships {
-                csv.push_str(&format!(
-                    "{},{},{}\n",
-                    rel.resource, rel.relation, rel.subject
-                ));
+                csv.push_str(&format!("{},{},{}\n", rel.resource, rel.relation, rel.subject));
             }
             csv
-        }
+        },
         _ => {
-            ctx.output.error(&format!(
-                "Unknown format: {}. Use json, yaml, or csv.",
-                format
-            ));
+            ctx.output.error(&format!("Unknown format: {}. Use json, yaml, or csv.", format));
             return Ok(());
-        }
+        },
     };
 
     // Write to file or stdout
@@ -105,10 +94,10 @@ pub async fn export(
                 export_data.relationships.len(),
                 path
             ));
-        }
+        },
         None => {
             println!("{}", content);
-        }
+        },
     }
 
     Ok(())
@@ -150,10 +139,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
         return Ok(());
     }
 
-    ctx.output.info(&format!(
-        "Found {} relationships to import.",
-        relationships.len()
-    ));
+    ctx.output.info(&format!("Found {} relationships to import.", relationships.len()));
     ctx.output.info(&format!("Mode: {}", mode));
 
     if dry_run {
@@ -175,8 +161,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
             }
         }
 
-        ctx.output
-            .info(&format!("Valid: {}, Invalid: {}", valid, invalid));
+        ctx.output.info(&format!("Valid: {}, Invalid: {}", valid, invalid));
         return Ok(());
     }
 
@@ -214,18 +199,14 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
                                 rel.resource, rel.relation, rel.subject, e
                             ));
                         }
-                    }
+                    },
                 }
             }
 
-            ctx.output.success(&format!(
-                "Imported {} relationships ({} failed).",
-                success, failed
-            ));
-        }
+            ctx.output.success(&format!("Imported {} relationships ({} failed).", success, failed));
+        },
         "replace" => {
-            ctx.output
-                .warn("Replace mode will delete all existing relationships first.");
+            ctx.output.warn("Replace mode will delete all existing relationships first.");
 
             if !yes {
                 let confirmed =
@@ -240,7 +221,8 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
             ctx.output.info("Deleting existing relationships...");
 
             // Use the delete_where builder to delete all relationships
-            // For now, we'll list and delete individually since delete_where might not delete everything
+            // For now, we'll list and delete individually since delete_where might not delete
+            // everything
             let mut deleted = 0;
             loop {
                 let page = rels.list().limit(100).await?;
@@ -257,8 +239,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
                 }
             }
 
-            ctx.output
-                .info(&format!("Deleted {} relationships.", deleted));
+            ctx.output.info(&format!("Deleted {} relationships.", deleted));
 
             // Now write the new relationships
             let mut success = 0;
@@ -270,15 +251,11 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
                 }
             }
 
-            ctx.output
-                .success(&format!("Imported {} relationships.", success));
-        }
+            ctx.output.success(&format!("Imported {} relationships.", success));
+        },
         _ => {
-            ctx.output.error(&format!(
-                "Unknown mode: {}. Use merge, upsert, or replace.",
-                mode
-            ));
-        }
+            ctx.output.error(&format!("Unknown mode: {}. Use merge, upsert, or replace.", mode));
+        },
     }
 
     Ok(())

@@ -2,17 +2,21 @@
 //!
 //! Displays cluster status, node status, pod status, and URLs.
 
-use crate::client::Context;
-use crate::error::{Error, Result};
-use crate::tui::{ClusterStatus, RefreshResult, TabData};
 use teapot::style::{Color, RESET};
 
-use super::commands::run_command_optional;
-use super::constants::{TIP_RESUME_CLUSTER, TIP_START_CLUSTER};
-use super::docker::{are_containers_paused, cluster_exists};
-use super::output::{
-    print_colored_prefix_dot_leader, print_hint, print_prefixed_dot_leader, print_section_header,
-    print_styled_header,
+use super::{
+    commands::run_command_optional,
+    constants::{TIP_RESUME_CLUSTER, TIP_START_CLUSTER},
+    docker::{are_containers_paused, cluster_exists},
+    output::{
+        print_colored_prefix_dot_leader, print_hint, print_prefixed_dot_leader,
+        print_section_header, print_styled_header,
+    },
+};
+use crate::{
+    client::Context,
+    error::{Error, Result},
+    tui::{ClusterStatus, RefreshResult, TabData},
 };
 
 // ============================================================================
@@ -74,7 +78,7 @@ fn status_with_spinners() -> Result<()> {
             println!();
             print_hint(TIP_START_CLUSTER);
             return Ok(());
-        }
+        },
         ClusterStatus::Paused => {
             let prefix = format!("{}⚠{}", yellow, reset);
             let status = format!("{}STOPPED{}", yellow, reset);
@@ -82,15 +86,15 @@ fn status_with_spinners() -> Result<()> {
             println!();
             print_hint(TIP_RESUME_CLUSTER);
             return Ok(());
-        }
+        },
         ClusterStatus::Online => {
             let prefix = format!("{}✓{}", green, reset);
             print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "RUNNING");
-        }
+        },
         ClusterStatus::Unknown => {
             let prefix = format!("{}○{}", yellow, reset);
             print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "UNKNOWN");
-        }
+        },
     }
 
     if let Some(current) = run_command_optional("kubectl", &["config", "current-context"]) {
@@ -126,9 +130,8 @@ fn print_nodes_status() {
                 for node in items {
                     let name = node["metadata"]["name"].as_str().unwrap_or("");
                     let labels = &node["metadata"]["labels"];
-                    let is_control_plane = labels
-                        .get("node-role.kubernetes.io/control-plane")
-                        .is_some();
+                    let is_control_plane =
+                        labels.get("node-role.kubernetes.io/control-plane").is_some();
 
                     let ready = node["status"]["conditions"]
                         .as_array()
@@ -136,11 +139,7 @@ fn print_nodes_status() {
                         .map(|c| c["status"] == "True")
                         .unwrap_or(false);
 
-                    let role = if is_control_plane {
-                        "control-plane"
-                    } else {
-                        "worker"
-                    };
+                    let role = if is_control_plane { "control-plane" } else { "worker" };
                     let status = if ready {
                         format!("{}Ready{} ({})", green, reset, role)
                     } else {
@@ -164,12 +163,26 @@ fn print_pods_status() {
 
     let inferadb_pods = run_command_optional(
         "kubectl",
-        &["get", "pods", "-n", "inferadb", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}"],
+        &[
+            "get",
+            "pods",
+            "-n",
+            "inferadb",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}",
+        ],
     );
 
     let fdb_pods = run_command_optional(
         "kubectl",
-        &["get", "pods", "-n", "fdb-system", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}"],
+        &[
+            "get",
+            "pods",
+            "-n",
+            "fdb-system",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}",
+        ],
     );
 
     let format_pod = |line: &str| -> Option<(String, String)> {
@@ -183,10 +196,7 @@ fn print_pods_status() {
                 return None;
             }
 
-            let ready_count = ready_statuses
-                .split_whitespace()
-                .filter(|s| *s == "true")
-                .count();
+            let ready_count = ready_statuses.split_whitespace().filter(|s| *s == "true").count();
             let total_count = ready_statuses.split_whitespace().count().max(1);
 
             let status = match phase {
@@ -245,7 +255,14 @@ fn print_pods_status() {
 fn print_urls_status() {
     let output = run_command_optional(
         "kubectl",
-        &["get", "ingress", "-n", "inferadb", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.loadBalancer.ingress[0].hostname}{\"\\n\"}{end}"],
+        &[
+            "get",
+            "ingress",
+            "-n",
+            "inferadb",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}|{.status.loadBalancer.ingress[0].hostname}{\"\\n\"}{end}",
+        ],
     );
 
     if let Some(output) = output {
@@ -279,9 +296,12 @@ fn print_urls_status() {
 
 /// Status interactive TUI mode.
 fn status_interactive() -> Result<()> {
+    use teapot::{
+        output::{terminal_height, terminal_width},
+        runtime::{Program, ProgramOptions},
+    };
+
     use crate::tui::DevStatusView;
-    use teapot::output::{terminal_height, terminal_width};
-    use teapot::runtime::{Program, ProgramOptions};
 
     let width = terminal_width();
     let height = terminal_height();
@@ -312,11 +332,5 @@ fn fetch_status_data() -> RefreshResult {
     let nodes = TabData::default();
     let pods = TabData::default();
 
-    RefreshResult {
-        cluster_status,
-        urls,
-        services,
-        nodes,
-        pods,
-    }
+    RefreshResult { cluster_status, urls, services, nodes, pods }
 }

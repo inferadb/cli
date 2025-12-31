@@ -5,9 +5,11 @@
 //!
 //! This module provides a thin wrapper around Teapot's `TaskProgressView`.
 
-use teapot::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
-use teapot::runtime::{Cmd, Model, Sub};
-use teapot::terminal::Event;
+use teapot::{
+    components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep},
+    runtime::{Cmd, Model, Sub},
+    terminal::Event,
+};
 
 // Re-export for backward compatibility
 pub use super::install_view::InstallStep;
@@ -49,11 +51,8 @@ impl DevStopView {
     /// Set custom title.
     pub fn title(mut self, title: impl Into<String>) -> Self {
         // Rebuild with new title
-        let inner = TaskProgressView::builder(vec![])
-            .title(title)
-            .subtitle("Stop")
-            .auto_start()
-            .build();
+        let inner =
+            TaskProgressView::builder(vec![]).title(title).subtitle("Stop").auto_start().build();
         self.inner = inner;
         self
     }

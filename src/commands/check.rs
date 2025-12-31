@@ -1,8 +1,11 @@
 //! Authorization check commands.
 
-use crate::client::Context;
-use crate::error::{Error, Result};
 use serde::Serialize;
+
+use crate::{
+    client::Context,
+    error::{Error, Result},
+};
 
 /// Check authorization.
 pub async fn check(
@@ -48,7 +51,7 @@ pub async fn check(
                     } else {
                         continue;
                     }
-                }
+                },
                 serde_json::Value::Bool(b) => inferadb::ContextValue::Bool(b),
                 _ => continue,
             };
@@ -70,18 +73,13 @@ pub async fn check(
 
     if ctx.output.format() == crate::output::OutputFormat::Table {
         if allowed {
-            ctx.output.success(&format!(
-                "{} {} {} → allowed",
-                subject, permission, resource
-            ));
+            ctx.output.success(&format!("{} {} {} → allowed", subject, permission, resource));
         } else {
-            ctx.output
-                .error(&format!("{} {} {} → denied", subject, permission, resource));
+            ctx.output.error(&format!("{} {} {} → denied", subject, permission, resource));
 
             if explain {
                 ctx.output.info("");
-                ctx.output
-                    .info("To see why access was denied, use 'inferadb explain-permission'");
+                ctx.output.info("To see why access was denied, use 'inferadb explain-permission'");
             }
 
             // For scripting: return exit code 20 for authorization denied
@@ -133,15 +131,11 @@ pub async fn simulate(
     let result = sim.check(subject, permission, resource).await?;
 
     if result.allowed {
-        ctx.output.success(&format!(
-            "With changes: {} {} {} → allowed",
-            subject, permission, resource
-        ));
+        ctx.output
+            .success(&format!("With changes: {} {} {} → allowed", subject, permission, resource));
     } else {
-        ctx.output.error(&format!(
-            "With changes: {} {} {} → denied",
-            subject, permission, resource
-        ));
+        ctx.output
+            .error(&format!("With changes: {} {} {} → denied", subject, permission, resource));
     }
 
     Ok(())
@@ -152,18 +146,13 @@ pub async fn expand(ctx: &Context, resource: &str, relation: &str, _max_depth: u
     let client = ctx.client().await?;
     let vault = client.vault();
 
-    ctx.output
-        .info(&format!("Expanding {}#{}", resource, relation));
+    ctx.output.info(&format!("Expanding {}#{}", resource, relation));
     ctx.output.info("");
 
     // TODO: Implement expand using SDK
     // For now, list subjects as a fallback
-    let subjects: Vec<String> = vault
-        .subjects()
-        .with_permission(relation)
-        .on_resource(resource)
-        .collect()
-        .await?;
+    let subjects: Vec<String> =
+        vault.subjects().with_permission(relation).on_resource(resource).collect().await?;
 
     if subjects.is_empty() {
         ctx.output.info("(no subjects found)");
@@ -193,10 +182,7 @@ pub async fn explain_permission(
         .resource(resource)
         .await?;
 
-    ctx.output.info(&format!(
-        "Explaining: {} {} {}",
-        subject, permission, resource
-    ));
+    ctx.output.info(&format!("Explaining: {} {} {}", subject, permission, resource));
     ctx.output.info("");
 
     ctx.output.value(&explanation)?;
@@ -214,10 +200,7 @@ pub async fn list_resources(
     let client = ctx.client().await?;
     let vault = client.vault();
 
-    let mut query = vault
-        .resources()
-        .accessible_by(subject)
-        .with_permission(permission);
+    let mut query = vault.resources().accessible_by(subject).with_permission(permission);
 
     if let Some(rt) = resource_type_filter {
         query = query.resource_type(rt);
@@ -231,8 +214,7 @@ pub async fn list_resources(
         for resource in &resources {
             println!("{}", resource);
         }
-        ctx.output
-            .info(&format!("\nTotal: {} resources", resources.len()));
+        ctx.output.info(&format!("\nTotal: {} resources", resources.len()));
     }
 
     Ok(())
@@ -248,10 +230,7 @@ pub async fn list_subjects(
     let client = ctx.client().await?;
     let vault = client.vault();
 
-    let mut query = vault
-        .subjects()
-        .with_permission(permission)
-        .on_resource(resource);
+    let mut query = vault.subjects().with_permission(permission).on_resource(resource);
 
     if let Some(st) = subject_type_filter {
         query = query.subject_type(st);
@@ -265,8 +244,7 @@ pub async fn list_subjects(
         for subject in &subjects {
             println!("{}", subject);
         }
-        ctx.output
-            .info(&format!("\nTotal: {} subjects", subjects.len()));
+        ctx.output.info(&format!("\nTotal: {} subjects", subjects.len()));
     }
 
     Ok(())

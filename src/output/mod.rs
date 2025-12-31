@@ -4,11 +4,15 @@
 //! for table rendering. For message output (success, error, warning, info),
 //! use `teapot::output` directly.
 
-use crate::error::Result;
-use teapot::components::{Column, Table};
-use teapot::output as toutput;
-use serde::Serialize;
 use std::io::IsTerminal;
+
+use serde::Serialize;
+use teapot::{
+    components::{Column, Table},
+    output as toutput,
+};
+
+use crate::error::Result;
 
 /// Output format options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -64,11 +68,7 @@ pub struct Output {
 impl Output {
     /// Create a new output writer.
     pub fn new(format: OutputFormat, color: bool, quiet: bool) -> Self {
-        Self {
-            format,
-            color,
-            quiet,
-        }
+        Self { format, color, quiet }
     }
 
     /// Create an output writer from CLI options.
@@ -93,7 +93,7 @@ impl Output {
             OutputFormat::Table => {
                 // For single values in table mode, fall back to JSON
                 self.json(value)
-            }
+            },
         }
     }
 
@@ -106,11 +106,8 @@ impl Output {
 
                 let rows: Vec<Vec<String>> = items.iter().map(|item| item.table_row()).collect();
 
-                let table = Table::new()
-                    .columns(columns)
-                    .rows(rows)
-                    .show_borders(false)
-                    .focused(false);
+                let table =
+                    Table::new().columns(columns).rows(rows).show_borders(false).focused(false);
 
                 let output = table.render();
                 if self.color {
@@ -119,23 +116,23 @@ impl Output {
                     println!("{}", toutput::strip_ansi(&output));
                 }
                 Ok(())
-            }
+            },
             OutputFormat::Json => {
                 let json = serde_json::to_string_pretty(&items)?;
                 println!("{}", json);
                 Ok(())
-            }
+            },
             OutputFormat::Yaml => {
                 let yaml = serde_yaml::to_string(&items)?;
                 print!("{}", yaml);
                 Ok(())
-            }
+            },
             OutputFormat::JsonLines => {
                 for item in items {
                     self.jsonl(item)?;
                 }
                 Ok(())
-            }
+            },
         }
     }
 
@@ -159,7 +156,7 @@ impl Output {
                     println!("{}", toutput::strip_ansi(&output));
                 }
                 Ok(())
-            }
+            },
             OutputFormat::Json => self.json(item),
             OutputFormat::Yaml => self.yaml(item),
             OutputFormat::JsonLines => self.jsonl(item),
@@ -268,10 +265,7 @@ mod tests {
         assert_eq!(OutputFormat::parse("table").unwrap(), OutputFormat::Table);
         assert_eq!(OutputFormat::parse("json").unwrap(), OutputFormat::Json);
         assert_eq!(OutputFormat::parse("yaml").unwrap(), OutputFormat::Yaml);
-        assert_eq!(
-            OutputFormat::parse("jsonl").unwrap(),
-            OutputFormat::JsonLines
-        );
+        assert_eq!(OutputFormat::parse("jsonl").unwrap(), OutputFormat::JsonLines);
         assert!(OutputFormat::parse("invalid").is_err());
     }
 }

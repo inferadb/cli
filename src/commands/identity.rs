@@ -1,10 +1,10 @@
 //! Identity and diagnostic commands: whoami, status, ping, doctor, health, version.
 
-use crate::client::Context;
-use crate::config::CredentialStore;
-use crate::error::Result;
-use serde::Serialize;
 use std::time::{Duration, Instant};
+
+use serde::Serialize;
+
+use crate::{client::Context, config::CredentialStore, error::Result};
 
 /// Show current user and profile info.
 pub async fn whoami(ctx: &Context) -> Result<()> {
@@ -23,10 +23,7 @@ pub async fn whoami(ctx: &Context) -> Result<()> {
     let store = CredentialStore::new();
     let credentials = store.load(profile_name)?;
     let authenticated = credentials.is_some();
-    let token_expires = credentials
-        .as_ref()
-        .and_then(|c| c.expires_at)
-        .map(|dt| dt.to_rfc3339());
+    let token_expires = credentials.as_ref().and_then(|c| c.expires_at).map(|dt| dt.to_rfc3339());
 
     let output = WhoamiOutput {
         profile: profile_name.to_string(),
@@ -78,11 +75,8 @@ pub async fn status(ctx: &Context) -> Result<()> {
     // Try to connect (without auth)
     let start = Instant::now();
     let client = reqwest::Client::new();
-    let response = client
-        .get(format!("{}/health", url))
-        .timeout(Duration::from_secs(10))
-        .send()
-        .await;
+    let response =
+        client.get(format!("{}/health", url)).timeout(Duration::from_secs(10)).send().await;
 
     let (status, latency_ms) = match response {
         Ok(resp) => {
@@ -92,7 +86,7 @@ pub async fn status(ctx: &Context) -> Result<()> {
             } else {
                 (format!("error ({})", resp.status()), Some(latency))
             }
-        }
+        },
         Err(e) => {
             if e.is_timeout() {
                 ("timeout".to_string(), None)
@@ -101,22 +95,14 @@ pub async fn status(ctx: &Context) -> Result<()> {
             } else {
                 (format!("error: {}", e), None)
             }
-        }
+        },
     };
 
-    let output = StatusOutput {
-        service: url.to_string(),
-        status: status.clone(),
-        latency_ms,
-    };
+    let output = StatusOutput { service: url.to_string(), status: status.clone(), latency_ms };
 
     if ctx.output.format() == crate::output::OutputFormat::Table {
         if status == "healthy" {
-            ctx.output.success(&format!(
-                "Service: {} ({}ms)",
-                status,
-                latency_ms.unwrap_or(0)
-            ));
+            ctx.output.success(&format!("Service: {} ({}ms)", status, latency_ms.unwrap_or(0)));
         } else {
             ctx.output.error(&format!("Service: {}", status));
         }
@@ -139,36 +125,32 @@ pub async fn ping(ctx: &Context, count: u32, control: bool, engine: bool) -> Res
         "service"
     };
 
-    ctx.output
-        .info(&format!("Pinging {} at {}...", target, url));
+    ctx.output.info(&format!("Pinging {} at {}...", target, url));
 
     let client = reqwest::Client::new();
     let mut latencies = Vec::new();
 
     for i in 0..count {
         let start = Instant::now();
-        let response = client
-            .get(format!("{}/health", url))
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await;
+        let response =
+            client.get(format!("{}/health", url)).timeout(Duration::from_secs(5)).send().await;
 
         match response {
             Ok(resp) if resp.status().is_success() => {
                 let latency = start.elapsed().as_millis() as u64;
                 latencies.push(latency);
                 println!("Ping {}: {}ms", i + 1, latency);
-            }
+            },
             Ok(resp) => {
                 println!("Ping {}: error ({})", i + 1, resp.status());
-            }
+            },
             Err(e) => {
                 if e.is_timeout() {
                     println!("Ping {}: timeout", i + 1);
                 } else {
                     println!("Ping {}: error", i + 1);
                 }
-            }
+            },
         }
 
         if i + 1 < count {
@@ -206,36 +188,31 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
                 match tokio::net::lookup_host(format!("{}:443", host)).await {
                     Ok(_) => {
                         println!("✓ ({}ms)", start.elapsed().as_millis());
-                    }
+                    },
                     Err(e) => {
                         println!("✗ Failed: {}", e);
-                    }
+                    },
                 }
             } else {
                 println!("✗ Invalid URL");
             }
-        }
+        },
         Err(e) => {
             println!("✗ Invalid URL: {}", e);
-        }
+        },
     }
 
     // HTTPS check
     print!("TLS connection... ");
     let start = Instant::now();
-    match client
-        .get(format!("{}/health", url))
-        .timeout(Duration::from_secs(10))
-        .send()
-        .await
-    {
+    match client.get(format!("{}/health", url)).timeout(Duration::from_secs(10)).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 println!("✓ ({}ms)", start.elapsed().as_millis());
             } else {
                 println!("⚠ Response: {}", resp.status());
             }
-        }
+        },
         Err(e) => {
             if e.is_timeout() {
                 println!("✗ Timeout");
@@ -244,7 +221,7 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
             } else {
                 println!("✗ Error: {}", e);
             }
-        }
+        },
     }
 
     // Auth check
@@ -262,11 +239,11 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
             } else {
                 println!("✓ Valid token");
             }
-        }
+        },
         None => {
             println!("✗ Not authenticated");
             println!("   Run: inferadb login");
-        }
+        },
     }
 
     // Profile check
@@ -308,11 +285,8 @@ async fn show_health(ctx: &Context, verbose: bool) -> Result<()> {
 
     let client = reqwest::Client::new();
     let start = Instant::now();
-    let response = client
-        .get(format!("{}/health", url))
-        .timeout(Duration::from_secs(10))
-        .send()
-        .await;
+    let response =
+        client.get(format!("{}/health", url)).timeout(Duration::from_secs(10)).send().await;
 
     match response {
         Ok(resp) if resp.status().is_success() => {
@@ -326,17 +300,17 @@ async fn show_health(ctx: &Context, verbose: bool) -> Result<()> {
                     println!("{}", body);
                 }
             }
-        }
+        },
         Ok(resp) => {
             println!("Status: ⚠ degraded ({})", resp.status());
-        }
+        },
         Err(e) => {
             if e.is_timeout() {
                 println!("Status: ✗ timeout");
             } else {
                 println!("Status: ✗ unreachable");
             }
-        }
+        },
     }
 
     println!();
@@ -368,15 +342,12 @@ pub async fn config_show(ctx: &Context, key: Option<&str>) -> Result<()> {
                 if let Some(ref p) = ctx.config.default_profile {
                     println!("{}", p);
                 }
-            }
+            },
             "output.format" => println!("{}", ctx.config.output.format),
             "output.color" => println!("{}", ctx.config.output.color),
             _ => {
-                return Err(crate::error::Error::invalid_arg(format!(
-                    "Unknown key: {}",
-                    k
-                )));
-            }
+                return Err(crate::error::Error::invalid_arg(format!("Unknown key: {}", k)));
+            },
         }
     } else {
         let yaml = serde_yaml::to_string(&ctx.config)?;
@@ -503,15 +474,12 @@ pub async fn stats(ctx: &Context, trends: bool, compact: bool) -> Result<()> {
     if trends {
         println!();
         println!("Trends:");
-        ctx.output
-            .info("Historical trends require time-series data.");
-        ctx.output
-            .info("Use 'inferadb what-changed --since 1d' to see recent activity.");
+        ctx.output.info("Historical trends require time-series data.");
+        ctx.output.info("Use 'inferadb what-changed --since 1d' to see recent activity.");
     }
 
     println!();
-    ctx.output
-        .info("For detailed stats, use the InferaDB Dashboard.");
+    ctx.output.info("For detailed stats, use the InferaDB Dashboard.");
 
     Ok(())
 }
@@ -530,10 +498,7 @@ pub async fn what_changed(
     let since_time = parse_time_spec(since.unwrap_or("1d"));
     let until_time = until.map(parse_time_spec);
 
-    ctx.output.info(&format!(
-        "Showing changes since {}",
-        since.unwrap_or("1 day ago")
-    ));
+    ctx.output.info(&format!("Showing changes since {}", since.unwrap_or("1 day ago")));
     if let Some(u) = until {
         ctx.output.info(&format!("Until {}", u));
     }
@@ -593,18 +558,18 @@ pub async fn what_changed(
                         if !action_str.contains("schema") {
                             return false;
                         }
-                    }
+                    },
                     "relationships" => {
                         if !action_str.contains("relationship") && !action_str.contains("tuple") {
                             return false;
                         }
-                    }
+                    },
                     "permissions" => {
                         if !action_str.contains("permission") && !action_str.contains("role") {
                             return false;
                         }
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
             }
 
@@ -710,8 +675,7 @@ pub async fn what_changed(
         println!();
     }
 
-    ctx.output
-        .info("For full details, use 'inferadb orgs audit-logs'");
+    ctx.output.info("For full details, use 'inferadb orgs audit-logs'");
 
     Ok(())
 }
@@ -750,37 +714,35 @@ pub async fn templates(
             println!("  compare-access         Compare access between two users");
             println!();
             println!("Use 'inferadb templates <name>' for details.");
-        }
+        },
         Some(template_name) => {
             let sub = subject.unwrap_or("user:example-subject");
 
             match template_name {
                 "user-offboarding" => {
                     show_user_offboarding_template(sub, format);
-                }
+                },
                 "batch-check" => {
                     show_batch_check_template(sub, format);
-                }
+                },
                 "debug-denial" => {
                     show_debug_denial_template(sub, format);
-                }
+                },
                 "schema-migration" => {
                     show_schema_migration_template(format);
-                }
+                },
                 "schema-rollback" => {
                     show_schema_rollback_template(format);
-                }
+                },
                 "export-backup" => {
                     show_export_backup_template(format);
-                }
+                },
                 _ => {
-                    ctx.output
-                        .error(&format!("Unknown template: {}", template_name));
-                    ctx.output
-                        .info("Run 'inferadb templates' to see available templates.");
-                }
+                    ctx.output.error(&format!("Unknown template: {}", template_name));
+                    ctx.output.info("Run 'inferadb templates' to see available templates.");
+                },
             }
-        }
+        },
     }
     Ok(())
 }
@@ -819,17 +781,11 @@ fn show_user_offboarding_template(subject: &str, format: &str) {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!();
         println!("# Step 1: Review what the user has access to");
-        println!(
-            "inferadb relationships list --subject {} -o json > access-backup.json",
-            subject
-        );
+        println!("inferadb relationships list --subject {} -o json > access-backup.json", subject);
         println!();
         println!("# Step 2: Remove all relationships for this user");
         println!("# (Review the backup file first!)");
-        println!(
-            "inferadb relationships list --subject {} | while read rel; do",
-            subject
-        );
+        println!("inferadb relationships list --subject {} | while read rel; do", subject);
         println!("  inferadb relationships delete $rel");
         println!("done");
         println!();
@@ -1053,7 +1009,7 @@ pub async fn guide(ctx: &Context, name: Option<&str>) -> Result<()> {
             println!("  security-best-practices Token management, audit, access control");
             println!();
             println!("Use 'inferadb guide <name>' for details.");
-        }
+        },
         Some(guide_name) => match guide_name {
             "quickstart" => show_quickstart_guide(),
             "concepts" => show_concepts_guide(),
@@ -1062,9 +1018,8 @@ pub async fn guide(ctx: &Context, name: Option<&str>) -> Result<()> {
             "incident-response" => show_incident_response_guide(),
             _ => {
                 ctx.output.error(&format!("Unknown guide: {}", guide_name));
-                ctx.output
-                    .info("Run 'inferadb guide' to see available guides.");
-            }
+                ctx.output.info("Run 'inferadb guide' to see available guides.");
+            },
         },
     }
     Ok(())
@@ -1274,6 +1229,6 @@ fn parse_time_spec(spec: &str) -> chrono::DateTime<chrono::Utc> {
 
             // Default to 1 day ago
             now - Duration::days(1)
-        }
+        },
     }
 }

@@ -22,9 +22,12 @@
 //! }
 //! ```
 
+use teapot::{
+    forms::{Form, FormResults},
+    output::{is_ci, is_tty},
+};
+
 use crate::error::Result;
-use teapot::forms::{Form, FormResults};
-use teapot::output::{is_ci, is_tty};
 
 /// Run a form and return its results.
 ///
@@ -35,8 +38,7 @@ use teapot::output::{is_ci, is_tty};
 pub fn run_form(mut form: Form) -> Result<Option<FormResults>> {
     // Always use accessible mode for CLI - it's the most compatible
     // and still provides a good experience
-    form.run_accessible()
-        .map_err(|e| crate::error::Error::other(e.to_string()))
+    form.run_accessible().map_err(|e| crate::error::Error::other(e.to_string()))
 }
 
 /// Check if forms should use accessible (plain text) mode.

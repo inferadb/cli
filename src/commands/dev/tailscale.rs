@@ -2,13 +2,10 @@
 //!
 //! Manages loading, saving, and prompting for Tailscale OAuth credentials.
 
-use std::env;
-use std::fs;
+use std::{env, fs};
 
+use super::{commands::run_command_optional, paths::get_tailscale_creds_file};
 use crate::error::{Error, Result};
-
-use super::commands::run_command_optional;
-use super::paths::get_tailscale_creds_file;
 
 /// Load cached Tailscale credentials.
 pub fn load_tailscale_credentials() -> Option<(String, String)> {
@@ -24,16 +21,11 @@ pub fn load_tailscale_credentials() -> Option<(String, String)> {
     for line in content.lines() {
         let line = line.trim();
         if line.starts_with("TAILSCALE_CLIENT_ID=") {
-            client_id = Some(
-                line.trim_start_matches("TAILSCALE_CLIENT_ID=")
-                    .trim_matches('"')
-                    .to_string(),
-            );
+            client_id =
+                Some(line.trim_start_matches("TAILSCALE_CLIENT_ID=").trim_matches('"').to_string());
         } else if line.starts_with("TAILSCALE_CLIENT_SECRET=") {
             client_secret = Some(
-                line.trim_start_matches("TAILSCALE_CLIENT_SECRET=")
-                    .trim_matches('"')
-                    .to_string(),
+                line.trim_start_matches("TAILSCALE_CLIENT_SECRET=").trim_matches('"').to_string(),
             );
         }
     }
@@ -81,10 +73,9 @@ pub fn get_tailscale_credentials() -> Result<(String, String)> {
     use teapot::forms::{Form, Group, InputField, NoteField};
 
     // Try environment variables first
-    if let (Ok(id), Ok(secret)) = (
-        env::var("TAILSCALE_CLIENT_ID"),
-        env::var("TAILSCALE_CLIENT_SECRET"),
-    ) {
+    if let (Ok(id), Ok(secret)) =
+        (env::var("TAILSCALE_CLIENT_ID"), env::var("TAILSCALE_CLIENT_SECRET"))
+    {
         if !id.is_empty() && !secret.is_empty() {
             return Ok((id, secret));
         }
@@ -118,18 +109,9 @@ Step 3: Create OAuth client
     let form = Form::new().title("Tailscale Setup").group(
         Group::new()
             .field(NoteField::new(instructions).build())
+            .field(InputField::new("client_id").title("Client ID").required().build())
             .field(
-                InputField::new("client_id")
-                    .title("Client ID")
-                    .required()
-                    .build(),
-            )
-            .field(
-                InputField::new("client_secret")
-                    .title("Client Secret")
-                    .required()
-                    .hidden()
-                    .build(),
+                InputField::new("client_secret").title("Client Secret").required().hidden().build(),
             ),
     );
 
@@ -147,9 +129,7 @@ Step 3: Create OAuth client
         .to_string();
 
     if client_id.is_empty() || client_secret.is_empty() {
-        return Err(Error::Other(
-            "Both Client ID and Client Secret are required".to_string(),
-        ));
+        return Err(Error::Other("Both Client ID and Client Secret are required".to_string()));
     }
 
     // Save credentials for future use

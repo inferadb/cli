@@ -2,11 +2,13 @@
 //!
 //! Provides consistent formatting for step output, dot leaders, and status messages.
 
-use crate::error::{Error, Result};
-use crate::tui::start_spinner;
 use teapot::style::RESET;
 
 use super::constants::STEP_LINE_WIDTH;
+use crate::{
+    error::{Error, Result},
+    tui::start_spinner,
+};
 
 // ============================================================================
 // Color Constants (using Ferment's Color for consistency)
@@ -121,23 +123,12 @@ pub struct DotLeaderConfig<'a> {
 impl<'a> DotLeaderConfig<'a> {
     /// Create a simple dot leader with just text and status.
     pub fn simple(text: &'a str, status: &'a str) -> Self {
-        Self {
-            text,
-            status,
-            auto_color_status: true,
-            ..Default::default()
-        }
+        Self { text, status, auto_color_status: true, ..Default::default() }
     }
 
     /// Create a dot leader with a prefix.
     pub fn with_prefix(prefix: &'a str, text: &'a str, status: &'a str) -> Self {
-        Self {
-            prefix: Some(prefix),
-            text,
-            status,
-            auto_color_status: true,
-            ..Default::default()
-        }
+        Self { prefix: Some(prefix), text, status, auto_color_status: true, ..Default::default() }
     }
 
     /// Create a dot leader with a colored prefix.
@@ -184,11 +175,11 @@ fn color_status(status: &str) -> String {
     match status.to_uppercase().as_str() {
         "OK" | "CREATED" | "CONFIGURED" | "RUNNING" | "READY" => {
             format!("{}{}{}", green(), status, reset())
-        }
+        },
         "SKIPPED" | "UNCHANGED" => format!("{}{}{}", dim(), status, reset()),
         "FAILED" | "ERROR" | "NOT FOUND" | "NOT RUNNING" => {
             format!("{}{}{}", red(), status, reset())
-        }
+        },
         "STOPPED" | "PAUSED" | "UNKNOWN" => format!("{}{}{}", yellow(), status, reset()),
         _ => status.to_string(),
     }
@@ -221,15 +212,7 @@ pub fn format_dot_leader_config(config: &DotLeaderConfig<'_>) -> String {
         .saturating_sub(2); // spaces around dots
     let dots = ".".repeat(dots_len);
 
-    format!(
-        "{}{} {}{}{} {}",
-        prefix_str,
-        config.text,
-        dim(),
-        dots,
-        reset(),
-        status_display
-    )
+    format!("{}{} {}{}{} {}", prefix_str, config.text, dim(), dots, reset(), status_display)
 }
 
 /// Format a line with dot leaders to a status suffix.
@@ -253,10 +236,7 @@ pub fn format_reset_dot_leader(prefix: &str, text: &str, status: &str) -> String
 
 /// Print a line with a dimmed prefix symbol, dot leaders, and status.
 pub fn print_prefixed_dot_leader(prefix: &str, text: &str, status: &str) {
-    println!(
-        "{}",
-        format_dot_leader_config(&DotLeaderConfig::with_prefix(prefix, text, status))
-    );
+    println!("{}", format_dot_leader_config(&DotLeaderConfig::with_prefix(prefix, text, status)));
 }
 
 /// Print a line with a colored prefix symbol, dot leaders, and status.
@@ -278,15 +258,7 @@ pub fn print_colored_prefix_dot_leader(
         .saturating_sub(2);
     let dots = ".".repeat(dots_len);
 
-    println!(
-        "{} {} {}{}{} {}",
-        prefix_formatted,
-        text,
-        dim(),
-        dots,
-        reset(),
-        status_display
-    );
+    println!("{} {} {}{}{} {}", prefix_formatted, text, dim(), dots, reset(), status_display);
 }
 
 // ============================================================================
@@ -352,16 +324,16 @@ where
                 ))
             );
             true
-        }
+        },
         Ok(StepOutcome::Skipped) => {
             spin.stop();
             print_destroy_skipped(completed);
             false
-        }
+        },
         Ok(StepOutcome::Failed(e)) | Err(e) => {
             spin.failure(&e);
             false
-        }
+        },
     }
 }
 
@@ -380,7 +352,7 @@ where
                 StepOutcome::Failed(err) => {
                     spin.failure(err);
                     return Err(Error::Other(err.clone()));
-                }
+                },
             };
 
             if step.dot_leader {
@@ -398,11 +370,11 @@ where
             }
 
             Ok(())
-        }
+        },
         Err(e) => {
             spin.failure(&e);
             Err(Error::Other(e))
-        }
+        },
     }
 }
 
@@ -421,7 +393,7 @@ where
                 StepOutcome::Failed(err) => {
                     spin.failure(err);
                     return Err(Error::Other(err.clone()));
-                }
+                },
             };
 
             if step.dot_leader {
@@ -439,11 +411,11 @@ where
             }
 
             Ok(value)
-        }
+        },
         Err(e) => {
             spin.failure(&e);
             Err(Error::Other(e))
-        }
+        },
     }
 }
 

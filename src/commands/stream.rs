@@ -1,8 +1,8 @@
 //! Stream command for real-time relationship changes.
 
-use crate::client::Context;
-use crate::error::Result;
 use futures::StreamExt;
+
+use crate::{client::Context, error::Result};
 
 /// Watch real-time relationship changes.
 pub async fn stream(
@@ -21,8 +21,7 @@ pub async fn stream(
     if let Some(rt) = resource_type {
         use inferadb::vault::watch::WatchFilter;
         watch = watch.filter(WatchFilter::resource_type(rt));
-        ctx.output
-            .info(&format!("Filtering by resource type: {}", rt));
+        ctx.output.info(&format!("Filtering by resource type: {}", rt));
     }
 
     if let Some(rel) = relation {
@@ -41,11 +40,7 @@ pub async fn stream(
     while let Some(event) = stream.next().await {
         match event {
             Ok(event) => {
-                let op = if event.operation.is_create() {
-                    "+"
-                } else {
-                    "-"
-                };
+                let op = if event.operation.is_create() { "+" } else { "-" };
 
                 println!(
                     "[{}] {} -[{}]-> {}",
@@ -54,11 +49,11 @@ pub async fn stream(
                     event.relationship.relation(),
                     event.relationship.resource()
                 );
-            }
+            },
             Err(e) => {
                 ctx.output.error(&format!("Stream error: {}", e));
                 // Continue watching after transient errors
-            }
+            },
         }
     }
 
