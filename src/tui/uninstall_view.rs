@@ -9,14 +9,13 @@ use std::any::Any;
 use std::path::PathBuf;
 
 use ferment::components::{
-    ConfirmationConfig, Phase, StepResult as FermentStepResult, TaskProgressMsg, TaskProgressView,
-    TaskStep,
+    ConfirmationConfig, Phase, TaskProgressMsg, TaskProgressView, TaskStep,
 };
 use ferment::runtime::{Cmd, Model, Sub};
 use ferment::style::Color;
 use ferment::terminal::Event;
 
-use super::install_view::{InstallStep, StepResult};
+use super::install_view::InstallStep;
 
 // ============================================================================
 // Constants
@@ -122,78 +121,12 @@ struct UninstallContext {
 }
 
 // ============================================================================
-// Message Type
+// Type Alias
 // ============================================================================
 
 /// Message type for uninstall view.
-#[derive(Debug, Clone)]
-pub enum DevUninstallViewMsg {
-    /// Advance spinner animation and poll for worker results.
-    Tick,
-    /// User confirmed uninstall.
-    Confirm,
-    /// User declined/cancelled uninstall.
-    Cancel,
-    /// Run a specific step.
-    RunStep(usize),
-    /// A step completed with result.
-    StepCompleted(usize, StepResult),
-    /// Close error modal.
-    CloseModal,
-    /// User pressed 'q' to quit/cancel.
-    Quit,
-    /// Terminal resize.
-    Resize(u16, u16),
-}
-
-impl From<DevUninstallViewMsg> for TaskProgressMsg {
-    fn from(msg: DevUninstallViewMsg) -> Self {
-        match msg {
-            DevUninstallViewMsg::Tick => TaskProgressMsg::Tick,
-            DevUninstallViewMsg::Confirm => TaskProgressMsg::Confirm,
-            DevUninstallViewMsg::Cancel => TaskProgressMsg::Cancel,
-            DevUninstallViewMsg::RunStep(idx) => TaskProgressMsg::RunStep(idx),
-            DevUninstallViewMsg::StepCompleted(idx, result) => {
-                TaskProgressMsg::StepCompleted(idx, result.into())
-            }
-            DevUninstallViewMsg::CloseModal => TaskProgressMsg::CloseModal,
-            DevUninstallViewMsg::Quit => TaskProgressMsg::Quit,
-            DevUninstallViewMsg::Resize(w, h) => TaskProgressMsg::Resize(w, h),
-        }
-    }
-}
-
-impl From<TaskProgressMsg> for DevUninstallViewMsg {
-    fn from(msg: TaskProgressMsg) -> Self {
-        match msg {
-            TaskProgressMsg::Tick => DevUninstallViewMsg::Tick,
-            TaskProgressMsg::Start => DevUninstallViewMsg::Confirm,
-            TaskProgressMsg::Confirm => DevUninstallViewMsg::Confirm,
-            TaskProgressMsg::Cancel => DevUninstallViewMsg::Cancel,
-            TaskProgressMsg::RunStep(idx) => DevUninstallViewMsg::RunStep(idx),
-            TaskProgressMsg::StepCompleted(idx, result) => DevUninstallViewMsg::StepCompleted(
-                idx,
-                match result {
-                    FermentStepResult::Success(d) => StepResult::Success(d),
-                    FermentStepResult::Skipped(r) => StepResult::Skipped(r),
-                    FermentStepResult::Failure(e) => StepResult::Failure(e),
-                },
-            ),
-            TaskProgressMsg::StartTask(_) => DevUninstallViewMsg::Tick,
-            TaskProgressMsg::CompleteTask(idx, result) => DevUninstallViewMsg::StepCompleted(
-                idx,
-                match result {
-                    FermentStepResult::Success(d) => StepResult::Success(d),
-                    FermentStepResult::Skipped(r) => StepResult::Skipped(r),
-                    FermentStepResult::Failure(e) => StepResult::Failure(e),
-                },
-            ),
-            TaskProgressMsg::CloseModal => DevUninstallViewMsg::CloseModal,
-            TaskProgressMsg::Quit => DevUninstallViewMsg::Quit,
-            TaskProgressMsg::Resize(w, h) => DevUninstallViewMsg::Resize(w, h),
-        }
-    }
-}
+/// This is a type alias to the underlying TaskProgressMsg.
+pub type DevUninstallViewMsg = TaskProgressMsg;
 
 // ============================================================================
 // View Implementation
@@ -289,16 +222,11 @@ impl Model for DevUninstallView {
     type Message = DevUninstallViewMsg;
 
     fn init(&self) -> Option<Cmd<Self::Message>> {
-        self.inner
-            .init()
-            .map(|cmd| cmd.map(DevUninstallViewMsg::from))
+        self.inner.init()
     }
 
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
-        let inner_msg: TaskProgressMsg = msg.into();
-        self.inner
-            .update(inner_msg)
-            .map(|cmd| cmd.map(DevUninstallViewMsg::from))
+        self.inner.update(msg)
     }
 
     fn view(&self) -> String {
@@ -306,13 +234,11 @@ impl Model for DevUninstallView {
     }
 
     fn handle_event(&self, event: Event) -> Option<Self::Message> {
-        self.inner
-            .handle_event(event)
-            .map(DevUninstallViewMsg::from)
+        self.inner.handle_event(event)
     }
 
     fn subscriptions(&self) -> Sub<Self::Message> {
-        self.inner.subscriptions().map(DevUninstallViewMsg::from)
+        self.inner.subscriptions()
     }
 }
 

@@ -13,7 +13,7 @@ use ferment::components::{
 use ferment::runtime::Sub;
 use ferment::style::{Color, RESET};
 use ferment::terminal::{Event, KeyCode};
-use ferment::util::measure_text;
+use ferment::util::{measure_text, ScrollState};
 use ferment::{Cmd, Model};
 
 /// Data returned by a refresh callback.
@@ -273,12 +273,8 @@ pub struct DevStatusView {
     columns: Vec<Column>,
     /// Current table rows.
     rows: Vec<Vec<String>>,
-    /// Selected row index.
-    selected_row: usize,
-    /// Vertical scroll offset.
-    scroll_offset: usize,
-    /// Horizontal scroll offset.
-    h_scroll_offset: usize,
+    /// Scroll state for table navigation.
+    scroll: ScrollState,
     /// Column index to sort by.
     sort_column: usize,
     /// Sort direction: true = ascending, false = descending.
@@ -322,9 +318,7 @@ impl DevStatusView {
             pods_data: TabData::default(),
             columns: Vec::new(),
             rows: Vec::new(),
-            selected_row: 0,
-            scroll_offset: 0,
-            h_scroll_offset: 0,
+            scroll: ScrollState::new(),
             sort_column: 0,
             sort_ascending: true,
             footer_hints: vec![
@@ -451,9 +445,7 @@ impl DevStatusView {
         if let Some(new_tab) = StatusTab::from_id(self.tab_bar.selected_id()) {
             if new_tab != self.current_tab {
                 self.current_tab = new_tab;
-                self.selected_row = 0;
-                self.scroll_offset = 0;
-                self.h_scroll_offset = 0;
+                self.scroll.reset();
                 // Reset sort to first column ascending when switching tabs
                 self.sort_column = 0;
                 self.sort_ascending = true;
@@ -488,11 +480,7 @@ impl DevStatusView {
 
     /// Clamp scroll positions.
     fn clamp_scroll(&mut self) {
-        let row_count = self.rows.len();
-        let visible = self.visible_rows();
-        let max_scroll = row_count.saturating_sub(visible);
-        self.scroll_offset = self.scroll_offset.min(max_scroll);
-        self.selected_row = self.selected_row.min(row_count.saturating_sub(1));
+        self.scroll.clamp(self.rows.len(), self.visible_rows());
     }
 
     /// Build the table component.
@@ -502,12 +490,12 @@ impl DevStatusView {
             .rows(self.rows.clone())
             .height(self.visible_rows())
             .width(self.width)
-            .with_h_scroll_offset(self.h_scroll_offset)
+            .with_h_scroll_offset(self.scroll.h_offset())
             .show_borders(false)
             .header_color(Color::Default)
             .selected_row_color(Color::Cyan)
-            .with_cursor_row(self.selected_row)
-            .with_offset(self.scroll_offset)
+            .with_cursor_row(self.scroll.selected())
+            .with_offset(self.scroll.offset())
     }
 
     /// Get the content width of the table.
@@ -540,8 +528,9 @@ impl DevStatusView {
 
     /// Render the footer with right-aligned hints.
     fn render_footer(&self) -> String {
-        let show_left = self.h_scroll_offset > 0;
-        let show_right = self.can_scroll_horizontal() && self.h_scroll_offset < self.max_h_scroll();
+        let show_left = self.scroll.h_offset() > 0;
+        let show_right =
+            self.can_scroll_horizontal() && self.scroll.h_offset() < self.max_h_scroll();
 
         FooterHints::new()
             .hints(self.footer_hints.iter().map(|(k, d)| (*k, *d)).collect())
@@ -582,48 +571,22 @@ impl Model for DevStatusView {
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
         match msg {
             DevStatusViewMsg::SelectPrev => {
-                if self.selected_row > 0 {
-                    self.selected_row -= 1;
-                    if self.selected_row < self.scroll_offset {
-                        self.scroll_offset = self.selected_row;
-                    }
-                }
+                self.scroll.select_prev();
             }
             DevStatusViewMsg::SelectNext => {
-                if self.selected_row < self.rows.len().saturating_sub(1) {
-                    self.selected_row += 1;
-                    let visible = self.visible_rows();
-                    if self.selected_row >= self.scroll_offset + visible {
-                        self.scroll_offset = self.selected_row.saturating_sub(visible - 1);
-                    }
-                }
+                self.scroll.select_next(self.rows.len(), self.visible_rows());
             }
             DevStatusViewMsg::ScrollLeft => {
-                self.h_scroll_offset = self.h_scroll_offset.saturating_sub(4);
+                self.scroll.scroll_left(4);
             }
             DevStatusViewMsg::ScrollRight => {
-                let max = self.max_h_scroll();
-                if self.h_scroll_offset + 4 <= max {
-                    self.h_scroll_offset += 4;
-                } else {
-                    self.h_scroll_offset = max;
-                }
+                self.scroll.scroll_right(4, self.max_h_scroll());
             }
             DevStatusViewMsg::PageUp => {
-                let page_size = self.visible_rows().saturating_sub(1);
-                self.selected_row = self.selected_row.saturating_sub(page_size);
-                if self.selected_row < self.scroll_offset {
-                    self.scroll_offset = self.selected_row;
-                }
+                self.scroll.page_up(self.visible_rows());
             }
             DevStatusViewMsg::PageDown => {
-                let page_size = self.visible_rows().saturating_sub(1);
-                self.selected_row =
-                    (self.selected_row + page_size).min(self.rows.len().saturating_sub(1));
-                let visible = self.visible_rows();
-                if self.selected_row >= self.scroll_offset + visible {
-                    self.scroll_offset = self.selected_row.saturating_sub(visible - 1);
-                }
+                self.scroll.page_down(self.rows.len(), self.visible_rows());
             }
             DevStatusViewMsg::SwitchTab(id) => {
                 self.tab_bar.set_selected(&id);

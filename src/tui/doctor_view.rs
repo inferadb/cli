@@ -6,7 +6,7 @@
 use ferment::components::{Column, FooterHints, Table, TitleBar};
 use ferment::style::{Color, RESET};
 use ferment::terminal::{Event, KeyCode};
-use ferment::util::measure_text;
+use ferment::util::{measure_text, ScrollState};
 use ferment::{Cmd, Model};
 
 use super::status_view::EnvironmentStatus;
@@ -108,12 +108,8 @@ pub struct DevDoctorView {
     columns: Vec<Column>,
     /// Table rows.
     rows: Vec<Vec<String>>,
-    /// Selected row index.
-    selected_row: usize,
-    /// Vertical scroll offset.
-    scroll_offset: usize,
-    /// Horizontal scroll offset.
-    h_scroll_offset: usize,
+    /// Scroll state for table navigation.
+    scroll: ScrollState,
     /// Footer hints.
     footer_hints: Vec<(&'static str, &'static str)>,
 }
@@ -134,9 +130,7 @@ impl DevDoctorView {
                 Column::new("Status").grow(),
             ],
             rows: Vec::new(),
-            selected_row: 0,
-            scroll_offset: 0,
-            h_scroll_offset: 0,
+            scroll: ScrollState::new(),
             footer_hints: vec![("↑/↓", "select"), ("q", "quit")],
         }
     }
@@ -187,11 +181,7 @@ impl DevDoctorView {
 
     /// Clamp scroll positions.
     fn clamp_scroll(&mut self) {
-        let row_count = self.rows.len();
-        let visible = self.visible_rows();
-        let max_scroll = row_count.saturating_sub(visible);
-        self.scroll_offset = self.scroll_offset.min(max_scroll);
-        self.selected_row = self.selected_row.min(row_count.saturating_sub(1));
+        self.scroll.clamp(self.rows.len(), self.visible_rows());
     }
 
     /// Build the table component.
@@ -201,12 +191,12 @@ impl DevDoctorView {
             .rows(self.rows.clone())
             .height(self.visible_rows())
             .width(self.width)
-            .with_h_scroll_offset(self.h_scroll_offset)
+            .with_h_scroll_offset(self.scroll.h_offset())
             .show_borders(false)
             .header_color(Color::Default)
             .selected_row_color(Color::Cyan)
-            .with_cursor_row(self.selected_row)
-            .with_offset(self.scroll_offset)
+            .with_cursor_row(self.scroll.selected())
+            .with_offset(self.scroll.offset())
     }
 
     /// Get the content width of the table.
@@ -248,8 +238,9 @@ impl DevDoctorView {
 
     /// Render the footer with right-aligned hints.
     fn render_footer(&self) -> String {
-        let show_left = self.h_scroll_offset > 0;
-        let show_right = self.can_scroll_horizontal() && self.h_scroll_offset < self.max_h_scroll();
+        let show_left = self.scroll.h_offset() > 0;
+        let show_right =
+            self.can_scroll_horizontal() && self.scroll.h_offset() < self.max_h_scroll();
 
         FooterHints::new()
             .hints(self.footer_hints.iter().map(|(k, d)| (*k, *d)).collect())
@@ -270,48 +261,22 @@ impl Model for DevDoctorView {
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
         match msg {
             DevDoctorViewMsg::SelectPrev => {
-                if self.selected_row > 0 {
-                    self.selected_row -= 1;
-                    if self.selected_row < self.scroll_offset {
-                        self.scroll_offset = self.selected_row;
-                    }
-                }
+                self.scroll.select_prev();
             }
             DevDoctorViewMsg::SelectNext => {
-                if self.selected_row < self.rows.len().saturating_sub(1) {
-                    self.selected_row += 1;
-                    let visible = self.visible_rows();
-                    if self.selected_row >= self.scroll_offset + visible {
-                        self.scroll_offset = self.selected_row.saturating_sub(visible - 1);
-                    }
-                }
+                self.scroll.select_next(self.rows.len(), self.visible_rows());
             }
             DevDoctorViewMsg::ScrollLeft => {
-                self.h_scroll_offset = self.h_scroll_offset.saturating_sub(4);
+                self.scroll.scroll_left(4);
             }
             DevDoctorViewMsg::ScrollRight => {
-                let max = self.max_h_scroll();
-                if self.h_scroll_offset + 4 <= max {
-                    self.h_scroll_offset += 4;
-                } else {
-                    self.h_scroll_offset = max;
-                }
+                self.scroll.scroll_right(4, self.max_h_scroll());
             }
             DevDoctorViewMsg::PageUp => {
-                let page_size = self.visible_rows().saturating_sub(1);
-                self.selected_row = self.selected_row.saturating_sub(page_size);
-                if self.selected_row < self.scroll_offset {
-                    self.scroll_offset = self.selected_row;
-                }
+                self.scroll.page_up(self.visible_rows());
             }
             DevDoctorViewMsg::PageDown => {
-                let page_size = self.visible_rows().saturating_sub(1);
-                self.selected_row =
-                    (self.selected_row + page_size).min(self.rows.len().saturating_sub(1));
-                let visible = self.visible_rows();
-                if self.selected_row >= self.scroll_offset + visible {
-                    self.scroll_offset = self.selected_row.saturating_sub(visible - 1);
-                }
+                self.scroll.page_down(self.rows.len(), self.visible_rows());
             }
             DevDoctorViewMsg::Quit => {
                 return Some(Cmd::quit());

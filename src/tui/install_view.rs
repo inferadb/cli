@@ -7,19 +7,24 @@
 
 use std::sync::Arc;
 
-use ferment::components::{
-    StepResult as FermentStepResult, TaskProgressMsg, TaskProgressView, TaskStep,
-};
+use ferment::components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep};
 use ferment::runtime::{Cmd, Model, Sub};
 use ferment::terminal::Event;
 
+// Re-export StepResult from Ferment for convenience
+pub use ferment::components::StepResult;
+
 // ============================================================================
-// Type Aliases for Backward Compatibility
+// Type Aliases
 // ============================================================================
 
 /// Type alias for step executor function.
 /// Returns Ok(detail) on success, or Err(error_message) on failure.
 pub type StepExecutor = Arc<dyn Fn() -> Result<Option<String>, String> + Send + Sync>;
+
+/// Message type for install view.
+/// This is a type alias to the underlying TaskProgressMsg.
+pub type DevInstallViewMsg = TaskProgressMsg;
 
 /// Installation step definition.
 /// This is a compatibility wrapper around Ferment's TaskStep.
@@ -67,107 +72,6 @@ impl From<InstallStep> for TaskStep {
             TaskStep::with_executor(step.name, move || ex())
         } else {
             TaskStep::new(step.name)
-        }
-    }
-}
-
-/// Result of running an installation step.
-#[derive(Debug, Clone)]
-pub enum StepResult {
-    /// Step completed successfully.
-    Success(Option<String>),
-    /// Step was skipped (with reason).
-    Skipped(String),
-    /// Step failed with error.
-    Failure(String),
-}
-
-impl From<StepResult> for FermentStepResult {
-    fn from(result: StepResult) -> Self {
-        match result {
-            StepResult::Success(detail) => FermentStepResult::Success(detail),
-            StepResult::Skipped(reason) => FermentStepResult::Skipped(reason),
-            StepResult::Failure(error) => FermentStepResult::Failure(error),
-        }
-    }
-}
-
-// ============================================================================
-// Message Type
-// ============================================================================
-
-/// Message type for install view.
-/// Extended from TaskProgressMsg with additional variants for external control.
-#[derive(Debug, Clone)]
-pub enum DevInstallViewMsg {
-    /// Advance spinner animation and poll for worker results.
-    Tick,
-    /// Start the installation process.
-    Start,
-    /// Run a specific step.
-    RunStep(usize),
-    /// A step completed with result.
-    StepCompleted(usize, StepResult),
-    /// Start a task (for manual control).
-    StartTask(usize),
-    /// Complete a task with result (for manual control).
-    CompleteTask(usize, StepResult),
-    /// User pressed 'q' to quit/cancel.
-    Quit,
-    /// Close error modal.
-    CloseModal,
-    /// Terminal resize.
-    Resize(u16, u16),
-}
-
-impl From<DevInstallViewMsg> for TaskProgressMsg {
-    fn from(msg: DevInstallViewMsg) -> Self {
-        match msg {
-            DevInstallViewMsg::Tick => TaskProgressMsg::Tick,
-            DevInstallViewMsg::Start => TaskProgressMsg::Start,
-            DevInstallViewMsg::RunStep(idx) => TaskProgressMsg::RunStep(idx),
-            DevInstallViewMsg::StepCompleted(idx, result) => {
-                TaskProgressMsg::StepCompleted(idx, result.into())
-            }
-            DevInstallViewMsg::StartTask(idx) => TaskProgressMsg::StartTask(idx),
-            DevInstallViewMsg::CompleteTask(idx, result) => {
-                TaskProgressMsg::CompleteTask(idx, result.into())
-            }
-            DevInstallViewMsg::Quit => TaskProgressMsg::Quit,
-            DevInstallViewMsg::CloseModal => TaskProgressMsg::CloseModal,
-            DevInstallViewMsg::Resize(w, h) => TaskProgressMsg::Resize(w, h),
-        }
-    }
-}
-
-impl From<TaskProgressMsg> for DevInstallViewMsg {
-    fn from(msg: TaskProgressMsg) -> Self {
-        match msg {
-            TaskProgressMsg::Tick => DevInstallViewMsg::Tick,
-            TaskProgressMsg::Start => DevInstallViewMsg::Start,
-            TaskProgressMsg::Confirm => DevInstallViewMsg::Start, // Map confirm to start
-            TaskProgressMsg::Cancel => DevInstallViewMsg::Quit,
-            TaskProgressMsg::RunStep(idx) => DevInstallViewMsg::RunStep(idx),
-            TaskProgressMsg::StepCompleted(idx, result) => DevInstallViewMsg::StepCompleted(
-                idx,
-                match result {
-                    FermentStepResult::Success(d) => StepResult::Success(d),
-                    FermentStepResult::Skipped(r) => StepResult::Skipped(r),
-                    FermentStepResult::Failure(e) => StepResult::Failure(e),
-                },
-            ),
-            TaskProgressMsg::StartTask(idx) => DevInstallViewMsg::StartTask(idx),
-            TaskProgressMsg::CompleteTask(idx, result) => DevInstallViewMsg::CompleteTask(
-                idx,
-                match result {
-                    FermentStepResult::Success(d) => StepResult::Success(d),
-                    FermentStepResult::Skipped(r) => StepResult::Skipped(r),
-                    FermentStepResult::Failure(e) => StepResult::Failure(e),
-                },
-            ),
-            TaskProgressMsg::CloseModal => DevInstallViewMsg::CloseModal,
-            TaskProgressMsg::Quit => DevInstallViewMsg::Quit,
-            TaskProgressMsg::Resize(w, h) => DevInstallViewMsg::Resize(w, h),
         }
     }
 }
@@ -238,6 +142,11 @@ impl DevInstallView {
         self.inner.has_failure()
     }
 
+    /// Get the current phase.
+    pub fn phase(&self) -> &Phase {
+        self.inner.phase()
+    }
+
     /// Start a task by index.
     pub fn start_task(&mut self, index: usize) {
         self.inner.start_task(index);
@@ -245,7 +154,7 @@ impl DevInstallView {
 
     /// Complete a task with result.
     pub fn complete_task(&mut self, index: usize, result: StepResult) {
-        self.inner.complete_task(index, result.into());
+        self.inner.complete_task(index, result);
     }
 
     /// Check if a task is currently running.
@@ -268,16 +177,11 @@ impl Model for DevInstallView {
     type Message = DevInstallViewMsg;
 
     fn init(&self) -> Option<Cmd<Self::Message>> {
-        self.inner
-            .init()
-            .map(|cmd| cmd.map(DevInstallViewMsg::from))
+        self.inner.init()
     }
 
     fn update(&mut self, msg: Self::Message) -> Option<Cmd<Self::Message>> {
-        let inner_msg: TaskProgressMsg = msg.into();
-        self.inner
-            .update(inner_msg)
-            .map(|cmd| cmd.map(DevInstallViewMsg::from))
+        self.inner.update(msg)
     }
 
     fn view(&self) -> String {
@@ -285,11 +189,11 @@ impl Model for DevInstallView {
     }
 
     fn handle_event(&self, event: Event) -> Option<Self::Message> {
-        self.inner.handle_event(event).map(DevInstallViewMsg::from)
+        self.inner.handle_event(event)
     }
 
     fn subscriptions(&self) -> Sub<Self::Message> {
-        self.inner.subscriptions().map(DevInstallViewMsg::from)
+        self.inner.subscriptions()
     }
 }
 
