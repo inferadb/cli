@@ -88,7 +88,7 @@ initial_prompt: |
   - Relationship management (add, list, delete)
   - Shell completions (bash, zsh, fish)
 
-  Built with clap for CLI parsing and the ferment TUI framework for interactive features.
+  Built with clap for CLI parsing and the teapot TUI framework for interactive features.
   Uses the InferaDB Rust SDK for API communication.
 
 project_name: "InferaDB CLI"
