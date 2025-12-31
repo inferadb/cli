@@ -856,14 +856,17 @@ pub async fn copy(
     let vault = org.vault(&source_vault);
     let schemas = vault.schemas();
 
-    let schema_content = if version == Some("active") || version.is_none() {
-        // Get active schema
-        let active = schemas.get_active().await?;
-        active.content
-    } else {
-        // Get specific version
-        let specific = schemas.get(version.unwrap()).await?;
-        specific.content
+    let schema_content = match version {
+        Some("active") | None => {
+            // Get active schema
+            let active = schemas.get_active().await?;
+            active.content
+        },
+        Some(v) => {
+            // Get specific version
+            let specific = schemas.get(v).await?;
+            specific.content
+        },
     };
 
     // Push to target vault
