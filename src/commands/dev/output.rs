@@ -4,42 +4,48 @@
 
 use crate::error::{Error, Result};
 use crate::tui::start_spinner;
+use ferment::style::RESET;
 
 use super::constants::STEP_LINE_WIDTH;
 
 // ============================================================================
-// Color Constants
+// Color Constants (using Ferment's Color for consistency)
 // ============================================================================
+
+// Static color strings cached for performance (Color::*.to_ansi_fg() allocates)
+const DIM_ANSI: &str = "\x1b[90m"; // Color::BrightBlack
+const GREEN_ANSI: &str = "\x1b[32m"; // Color::Green
+const YELLOW_ANSI: &str = "\x1b[33m"; // Color::Yellow
+const RED_ANSI: &str = "\x1b[31m"; // Color::Red
 
 /// Get ANSI escape code for dim/gray text.
 #[inline]
 fn dim() -> &'static str {
-    // Cache the result since Color::BrightBlack.to_ansi_fg() allocates
-    "\x1b[90m"
+    DIM_ANSI
 }
 
 /// Get ANSI escape code for green text.
 #[inline]
 fn green() -> &'static str {
-    "\x1b[32m"
+    GREEN_ANSI
 }
 
 /// Get ANSI escape code for yellow text.
 #[inline]
 fn yellow() -> &'static str {
-    "\x1b[33m"
+    YELLOW_ANSI
 }
 
 /// Get ANSI escape code for red text.
 #[inline]
 fn red() -> &'static str {
-    "\x1b[31m"
+    RED_ANSI
 }
 
 /// Get ANSI reset code.
 #[inline]
 fn reset() -> &'static str {
-    "\x1b[0m"
+    RESET
 }
 
 // ============================================================================

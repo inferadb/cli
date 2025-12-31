@@ -5,15 +5,16 @@
 //! - Credentials input modal
 //! - Step-by-step progress with animated spinners
 
-use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
-use ferment::components::{Modal, ModalBorder, TaskList, TextInput, TextInputMsg};
+use ferment::components::{
+    FooterHints, Modal, ModalBorder, TaskList, TextInput, TextInputMsg, TitleBar,
+};
 use ferment::runtime::Sub;
-use ferment::style::Color;
+use ferment::style::{Color, RESET, UNDERLINE};
 use ferment::terminal::{Event, KeyCode};
+use ferment::util::WorkerHandle;
 use ferment::{Cmd, Model};
 
 use super::install_view::{InstallStep, StepExecutor, StepResult};
@@ -24,11 +25,9 @@ use super::install_view::{InstallStep, StepExecutor, StepResult};
 /// Terminals that don't support it will just show the underlined text without the link.
 fn hyperlink(url: &str, text: &str) -> String {
     // OSC 8 for hyperlink + underline styling to indicate clickability
-    let underline = "\x1b[4m";
-    let reset = "\x1b[0m";
     format!(
         "\x1b]8;;{}\x07{}{}{}\x1b]8;;\x07",
-        url, underline, text, reset
+        url, UNDERLINE, text, RESET
     )
 }
 
@@ -102,10 +101,8 @@ pub struct DevStartView {
     executors: Vec<Option<StepExecutor>>,
     /// Current step index being processed.
     current_step: usize,
-    /// Whether a step is currently executing in a worker thread.
-    executing: bool,
-    /// Receiver for worker thread results.
-    result_receiver: Option<Receiver<WorkerResult>>,
+    /// Worker handle for step execution.
+    worker: Option<WorkerHandle<WorkerResult>>,
     /// Terminal width.
     width: u16,
     /// Terminal height.
@@ -146,8 +143,7 @@ impl DevStartView {
             task_list: TaskList::new(),
             executors: Vec::new(),
             current_step: 0,
-            executing: false,
-            result_receiver: None,
+            worker: None,
             width,
             height,
             error_modal: None,
@@ -227,9 +223,6 @@ impl DevStartView {
 
     /// Render the title bar with dimmed slashes.
     fn render_title_bar(&self) -> String {
-        let reset = "\x1b[0m";
-        let dim = Color::BrightBlack.to_ansi_fg();
-
         let subtitle = match self.phase {
             StartPhase::CheckingPrereqs => "Checking Prerequisites",
             StartPhase::SetupInstructions => "Tailscale Setup",
@@ -239,25 +232,15 @@ impl DevStartView {
             StartPhase::Failed => "Failed",
         };
 
-        let prefix_len = 2 + 2 + self.title.len() + 2;
-        let suffix_len = 2 + subtitle.len() + 2 + 2;
-        let fill_count = (self.width as usize).saturating_sub(prefix_len + suffix_len);
-        let fill = "/".repeat(fill_count);
-
-        format!(
-            "{}//{}  {}  {}{}{}  {}  {}//{}",
-            dim, reset, self.title, dim, fill, reset, subtitle, dim, reset
-        )
+        TitleBar::new(&self.title)
+            .subtitle(subtitle)
+            .width(self.width as usize)
+            .render()
     }
 
     /// Render the footer with right-aligned hints.
     fn render_footer(&self) -> String {
-        let reset = "\x1b[0m";
-        let dim = Color::BrightBlack.to_ansi_fg();
-
-        let separator = format!("{}{}{}", dim, "─".repeat(self.width as usize), reset);
-
-        let hints = match self.phase {
+        let hints: Vec<(&str, &str)> = match self.phase {
             StartPhase::SetupInstructions => vec![("enter", "continue"), ("q", "cancel")],
             StartPhase::CredentialsInput => {
                 vec![("tab", "switch"), ("enter", "submit"), ("q", "cancel")]
@@ -267,32 +250,11 @@ impl DevStartView {
             _ => vec![("q", "cancel")],
         };
 
-        let mut styled_hints = String::new();
-        let mut plain_len = 0;
-
-        for (i, (key, desc)) in hints.iter().enumerate() {
-            if i > 0 {
-                styled_hints.push_str("  ");
-                plain_len += 2;
-            }
-            styled_hints.push_str(reset);
-            styled_hints.push_str(key);
-            styled_hints.push_str(&dim);
-            styled_hints.push(' ');
-            styled_hints.push_str(desc);
-            plain_len += key.len() + 1 + desc.len();
-        }
-        styled_hints.push_str(reset);
-
-        let padding = (self.width as usize).saturating_sub(plain_len);
-
-        format!(
-            "{}\r\n{}{}{}",
-            separator,
-            " ".repeat(padding),
-            styled_hints,
-            reset
-        )
+        FooterHints::new()
+            .hints(hints)
+            .width(self.width as usize)
+            .with_separator()
+            .render()
     }
 
     /// Render the setup instructions content.
@@ -394,47 +356,31 @@ Step 3: Create OAuth client
     }
 
     /// Spawn a worker thread to execute a step.
-    fn spawn_step_worker(&self, index: usize) -> Receiver<WorkerResult> {
-        let (tx, rx) = mpsc::channel();
-
+    fn spawn_step_worker(&self, index: usize) -> WorkerHandle<WorkerResult> {
         if let Some(Some(executor)) = self.executors.get(index) {
             let executor = Arc::clone(executor);
-            thread::spawn(move || {
+            WorkerHandle::spawn(move || {
                 let result = executor();
                 let step_result = match result {
                     Ok(detail) => StepResult::Success(detail),
                     Err(error) => StepResult::Failure(error),
                 };
-                let _ = tx.send((index, step_result));
-            });
+                (index, step_result)
+            })
         } else {
-            thread::spawn(move || {
-                let _ = tx.send((index, StepResult::Success(None)));
-            });
+            WorkerHandle::spawn(move || (index, StepResult::Success(None)))
         }
-
-        rx
     }
 
     /// Poll for worker result.
     fn poll_worker_result(&mut self) -> Option<WorkerResult> {
-        if let Some(ref rx) = self.result_receiver {
-            match rx.try_recv() {
-                Ok(result) => {
-                    self.executing = false;
-                    self.result_receiver = None;
-                    Some(result)
-                }
-                Err(TryRecvError::Empty) => None,
-                Err(TryRecvError::Disconnected) => {
-                    self.executing = false;
-                    self.result_receiver = None;
-                    None
-                }
+        if let Some(ref handle) = self.worker {
+            if let Some(result) = handle.try_recv() {
+                self.worker = None;
+                return Some(result);
             }
-        } else {
-            None
         }
+        None
     }
 
     /// Render the error modal.
@@ -559,8 +505,7 @@ impl Model for DevStartView {
                             if next_step < self.executors.len() {
                                 self.current_step = next_step;
                                 self.task_list.start_task(next_step);
-                                self.executing = true;
-                                self.result_receiver = Some(self.spawn_step_worker(next_step));
+                                self.worker = Some(self.spawn_step_worker(next_step));
                             } else {
                                 self.phase = StartPhase::Completed;
                             }
@@ -697,8 +642,7 @@ impl Model for DevStartView {
                 if !self.executors.is_empty() {
                     self.current_step = 0;
                     self.task_list.start_task(0);
-                    self.executing = true;
-                    self.result_receiver = Some(self.spawn_step_worker(0));
+                    self.worker = Some(self.spawn_step_worker(0));
                     return Some(Cmd::tick(Duration::from_millis(80), |_| {
                         DevStartViewMsg::Tick
                     }));
@@ -781,7 +725,7 @@ impl Model for DevStartView {
                 // Footer
                 if self.error_modal.is_some() {
                     let dim = Color::BrightBlack.to_ansi_fg();
-                    let reset = "\x1b[0m";
+                    let reset = RESET;
                     output.push_str(&format!(
                         "{}{}{}\r\n{}",
                         dim,

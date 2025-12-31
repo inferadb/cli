@@ -9,7 +9,7 @@ use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::UninstallInfo;
 use ferment::output::{info as print_info, success as print_success};
-use ferment::style::Color;
+use ferment::style::{Color, RESET};
 
 use super::commands::{run_command, run_command_optional};
 use super::constants::{CLUSTER_NAME, KUBE_CONTEXT, REGISTRY_NAME, TAILSCALE_DEVICE_PREFIX};
@@ -485,7 +485,7 @@ fn uninstall_with_spinners(yes: bool, with_credentials: bool) -> Result<()> {
     println!();
     if did_work {
         let green = Color::Green.to_ansi_fg();
-        let reset = "\x1b[0m";
+        let reset = RESET;
         println!("{}Cluster destroyed successfully.{}", green, reset);
 
         if !with_credentials && info.has_creds_file {

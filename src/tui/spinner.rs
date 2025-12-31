@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use ferment::components::{Spinner, SpinnerStyle};
 use ferment::output::{is_ci, is_tty};
-use ferment::style::Color;
+use ferment::style::{Color, CLEAR_LINE};
 use ferment::Model;
 
 /// Handle to control a running spinner.
@@ -125,7 +125,7 @@ pub fn start(message: impl Into<String>) -> SpinnerHandle {
 
         while running_clone.load(Ordering::SeqCst) {
             // Clear line and print spinner
-            eprint!("\r\x1b[K{}", spinner.view());
+            eprint!("\r{}{}", CLEAR_LINE, spinner.view());
             let _ = io::stderr().flush();
 
             spinner.tick();
@@ -133,7 +133,7 @@ pub fn start(message: impl Into<String>) -> SpinnerHandle {
         }
 
         // Clear the spinner line when done
-        eprint!("\r\x1b[K");
+        eprint!("\r{}", CLEAR_LINE);
         let _ = io::stderr().flush();
     });
 
@@ -206,7 +206,7 @@ where
 /// Clear the current line.
 fn clear_line() {
     if is_tty() && !is_ci() {
-        eprint!("\r\x1b[K");
+        eprint!("\r{}", CLEAR_LINE);
         let _ = io::stderr().flush();
     }
 }

@@ -16,7 +16,7 @@ use std::io::{self, BufRead, Write};
 
 use ferment::components::Confirm as FermentConfirm;
 use ferment::output::{is_ci, is_tty};
-use ferment::style::Color;
+use ferment::style::{Color, RESET};
 use ferment::Model;
 
 /// Result of a confirmation prompt.
@@ -141,7 +141,7 @@ pub fn confirm_danger(message: &str) -> crate::error::Result<bool> {
     }
 
     // Show warning prefix in danger mode
-    eprint!("{}⚠\x1b[0m ", Color::Red.to_ansi_fg());
+    eprint!("{}⚠{} ", Color::Red.to_ansi_fg(), RESET);
 
     let confirm = FermentConfirm::new(message)
         .default(false)

@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::InstallStep;
-use ferment::style::Color;
+use ferment::style::{Color, RESET};
 
 use super::commands::{command_exists, run_command, run_command_optional};
 use super::constants::{
@@ -634,7 +634,7 @@ spec:
 /// Show final success output with URLs and hints.
 fn show_final_success(tailnet_suffix: Option<&str>) {
     let green = Color::Green.to_ansi_fg();
-    let reset = "\x1b[0m";
+    let reset = RESET;
 
     println!();
     println!("{}✓{} Development cluster ready", green, reset);

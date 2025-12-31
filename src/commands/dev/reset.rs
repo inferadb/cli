@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::start_spinner;
-use ferment::style::Color;
+use ferment::style::{Color, RESET};
 
 use super::commands::{parse_kubectl_apply_line, run_command, run_command_optional};
 use super::constants::{INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS};
@@ -188,7 +188,7 @@ fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) -> Result<()>
 
     let green = Color::Green.to_ansi_fg();
     let dim = Color::BrightBlack.to_ansi_fg();
-    let reset_color = "\x1b[0m";
+    let reset_color = RESET;
     println!();
     println!("{}✓ Cluster reset complete.{}", green, reset_color);
     println!(

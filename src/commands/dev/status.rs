@@ -5,7 +5,7 @@
 use crate::client::Context;
 use crate::error::{Error, Result};
 use crate::tui::{ClusterStatus, RefreshResult, TabData};
-use ferment::style::Color;
+use ferment::style::{Color, RESET};
 
 use super::commands::run_command_optional;
 use super::constants::{TIP_RESUME_CLUSTER, TIP_START_CLUSTER};
@@ -60,7 +60,7 @@ fn status_with_spinners() -> Result<()> {
     let green = Color::Green.to_ansi_fg();
     let yellow = Color::Yellow.to_ansi_fg();
     let red = Color::Red.to_ansi_fg();
-    let reset = "\x1b[0m";
+    let reset = RESET;
 
     print_styled_header("InferaDB Development Cluster Status");
     println!();
@@ -118,7 +118,7 @@ fn print_nodes_status() {
 
     let green = Color::Green.to_ansi_fg();
     let red = Color::Red.to_ansi_fg();
-    let reset = "\x1b[0m";
+    let reset = RESET;
 
     if let Some(output) = output {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output) {
@@ -160,7 +160,7 @@ fn print_pods_status() {
     let green = Color::Green.to_ansi_fg();
     let yellow = Color::Yellow.to_ansi_fg();
     let red = Color::Red.to_ansi_fg();
-    let reset = "\x1b[0m";
+    let reset = RESET;
 
     let inferadb_pods = run_command_optional(
         "kubectl",

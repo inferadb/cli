@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use ferment::components::Progress as FermentProgress;
 use ferment::output::{is_ci, is_tty};
-use ferment::style::Color;
+use ferment::style::{Color, CLEAR_LINE, CURSOR_UP};
 use ferment::Model;
 
 /// A progress bar handle for tracking operation progress.
@@ -160,7 +160,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
                     .filled_color(Color::Cyan)
                     .empty_color(Color::BrightBlack);
 
-                eprint!("\r\x1b[K{}", progress.view());
+                eprint!("\r{}{}", CLEAR_LINE, progress.view());
                 let _ = io::stderr().flush();
             }
 
@@ -168,7 +168,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
         }
 
         // Clear line when done
-        eprint!("\r\x1b[K");
+        eprint!("\r{}", CLEAR_LINE);
         let _ = io::stderr().flush();
     });
 
@@ -351,7 +351,7 @@ fn format_duration(duration: Duration) -> String {
 /// Clear the current line.
 fn clear_line() {
     if is_tty() && !is_ci() {
-        eprint!("\r\x1b[K");
+        eprint!("\r{}", CLEAR_LINE);
         let _ = io::stderr().flush();
     }
 }
@@ -360,7 +360,7 @@ fn clear_line() {
 fn clear_lines(count: usize) {
     if is_tty() && !is_ci() {
         for _ in 0..count {
-            eprint!("\x1b[1A\x1b[K");
+            eprint!("{}{}", CURSOR_UP, CLEAR_LINE);
         }
         let _ = io::stderr().flush();
     }

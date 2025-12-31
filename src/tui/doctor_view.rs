@@ -3,8 +3,8 @@
 //! A full-screen TUI for displaying development cluster diagnostics
 //! including dependency checks, service status, and configuration validation.
 
-use ferment::components::{Column, Table};
-use ferment::style::Color;
+use ferment::components::{Column, FooterHints, Table, TitleBar};
+use ferment::style::{Color, RESET};
 use ferment::terminal::{Event, KeyCode};
 use ferment::util::measure_text;
 use ferment::{Cmd, Model};
@@ -230,39 +230,16 @@ impl DevDoctorView {
             return String::new();
         }
 
-        let reset = "\x1b[0m";
-        let dim = Color::BrightBlack.to_ansi_fg();
-
-        if self.subtitle.is_empty() {
-            // No subtitle: "// Title //////..."
-            let prefix = format!("{}//{}  {}  ", dim, reset, self.title);
-            let prefix_len = 2 + 2 + self.title.len() + 2;
-            let remaining = self.width.saturating_sub(prefix_len);
-            let fill = format!("{}{}{}", dim, "/".repeat(remaining), reset);
-            format!("{}{}", prefix, fill)
-        } else {
-            // With subtitle: "//  Title  /////...  Subtitle  //"
-            let prefix_len = 2 + 2 + self.title.len() + 2;
-            let suffix_len = 2 + self.subtitle.len() + 2 + 2;
-            let fill_count = self.width.saturating_sub(prefix_len + suffix_len);
-            let fill = "/".repeat(fill_count);
-            format!(
-                "{}//{}  {}  {}{}{}  {}  {}//{}",
-                dim, reset, self.title, dim, fill, reset, self.subtitle, dim, reset
-            )
+        let mut bar = TitleBar::new(&self.title).width(self.width);
+        if !self.subtitle.is_empty() {
+            bar = bar.subtitle(&self.subtitle);
         }
+        bar.render()
     }
 
     /// Render the status line.
     fn render_status_line(&self) -> String {
-        let reset = "\x1b[0m";
-        let status_line = format!(
-            "{}{} {}{}",
-            self.status.color().to_ansi_fg(),
-            self.status.indicator(),
-            self.status.text(),
-            reset
-        );
+        let status_line = self.status.badge().render();
         // Right-align status with 1 char padding on right
         let status_len = measure_text(&status_line);
         let padding = self.width.saturating_sub(status_len + 1);
@@ -271,45 +248,15 @@ impl DevDoctorView {
 
     /// Render the footer with right-aligned hints.
     fn render_footer(&self) -> String {
-        let reset = "\x1b[0m";
-        let dim = Color::BrightBlack.to_ansi_fg();
-
-        // Build styled hints
-        let mut styled_hints = String::new();
-        let mut plain_len = 0;
-
-        for (i, (shortcut, desc)) in self.footer_hints.iter().enumerate() {
-            if i > 0 {
-                styled_hints.push_str("  ");
-                plain_len += 2;
-            }
-            styled_hints.push_str(reset);
-            styled_hints.push_str(shortcut);
-            plain_len += measure_text(shortcut);
-            styled_hints.push_str(&dim);
-            styled_hints.push(' ');
-            styled_hints.push_str(desc);
-            plain_len += 1 + desc.len();
-        }
-        styled_hints.push_str(reset);
-
-        // Scroll indicators
         let show_left = self.h_scroll_offset > 0;
         let show_right = self.can_scroll_horizontal() && self.h_scroll_offset < self.max_h_scroll();
-        let left_indicator = if show_left { "◀ " } else { "  " };
-        let right_indicator = if show_right { " ▶" } else { "  " };
-        let indicators_len = 4;
-        let padding = self.width.saturating_sub(plain_len + indicators_len);
 
-        format!(
-            "{}{}{}{}{}{}",
-            dim,
-            left_indicator,
-            " ".repeat(padding),
-            styled_hints,
-            right_indicator,
-            reset
-        )
+        FooterHints::new()
+            .hints(self.footer_hints.iter().map(|(k, d)| (*k, *d)).collect())
+            .width(self.width)
+            .scroll_left(show_left)
+            .scroll_right(show_right)
+            .render()
     }
 }
 
@@ -380,7 +327,7 @@ impl Model for DevDoctorView {
 
     fn view(&self) -> String {
         let mut output = String::new();
-        let reset = "\x1b[0m";
+        let reset = RESET;
         let dim = Color::BrightBlack.to_ansi_fg();
 
         // Title bar
