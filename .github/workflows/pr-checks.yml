@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Validate PR title follows Conventional Commits
+  conventional-commits:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Require conventional commit format for PR titles
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          # Don't require a scope
+          requireScope: false
+          # Disable body validation
+          validateSingleCommit: false
+          # Allow WIP PRs with special prefix
+          wip: true
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" should not start with an uppercase letter.
+            Please use lowercase for conventional commit messages.
+
+  # Check for common issues in PR
+  pr-hygiene:
+    name: PR Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Check for debug statements
+        run: |
+          # Check for common debug patterns that shouldn't be committed
+          if grep -rn "dbg!" --include="*.rs" src/; then
+            echo "::warning::Found dbg! macros in source code. Consider removing before merge."
+          fi
+
+          if grep -rn "println!" --include="*.rs" src/ | grep -v "// ok:" | grep -v "#\[cfg(test)\]" -A5 | head -20; then
+            echo "::notice::Found println! statements. Ensure these are intentional."
+          fi
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          # Count TODO/FIXME comments (informational)
+          TODO_COUNT=$(grep -rn "TODO\|FIXME" --include="*.rs" src/ | wc -l || echo "0")
+          echo "Found $TODO_COUNT TODO/FIXME comments"
+          echo "::notice::Found $TODO_COUNT TODO/FIXME comments in source code."
