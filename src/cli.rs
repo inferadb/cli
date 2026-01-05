@@ -216,35 +216,35 @@ pub enum Commands {
 
     /// Manage profiles
     #[command(subcommand)]
-    Profiles(ProfilesCommands),
+    Profiles(Box<ProfilesCommands>),
 
     /// Manage configuration
     #[command(subcommand)]
-    Config(ConfigCommands),
+    Config(Box<ConfigCommands>),
 
     /// Manage relationships
     #[command(subcommand)]
-    Relationships(RelationshipsCommands),
+    Relationships(Box<RelationshipsCommands>),
 
     /// Manage schemas
     #[command(subcommand)]
-    Schemas(SchemasCommands),
+    Schemas(Box<SchemasCommands>),
 
     /// Manage your account
     #[command(subcommand)]
-    Account(AccountCommands),
+    Account(Box<AccountCommands>),
 
     /// Manage organizations
     #[command(subcommand)]
-    Orgs(OrgsCommands),
+    Orgs(Box<OrgsCommands>),
 
     /// JWKS operations (debugging)
     #[command(subcommand)]
-    Jwks(JwksCommands),
+    Jwks(Box<JwksCommands>),
 
     /// Manage tokens
     #[command(subcommand)]
-    Tokens(TokensCommands),
+    Tokens(Box<TokensCommands>),
 
     /// Export relationships to file
     Export {
@@ -360,7 +360,7 @@ pub enum Commands {
 
     /// Local development cluster
     #[command(subcommand)]
-    Dev(DevCommands),
+    Dev(Box<DevCommands>),
 
     /// Generate shell completions
     Completion {

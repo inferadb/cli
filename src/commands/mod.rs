@@ -86,28 +86,28 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
         },
 
         // Profile commands
-        Commands::Profiles(sub) => profiles_dispatch(ctx, sub).await,
+        Commands::Profiles(sub) => profiles_dispatch(ctx, sub.as_ref()).await,
 
         // Config commands
-        Commands::Config(sub) => config_dispatch(ctx, sub).await,
+        Commands::Config(sub) => config_dispatch(ctx, sub.as_ref()).await,
 
         // Account commands
-        Commands::Account(sub) => account_dispatch(ctx, sub).await,
+        Commands::Account(sub) => account_dispatch(ctx, sub.as_ref()).await,
 
         // Relationship commands
-        Commands::Relationships(sub) => relationships_dispatch(ctx, sub).await,
+        Commands::Relationships(sub) => relationships_dispatch(ctx, sub.as_ref()).await,
 
         // Schema commands
-        Commands::Schemas(sub) => schemas_dispatch(ctx, sub).await,
+        Commands::Schemas(sub) => schemas_dispatch(ctx, sub.as_ref()).await,
 
         // Org commands
-        Commands::Orgs(sub) => orgs_dispatch(ctx, sub).await,
+        Commands::Orgs(sub) => orgs_dispatch(ctx, sub.as_ref()).await,
 
         // JWKS commands
-        Commands::Jwks(sub) => jwks_dispatch(ctx, sub).await,
+        Commands::Jwks(sub) => jwks_dispatch(ctx, sub.as_ref()).await,
 
         // Token commands
-        Commands::Tokens(sub) => tokens_dispatch(ctx, sub).await,
+        Commands::Tokens(sub) => tokens_dispatch(ctx, sub.as_ref()).await,
 
         // Bulk operations
         Commands::Export { output, resource_type, format } => {
@@ -149,7 +149,7 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
             identity::templates(ctx, name.as_deref(), subject.as_deref(), format).await
         },
         Commands::Guide { name } => identity::guide(ctx, name.as_deref()).await,
-        Commands::Dev(sub) => dev_dispatch(ctx, sub).await,
+        Commands::Dev(sub) => dev_dispatch(ctx, sub.as_ref()).await,
         Commands::Completion { shell } => completion(ctx, shell).await,
     }
 }
