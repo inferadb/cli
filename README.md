@@ -4,7 +4,8 @@
     <p>Complete authorization management without leaving your terminal</p>
 </div>
 
-<br />
+> [!IMPORTANT]
+> Under active development. Not production-ready.
 
 The [InferaDB](https://inferadb.com) CLI gives you instant visibility into authorization decisions, lets you test policy changes before deploying, and provides complete control over tenants, schemas, and relationships. From local development to production debugging, everything is one command away.
 
