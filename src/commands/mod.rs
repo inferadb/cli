@@ -193,7 +193,7 @@ async fn account_dispatch(ctx: &Context, sub: &crate::cli::AccountCommands) -> R
         AccountCommands::Show => account::show(ctx).await,
         AccountCommands::Update { name } => account::update(ctx, name.as_deref()).await,
         AccountCommands::Delete { yes } => account::delete(ctx, *yes).await,
-        AccountCommands::Emails(email_cmd) => match email_cmd {
+        AccountCommands::Emails(email_cmd) => match email_cmd.as_ref() {
             EmailsCommands::List => account::emails_list(ctx).await,
             EmailsCommands::Add { email, primary } => {
                 account::emails_add(ctx, email, *primary).await
@@ -203,12 +203,12 @@ async fn account_dispatch(ctx: &Context, sub: &crate::cli::AccountCommands) -> R
             EmailsCommands::Remove { id } => account::emails_remove(ctx, id).await,
             EmailsCommands::SetPrimary { id } => account::emails_set_primary(ctx, id).await,
         },
-        AccountCommands::Sessions(session_cmd) => match session_cmd {
+        AccountCommands::Sessions(session_cmd) => match session_cmd.as_ref() {
             SessionsCommands::List => account::sessions_list(ctx).await,
             SessionsCommands::Revoke { id } => account::sessions_revoke(ctx, id).await,
             SessionsCommands::RevokeOthers => account::sessions_revoke_others(ctx).await,
         },
-        AccountCommands::Password(password_cmd) => match password_cmd {
+        AccountCommands::Password(password_cmd) => match password_cmd.as_ref() {
             PasswordCommands::Reset { request, confirm, email, token, new_password } => {
                 account::password_reset(
                     ctx,
@@ -281,7 +281,9 @@ async fn schemas_dispatch(ctx: &Context, sub: &crate::cli::SchemasCommands) -> R
         SchemasCommands::Watch { file, test, auto_push } => {
             schemas::watch(ctx, file, *test, *auto_push).await
         },
-        SchemasCommands::Canary(canary_cmd) => schemas::canary_dispatch(ctx, canary_cmd).await,
+        SchemasCommands::Canary(canary_cmd) => {
+            schemas::canary_dispatch(ctx, canary_cmd.as_ref()).await
+        },
         SchemasCommands::Analyze { file, checks, compare } => {
             schemas::analyze(ctx, file, checks.as_deref(), compare.as_deref()).await
         },
@@ -335,7 +337,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
         OrgsCommands::Leave { id, yes } => orgs::leave(ctx, id, *yes).await,
 
         // Members
-        OrgsCommands::Members(mem_cmd) => match mem_cmd {
+        OrgsCommands::Members(mem_cmd) => match mem_cmd.as_ref() {
             MembersCommands::List => orgs::members_list(ctx).await,
             MembersCommands::UpdateRole { member_id, role } => {
                 orgs::members_update_role(ctx, member_id, role).await
@@ -344,7 +346,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
         },
 
         // Invitations
-        OrgsCommands::Invitations(inv_cmd) => match inv_cmd {
+        OrgsCommands::Invitations(inv_cmd) => match inv_cmd.as_ref() {
             InvitationsCommands::List => orgs::invitations_list(ctx).await,
             InvitationsCommands::Create { email, role } => {
                 orgs::invitations_create(ctx, email, role).await
@@ -355,7 +357,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
         },
 
         // Org Roles
-        OrgsCommands::Roles(role_cmd) => match role_cmd {
+        OrgsCommands::Roles(role_cmd) => match role_cmd.as_ref() {
             OrgRolesCommands::List => orgs::roles_list(ctx).await,
             OrgRolesCommands::Grant { user_id, role } => {
                 orgs::roles_grant(ctx, user_id, role).await
@@ -367,7 +369,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
         },
 
         // Vaults
-        OrgsCommands::Vaults(vault_cmd) => match vault_cmd {
+        OrgsCommands::Vaults(vault_cmd) => match vault_cmd.as_ref() {
             VaultsCommands::List => orgs::vaults_list(ctx).await,
             VaultsCommands::Create { name, description } => {
                 orgs::vaults_create(ctx, name, description.as_deref()).await
@@ -377,7 +379,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
                 orgs::vaults_update(ctx, id, name.as_deref(), description.as_deref()).await
             },
             VaultsCommands::Delete { id } => orgs::vaults_delete(ctx, id).await,
-            VaultsCommands::Roles(role_cmd) => match role_cmd {
+            VaultsCommands::Roles(role_cmd) => match role_cmd.as_ref() {
                 VaultRolesCommands::List { vault } => {
                     orgs::vault_roles_list(ctx, vault.as_deref()).await
                 },
@@ -389,7 +391,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
                 },
                 VaultRolesCommands::Revoke { id } => orgs::vault_roles_revoke(ctx, id).await,
             },
-            VaultsCommands::TeamRoles(role_cmd) => match role_cmd {
+            VaultsCommands::TeamRoles(role_cmd) => match role_cmd.as_ref() {
                 VaultTeamRolesCommands::List { vault } => {
                     orgs::vault_team_roles_list(ctx, vault.as_deref()).await
                 },
@@ -406,7 +408,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
         },
 
         // Teams
-        OrgsCommands::Teams(team_cmd) => match team_cmd {
+        OrgsCommands::Teams(team_cmd) => match team_cmd.as_ref() {
             TeamsCommands::List => orgs::teams_list(ctx).await,
             TeamsCommands::Create { name, description } => {
                 orgs::teams_create(ctx, name, description.as_deref()).await
@@ -416,7 +418,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
                 orgs::teams_update(ctx, id, name.as_deref()).await
             },
             TeamsCommands::Delete { id } => orgs::teams_delete(ctx, id).await,
-            TeamsCommands::Members(mem_cmd) => match mem_cmd {
+            TeamsCommands::Members(mem_cmd) => match mem_cmd.as_ref() {
                 TeamMembersCommands::List { team_id } => {
                     orgs::team_members_list(ctx, team_id).await
                 },
@@ -430,7 +432,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
                     orgs::team_members_remove(ctx, team_id, user_id).await
                 },
             },
-            TeamsCommands::Permissions(perm_cmd) => match perm_cmd {
+            TeamsCommands::Permissions(perm_cmd) => match perm_cmd.as_ref() {
                 TeamPermissionsCommands::List { team_id } => {
                     orgs::team_permissions_list(ctx, team_id).await
                 },
@@ -441,7 +443,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
                     orgs::team_permissions_revoke(ctx, team_id, permission).await
                 },
             },
-            TeamsCommands::Grants(grant_cmd) => match grant_cmd {
+            TeamsCommands::Grants(grant_cmd) => match grant_cmd.as_ref() {
                 TeamGrantsCommands::List { team_id } => orgs::team_grants_list(ctx, team_id).await,
                 TeamGrantsCommands::Create { team_id, vault, role } => {
                     orgs::team_grants_create(ctx, team_id, vault, role).await
@@ -454,7 +456,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
         },
 
         // Clients
-        OrgsCommands::Clients(client_cmd) => match client_cmd {
+        OrgsCommands::Clients(client_cmd) => match client_cmd.as_ref() {
             ClientsCommands::List => orgs::clients_list(ctx).await,
             ClientsCommands::Create { name, vault } => {
                 orgs::clients_create(ctx, name, vault.as_deref()).await
@@ -466,7 +468,7 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
             ClientsCommands::Delete { id } => orgs::clients_delete(ctx, id).await,
             ClientsCommands::Deactivate { id } => orgs::clients_deactivate(ctx, id).await,
             ClientsCommands::Reactivate { id } => orgs::clients_reactivate(ctx, id).await,
-            ClientsCommands::Certificates(cert_cmd) => match cert_cmd {
+            ClientsCommands::Certificates(cert_cmd) => match cert_cmd.as_ref() {
                 CertificatesCommands::List { client_id } => {
                     orgs::certificates_list(ctx, client_id).await
                 },

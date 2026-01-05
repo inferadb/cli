@@ -704,7 +704,7 @@ pub enum SchemasCommands {
 
     /// Canary deployment management
     #[command(subcommand)]
-    Canary(CanaryCommands),
+    Canary(Box<CanaryCommands>),
 
     /// Analyze schema for issues
     Analyze {
@@ -863,27 +863,27 @@ pub enum OrgsCommands {
 
     /// Manage organization members
     #[command(subcommand)]
-    Members(MembersCommands),
+    Members(Box<MembersCommands>),
 
     /// Manage organization invitations
     #[command(subcommand)]
-    Invitations(InvitationsCommands),
+    Invitations(Box<InvitationsCommands>),
 
     /// Manage organization roles
     #[command(subcommand)]
-    Roles(OrgRolesCommands),
+    Roles(Box<OrgRolesCommands>),
 
     /// Manage organization vaults
     #[command(subcommand)]
-    Vaults(VaultsCommands),
+    Vaults(Box<VaultsCommands>),
 
     /// Manage organization teams
     #[command(subcommand)]
-    Teams(TeamsCommands),
+    Teams(Box<TeamsCommands>),
 
     /// Manage organization clients
     #[command(subcommand)]
-    Clients(ClientsCommands),
+    Clients(Box<ClientsCommands>),
 
     /// View audit logs
     AuditLogs {
@@ -1037,11 +1037,11 @@ pub enum VaultsCommands {
 
     /// Manage vault user roles
     #[command(subcommand)]
-    Roles(VaultRolesCommands),
+    Roles(Box<VaultRolesCommands>),
 
     /// Manage vault team roles
     #[command(subcommand)]
-    TeamRoles(VaultTeamRolesCommands),
+    TeamRoles(Box<VaultTeamRolesCommands>),
 }
 
 /// Vault user role management commands.
@@ -1162,15 +1162,15 @@ pub enum TeamsCommands {
 
     /// Manage team members
     #[command(subcommand)]
-    Members(TeamMembersCommands),
+    Members(Box<TeamMembersCommands>),
 
     /// Manage team permissions
     #[command(subcommand)]
-    Permissions(TeamPermissionsCommands),
+    Permissions(Box<TeamPermissionsCommands>),
 
     /// Manage team vault grants
     #[command(subcommand)]
-    Grants(TeamGrantsCommands),
+    Grants(Box<TeamGrantsCommands>),
 }
 
 /// Team member management commands.
@@ -1337,7 +1337,7 @@ pub enum ClientsCommands {
 
     /// Manage client certificates
     #[command(subcommand)]
-    Certificates(CertificatesCommands),
+    Certificates(Box<CertificatesCommands>),
 }
 
 /// Certificate management commands.
@@ -1400,15 +1400,15 @@ pub enum AccountCommands {
 
     /// Manage email addresses
     #[command(subcommand)]
-    Emails(EmailsCommands),
+    Emails(Box<EmailsCommands>),
 
     /// Manage sessions
     #[command(subcommand)]
-    Sessions(SessionsCommands),
+    Sessions(Box<SessionsCommands>),
 
     /// Password management
     #[command(subcommand)]
-    Password(PasswordCommands),
+    Password(Box<PasswordCommands>),
 }
 
 /// Email management commands.
