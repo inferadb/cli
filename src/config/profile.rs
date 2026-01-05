@@ -33,6 +33,7 @@ impl Profile {
     }
 
     /// Get the URL or a default value.
+    #[must_use]
     pub fn url_or_default(&self) -> &str {
         self.url.as_deref().unwrap_or("https://api.inferadb.com")
     }
@@ -48,7 +49,8 @@ impl Profile {
     }
 
     /// Check if the profile has enough information to connect.
-    pub fn is_complete(&self) -> bool {
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
         self.url.is_some() && self.org.is_some() && self.vault.is_some()
     }
 
@@ -103,26 +105,23 @@ impl Credentials {
     }
 
     /// Check if the credentials are expired.
+    #[must_use]
     pub fn is_expired(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
-            chrono::Utc::now() >= expires_at
-        } else {
-            false
-        }
+        self.expires_at.is_some_and(|expires_at| chrono::Utc::now() >= expires_at)
     }
 
     /// Check if the credentials will expire soon (within 5 minutes).
+    #[must_use]
     pub fn expires_soon(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
+        self.expires_at.is_some_and(|expires_at| {
             let threshold = chrono::Utc::now() + chrono::Duration::minutes(5);
             threshold >= expires_at
-        } else {
-            false
-        }
+        })
     }
 
     /// Check if the credentials can be refreshed.
-    pub fn can_refresh(&self) -> bool {
+    #[must_use]
+    pub const fn can_refresh(&self) -> bool {
         self.refresh_token.is_some()
     }
 }
@@ -134,6 +133,7 @@ pub struct CredentialStore {
 
 impl CredentialStore {
     /// Create a new credential store.
+    #[must_use]
     pub fn new() -> Self {
         Self { service: "inferadb-cli".to_string() }
     }
@@ -171,7 +171,8 @@ impl CredentialStore {
                     .ok_or_else(|| crate::error::Error::credential("Missing access token"))?
                     .to_string();
 
-                let refresh_token = value["refresh_token"].as_str().map(|s| s.to_string());
+                let refresh_token =
+                    value["refresh_token"].as_str().map(std::string::ToString::to_string);
 
                 let expires_at = value["expires_at"]
                     .as_str()
@@ -189,13 +190,13 @@ impl CredentialStore {
     pub fn delete(&self, profile: &str) -> crate::Result<()> {
         let entry = self.entry(profile)?;
         match entry.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()), // Already deleted
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()), // Already deleted is OK
             Err(e) => Err(e.into()),
         }
     }
 
     /// Check if credentials exist for a profile.
+    #[must_use]
     pub fn exists(&self, profile: &str) -> bool {
         self.entry(profile).map(|e| e.get_password().is_ok()).unwrap_or(false)
     }

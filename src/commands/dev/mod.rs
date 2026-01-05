@@ -1,7 +1,7 @@
 //! Local development cluster commands.
 //!
-//! Manages a local Talos Kubernetes cluster for InferaDB development,
-//! including FoundationDB, the engine, control plane, and dashboard.
+//! Manages a local Talos Kubernetes cluster for `InferaDB` development,
+//! including `FoundationDB`, the engine, control plane, and dashboard.
 //!
 //! # Module Structure
 //!
@@ -98,7 +98,7 @@ pub async fn logs(_ctx: &Context, follow: bool, service: Option<&str>, tail: u32
         Some("engine") => ("app.kubernetes.io/name=inferadb-engine", "engine"),
         Some("control") => ("app.kubernetes.io/name=inferadb-control", "control"),
         Some("dashboard") => ("app.kubernetes.io/name=inferadb-dashboard", "dashboard"),
-        Some("fdb") | Some("foundationdb") => ("app.kubernetes.io/name=fdb", "fdb"),
+        Some("fdb" | "foundationdb") => ("app.kubernetes.io/name=fdb", "fdb"),
         Some(s) => (s, s),
         None => ("app.kubernetes.io/part-of=inferadb", "all"),
     };
@@ -112,7 +112,7 @@ pub async fn logs(_ctx: &Context, follow: bool, service: Option<&str>, tail: u32
     let tail_str = tail.to_string();
     args.extend(["--tail", &tail_str]);
 
-    println!("Streaming logs for {} pods...\n", service_name);
+    println!("Streaming logs for {service_name} pods...\n");
     run_command_streaming("kubectl", &args, &[])?;
     Ok(())
 }
@@ -138,7 +138,7 @@ pub async fn dashboard(_ctx: &Context) -> Result<()> {
     match hostname {
         Some(h) if !h.is_empty() => {
             let url = format!("https://{}", h.trim());
-            println!("Opening dashboard: {}", url);
+            println!("Opening dashboard: {url}");
             #[cfg(target_os = "macos")]
             {
                 let _ = Command::new("open").arg(&url).spawn();

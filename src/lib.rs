@@ -1,6 +1,6 @@
-//! InferaDB CLI Library
+//! `InferaDB` CLI Library
 //!
-//! This crate provides the command-line interface for InferaDB,
+//! This crate provides the command-line interface for `InferaDB`,
 //! built on top of the `inferadb` Rust SDK.
 //!
 //! ## Usage
@@ -54,7 +54,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 
     // Show warning if language not supported (after i18n init so we can use translations)
     if !lang_supported && lang != "en-US" {
-        eprintln!("Warning: Language '{}' is not supported. Falling back to en-US.", lang);
+        eprintln!("Warning: Language '{lang}' is not supported. Falling back to en-US.");
         eprintln!("Supported languages: {}", i18n::SUPPORTED_LOCALES.join(", "));
     }
 
@@ -130,7 +130,7 @@ fn extract_lang_arg(args: &[String]) -> String {
         }
         if arg == "--lang" {
             if let Some(lang) = args.get(i + 1) {
-                return lang.to_string();
+                return lang.clone();
             }
         }
     }

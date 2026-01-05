@@ -1,4 +1,4 @@
-//! Internationalization (i18n) support for the InferaDB CLI.
+//! Internationalization (i18n) support for the `InferaDB` CLI.
 //!
 //! Uses Project Fluent for localization, embedding `.ftl` translation files
 //! in the binary for zero-runtime-dependency locale loading.
@@ -48,6 +48,7 @@ pub fn init(locale: &str) -> bool {
 }
 
 /// Check if a locale is supported.
+#[must_use]
 pub fn is_supported(locale: &str) -> bool {
     let normalized = locales::normalize_locale(locale);
     SUPPORTED_LOCALES.contains(&normalized.as_str())
@@ -59,6 +60,7 @@ pub fn is_supported(locale: &str) -> bool {
 /// Initialize with auto-detected locale from environment.
 ///
 /// Checks `INFERADB_LOCALE`, then `LC_ALL`, then `LANG`.
+#[must_use]
 pub fn init_auto() -> bool {
     let locale = locales::detect_locale();
     init(&locale)
@@ -81,6 +83,7 @@ pub fn try_get() -> Option<&'static I18n> {
 /// Get a translation by key.
 ///
 /// Prefer using the `t!()` macro for ergonomic access.
+#[must_use]
 pub fn translate(key: &str) -> String {
     get().translate(key, None)
 }
@@ -88,6 +91,7 @@ pub fn translate(key: &str) -> String {
 /// Get a translation with arguments.
 ///
 /// Prefer using the `t!()` macro for ergonomic access.
+#[must_use]
 pub fn translate_with_args(key: &str, args: &[(&str, &str)]) -> String {
     get().translate(key, Some(args))
 }

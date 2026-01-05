@@ -1,4 +1,4 @@
-//! Interactive shell (REPL) for InferaDB.
+//! Interactive shell (REPL) for `InferaDB`.
 
 use std::io::{self, BufRead, Write};
 
@@ -19,7 +19,7 @@ pub async fn shell(ctx: &Context) -> Result<()> {
         let line = match line {
             Ok(l) => l,
             Err(e) => {
-                ctx.output.error(&format!("Read error: {}", e));
+                ctx.output.error(&format!("Read error: {e}"));
                 break;
             },
         };
@@ -78,7 +78,7 @@ pub async fn shell(ctx: &Context) -> Result<()> {
                 let _ = io::stdout().flush();
             },
             cmd => {
-                println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+                println!("Unknown command: {cmd}. Type 'help' for available commands.");
             },
         }
 
@@ -132,18 +132,18 @@ async fn execute_check(ctx: &Context, subject: &str, permission: &str, resource:
             match vault.check(subject, permission, resource).await {
                 Ok(allowed) => {
                     if allowed {
-                        println!("ALLOWED: {} can {} {}", subject, permission, resource);
+                        println!("ALLOWED: {subject} can {permission} {resource}");
                     } else {
-                        println!("DENIED: {} cannot {} {}", subject, permission, resource);
+                        println!("DENIED: {subject} cannot {permission} {resource}");
                     }
                 },
                 Err(e) => {
-                    println!("Error: {}", e);
+                    println!("Error: {e}");
                 },
             }
         },
         Err(e) => {
-            println!("Connection error: {}", e);
+            println!("Connection error: {e}");
         },
     }
 }
@@ -156,15 +156,15 @@ async fn execute_add(ctx: &Context, subject: &str, relation: &str, resource: &st
             let relationship = inferadb::Relationship::new(resource, relation, subject);
             match rels.write(relationship).await {
                 Ok(_) => {
-                    println!("Added: {} -[{}]-> {}", subject, relation, resource);
+                    println!("Added: {subject} -[{relation}]-> {resource}");
                 },
                 Err(e) => {
-                    println!("Error: {}", e);
+                    println!("Error: {e}");
                 },
             }
         },
         Err(e) => {
-            println!("Connection error: {}", e);
+            println!("Connection error: {e}");
         },
     }
 }
@@ -176,16 +176,16 @@ async fn execute_delete(ctx: &Context, subject: &str, relation: &str, resource: 
             let rels = vault.relationships();
             let relationship = inferadb::Relationship::new(resource, relation, subject);
             match rels.delete(relationship).await {
-                Ok(_) => {
-                    println!("Deleted: {} -[{}]-> {}", subject, relation, resource);
+                Ok(()) => {
+                    println!("Deleted: {subject} -[{relation}]-> {resource}");
                 },
                 Err(e) => {
-                    println!("Error: {}", e);
+                    println!("Error: {e}");
                 },
             }
         },
         Err(e) => {
-            println!("Connection error: {}", e);
+            println!("Connection error: {e}");
         },
     }
 }
@@ -198,7 +198,7 @@ async fn execute_list(ctx: &Context, resource_type: Option<&str>) {
             let mut req = rels.list().limit(50);
 
             if let Some(rt) = resource_type {
-                req = req.resource(format!("{}:*", rt));
+                req = req.resource(format!("{rt}:*"));
             }
 
             match req.await {
@@ -220,12 +220,12 @@ async fn execute_list(ctx: &Context, resource_type: Option<&str>) {
                     }
                 },
                 Err(e) => {
-                    println!("Error: {}", e);
+                    println!("Error: {e}");
                 },
             }
         },
         Err(e) => {
-            println!("Connection error: {}", e);
+            println!("Connection error: {e}");
         },
     }
 }
@@ -233,10 +233,10 @@ async fn execute_list(ctx: &Context, resource_type: Option<&str>) {
 async fn execute_status(ctx: &Context) {
     println!("Profile: {}", ctx.effective_profile_name());
     if let Some(org) = ctx.profile_org_id() {
-        println!("Organization: {}", org);
+        println!("Organization: {org}");
     }
     if let Some(vault) = ctx.profile_vault_id() {
-        println!("Vault: {}", vault);
+        println!("Vault: {vault}");
     }
     println!("Authenticated: {}", ctx.is_authenticated());
 
@@ -248,12 +248,12 @@ async fn execute_status(ctx: &Context) {
                     println!("Service Status: {}", health.status);
                 },
                 Err(e) => {
-                    println!("Service Status: Error - {}", e);
+                    println!("Service Status: Error - {e}");
                 },
             }
         },
         Err(e) => {
-            println!("Connection: Error - {}", e);
+            println!("Connection: Error - {e}");
         },
     }
 }

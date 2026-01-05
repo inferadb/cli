@@ -1,4 +1,4 @@
-//! Command implementations for the InferaDB CLI.
+//! Command implementations for the `InferaDB` CLI.
 //!
 //! Each submodule implements a group of related commands.
 
@@ -594,22 +594,21 @@ async fn cheatsheet(_ctx: &Context, _role: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+fn print_completions<G: clap_complete::Generator>(gen: G, cmd: &mut clap::Command) {
+    clap_complete::generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
+}
+
 async fn completion(_ctx: &Context, shell: &crate::cli::Shell) -> Result<()> {
     use clap::CommandFactory;
-    use clap_complete::{Generator, generate};
 
     let mut cmd = crate::cli::Cli::command();
-
-    fn print_completions<G: Generator>(gen: G, cmd: &mut clap::Command) {
-        generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
-    }
 
     match shell {
         crate::cli::Shell::Bash => print_completions(clap_complete::shells::Bash, &mut cmd),
         crate::cli::Shell::Zsh => print_completions(clap_complete::shells::Zsh, &mut cmd),
         crate::cli::Shell::Fish => print_completions(clap_complete::shells::Fish, &mut cmd),
         crate::cli::Shell::PowerShell => {
-            print_completions(clap_complete::shells::PowerShell, &mut cmd)
+            print_completions(clap_complete::shells::PowerShell, &mut cmd);
         },
     }
 

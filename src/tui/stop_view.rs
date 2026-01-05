@@ -15,7 +15,7 @@ use teapot::{
 pub use super::install_view::InstallStep;
 
 /// Message type for dev stop view.
-/// This is a type alias to the underlying TaskProgressMsg.
+/// This is a type alias to the underlying `TaskProgressMsg`.
 pub type DevStopViewMsg = TaskProgressMsg;
 
 /// The dev stop view state.
@@ -27,6 +27,7 @@ pub struct DevStopView {
 
 impl DevStopView {
     /// Create a new stop view with the given steps.
+    #[must_use]
     pub fn new(steps: Vec<InstallStep>) -> Self {
         let task_steps: Vec<TaskStep> = steps
             .into_iter()
@@ -70,26 +71,31 @@ impl DevStopView {
     }
 
     /// Check if the view should quit.
+    #[must_use]
     pub fn should_quit(&self) -> bool {
         self.inner.should_quit()
     }
 
     /// Check if stop was cancelled by user.
+    #[must_use]
     pub fn was_cancelled(&self) -> bool {
         self.inner.was_cancelled()
     }
 
     /// Check if stop completed successfully.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.inner.is_success()
     }
 
     /// Check if there was a failure.
+    #[must_use]
     pub fn has_failure(&self) -> bool {
         self.inner.has_failure()
     }
 
     /// Get the current phase.
+    #[must_use]
     pub fn phase(&self) -> &Phase {
         self.inner.phase()
     }

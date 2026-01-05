@@ -1,4 +1,4 @@
-//! FluentBundle creation and management.
+//! `FluentBundle` creation and management.
 
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue, concurrent::FluentBundle};
 use unic_langid::LanguageIdentifier;
@@ -6,9 +6,9 @@ use unic_langid::LanguageIdentifier;
 /// Embedded locale files.
 const EN_US_FTL: &str = include_str!("locales/en-US.ftl");
 
-/// The i18n system, holding a FluentBundle for translation lookups.
+/// The i18n system, holding a `FluentBundle` for translation lookups.
 ///
-/// Uses the concurrent FluentBundle variant for thread-safety.
+/// Uses the concurrent `FluentBundle` variant for thread-safety.
 pub struct I18n {
     bundle: FluentBundle<FluentResource>,
     locale: LanguageIdentifier,
@@ -18,15 +18,13 @@ impl I18n {
     /// Create a new I18n instance for the given locale.
     ///
     /// Falls back to en-US if the locale is not available.
+    #[must_use]
     pub fn new(locale: &str) -> Self {
         let locale: LanguageIdentifier =
             locale.parse().unwrap_or_else(|_| "en-US".parse().unwrap());
 
-        let ftl_string = match locale.language.as_str() {
-            "en" => EN_US_FTL,
-            // Add more languages here as they become available
-            _ => EN_US_FTL,
-        };
+        // Currently only en-US is supported, add more languages here as they become available
+        let ftl_string = EN_US_FTL;
 
         let resource =
             FluentResource::try_new(ftl_string.to_string()).expect("Failed to parse FTL resource");
@@ -39,7 +37,7 @@ impl I18n {
     }
 
     /// Get the current locale.
-    pub fn locale(&self) -> &LanguageIdentifier {
+    pub const fn locale(&self) -> &LanguageIdentifier {
         &self.locale
     }
 
@@ -47,18 +45,14 @@ impl I18n {
     ///
     /// If the key is not found, returns the key itself as a fallback.
     pub fn translate(&self, key: &str, args: Option<&[(&str, &str)]>) -> String {
-        let msg = match self.bundle.get_message(key) {
-            Some(msg) => msg,
-            None => {
-                // Key not found - return key as fallback
-                tracing::warn!(key = key, "Missing translation key");
-                return key.to_string();
-            },
+        let Some(msg) = self.bundle.get_message(key) else {
+            // Key not found - return key as fallback
+            tracing::warn!(key = key, "Missing translation key");
+            return key.to_string();
         };
 
-        let pattern = match msg.value() {
-            Some(pattern) => pattern,
-            None => return key.to_string(),
+        let Some(pattern) = msg.value() else {
+            return key.to_string();
         };
 
         let mut errors = vec![];

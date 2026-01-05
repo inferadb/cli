@@ -23,7 +23,7 @@ pub fn run_command(cmd: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(cmd)
         .args(args)
         .output()
-        .map_err(|e| Error::Other(format!("Failed to run {}: {}", cmd, e)))?;
+        .map_err(|e| Error::Other(format!("Failed to run {cmd}: {e}")))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -52,8 +52,7 @@ pub fn run_command_streaming(cmd: &str, args: &[&str], env_vars: &[(&str, &str)]
         command.env(key, value);
     }
 
-    let status =
-        command.status().map_err(|e| Error::Other(format!("Failed to run {}: {}", cmd, e)))?;
+    let status = command.status().map_err(|e| Error::Other(format!("Failed to run {cmd}: {e}")))?;
 
     if status.success() {
         Ok(())
@@ -85,8 +84,8 @@ pub fn normalize_version(raw: &str) -> String {
     // Ensure it starts with 'v'
     if version.starts_with('v') {
         version.to_string()
-    } else if version.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
-        format!("v{}", version)
+    } else if version.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("v{version}")
     } else {
         raw.to_string()
     }
@@ -101,24 +100,24 @@ pub fn extract_version_string(output: &str, command: &str) -> String {
             output
                 .lines()
                 .find(|line| line.contains("Talos v") || line.contains("Tag:"))
-                .map(|line| line.trim().trim_start_matches("Tag:").trim().to_string())
-                .unwrap_or_else(|| "installed".to_string())
+                .map_or_else(
+                    || "installed".to_string(),
+                    |line| line.trim().trim_start_matches("Tag:").trim().to_string(),
+                )
         },
         "kubectl" => {
             // Output: "Client Version: v1.34.1\nKustomize Version: v5.7.1"
-            output
-                .lines()
-                .find(|line| line.starts_with("Client Version:"))
-                .map(|line| line.trim_start_matches("Client Version:").trim().to_string())
-                .unwrap_or_else(|| "installed".to_string())
+            output.lines().find(|line| line.starts_with("Client Version:")).map_or_else(
+                || "installed".to_string(),
+                |line| line.trim_start_matches("Client Version:").trim().to_string(),
+            )
         },
         _ => {
             // Default: take first non-empty line
             output
                 .lines()
                 .find(|line| !line.trim().is_empty())
-                .map(|line| line.trim().to_string())
-                .unwrap_or_else(|| "installed".to_string())
+                .map_or_else(|| "installed".to_string(), |line| line.trim().to_string())
         },
     };
     normalize_version(&raw)

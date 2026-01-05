@@ -21,13 +21,13 @@ pub async fn stream(
     if let Some(rt) = resource_type {
         use inferadb::vault::watch::WatchFilter;
         watch = watch.filter(WatchFilter::resource_type(rt));
-        ctx.output.info(&format!("Filtering by resource type: {}", rt));
+        ctx.output.info(&format!("Filtering by resource type: {rt}"));
     }
 
     if let Some(rel) = relation {
         use inferadb::vault::watch::WatchFilter;
         watch = watch.filter(WatchFilter::relation(rel));
-        ctx.output.info(&format!("Filtering by relation: {}", rel));
+        ctx.output.info(&format!("Filtering by relation: {rel}"));
     }
 
     ctx.output.info("Watching for changes... (Ctrl+C to stop)");
@@ -51,7 +51,7 @@ pub async fn stream(
                 );
             },
             Err(e) => {
-                ctx.output.error(&format!("Stream error: {}", e));
+                ctx.output.error(&format!("Stream error: {e}"));
                 // Continue watching after transient errors
             },
         }

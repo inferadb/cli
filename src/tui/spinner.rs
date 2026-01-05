@@ -134,7 +134,7 @@ pub fn start(message: impl Into<String>) -> SpinnerHandle {
         }
 
         // Clear the spinner line when done
-        eprint!("\r{}", CLEAR_LINE);
+        eprint!("\r{CLEAR_LINE}");
         let _ = io::stderr().flush();
     });
 
@@ -204,7 +204,7 @@ where
 /// Clear the current line.
 fn clear_line() {
     if is_tty() && !is_ci() {
-        eprint!("\r{}", CLEAR_LINE);
+        eprint!("\r{CLEAR_LINE}");
         let _ = io::stderr().flush();
     }
 }

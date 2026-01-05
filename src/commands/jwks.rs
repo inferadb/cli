@@ -34,37 +34,34 @@ pub async fn get_key(ctx: &Context, kid: &str) -> Result<()> {
     let client = ctx.client().await?;
     let jwks_client = client.jwks();
 
-    ctx.output.info(&format!("Looking up key: {}", kid));
+    ctx.output.info(&format!("Looking up key: {kid}"));
 
     let jwks = jwks_client.get().await?;
 
     // Find the key with matching kid
     let key = jwks.keys.iter().find(|k| k.kid.as_deref() == Some(kid));
 
-    match key {
-        Some(key) => {
-            println!("Key Details");
-            println!("===========");
-            println!();
-            println!("  kid: {}", key.kid.as_deref().unwrap_or("(not set)"));
-            println!("  kty: {}", key.kty);
-            println!("  alg: {}", key.alg.as_deref().unwrap_or("(not set)"));
-            println!("  use: {}", key.use_.as_deref().unwrap_or("(not set)"));
+    if let Some(key) = key {
+        println!("Key Details");
+        println!("===========");
+        println!();
+        println!("  kid: {}", key.kid.as_deref().unwrap_or("(not set)"));
+        println!("  kty: {}", key.kty);
+        println!("  alg: {}", key.alg.as_deref().unwrap_or("(not set)"));
+        println!("  use: {}", key.use_.as_deref().unwrap_or("(not set)"));
 
-            // Output full key as JSON
-            println!();
-            println!("Full key:");
-            println!("{}", serde_json::to_string_pretty(&key)?);
-        },
-        None => {
-            ctx.output.error(&format!("Key not found: {}", kid));
-            ctx.output.info("Available keys:");
-            for key in &jwks.keys {
-                if let Some(kid) = &key.kid {
-                    println!("  - {}", kid);
-                }
+        // Output full key as JSON
+        println!();
+        println!("Full key:");
+        println!("{}", serde_json::to_string_pretty(&key)?);
+    } else {
+        ctx.output.error(&format!("Key not found: {kid}"));
+        ctx.output.info("Available keys:");
+        for key in &jwks.keys {
+            if let Some(kid) = &key.kid {
+                println!("  - {kid}");
             }
-        },
+        }
     }
 
     Ok(())

@@ -38,7 +38,7 @@ impl OAuthFlow {
 
     /// Create a new OAuth flow with custom configuration.
     pub fn with_config(auth_url: &str, token_url: &str, client_id: &str) -> Result<Self> {
-        let redirect_url = format!("http://localhost:{}/callback", CALLBACK_PORT);
+        let redirect_url = format!("http://localhost:{CALLBACK_PORT}/callback");
 
         Ok(Self {
             auth_url: auth_url.to_string(),
@@ -83,12 +83,12 @@ impl OAuthFlow {
             .url();
 
         eprintln!("Opening browser for authentication...");
-        eprintln!("If the browser doesn't open, visit: {}", auth_url);
+        eprintln!("If the browser doesn't open, visit: {auth_url}");
 
         // Open browser
         if let Err(e) = webbrowser::open(auth_url.as_str()) {
-            eprintln!("Failed to open browser: {}", e);
-            eprintln!("Please open this URL manually: {}", auth_url);
+            eprintln!("Failed to open browser: {e}");
+            eprintln!("Please open this URL manually: {auth_url}");
         }
 
         // Wait for callback
@@ -120,10 +120,10 @@ impl OAuthFlow {
                 }
             })
             .await
-            .map_err(|e| Error::oauth(format!("Token exchange failed: {}", e)))?;
+            .map_err(|e| Error::oauth(format!("Token exchange failed: {e}")))?;
 
-        let access_token = token_result.access_token().secret().to_string();
-        let refresh_token = token_result.refresh_token().map(|t| t.secret().to_string());
+        let access_token = token_result.access_token().secret().clone();
+        let refresh_token = token_result.refresh_token().map(|t| t.secret().clone());
         let expires_at = token_result
             .expires_in()
             .map(|d| chrono::Utc::now() + chrono::Duration::seconds(d.as_secs() as i64));
@@ -146,12 +146,12 @@ impl Default for OAuthFlow {
 
 /// Wait for the OAuth callback.
 fn wait_for_callback(expected_state: String) -> Result<(String, String)> {
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", CALLBACK_PORT))
-        .map_err(|e| Error::oauth(format!("Failed to start callback server: {}", e)))?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{CALLBACK_PORT}"))
+        .map_err(|e| Error::oauth(format!("Failed to start callback server: {e}")))?;
 
     listener
         .set_nonblocking(false)
-        .map_err(|e| Error::oauth(format!("Failed to configure listener: {}", e)))?;
+        .map_err(|e| Error::oauth(format!("Failed to configure listener: {e}")))?;
 
     let (tx, rx) = mpsc::channel();
 
@@ -189,21 +189,19 @@ fn wait_for_callback(expected_state: String) -> Result<(String, String)> {
                                     </body></html>";
 
                                 let _ = stream.write_all(response.as_bytes());
-                                let _ = tx.send(Ok((code.to_string(), state.to_string())));
+                                let _ = tx.send(Ok(((*code).to_string(), (*state).to_string())));
                                 break;
                             } else if let Some(error) = params.get("error") {
                                 let description = params
                                     .get("error_description")
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_else(|| error.to_string());
+                                    .map_or_else(|| (*error).to_string(), |s| (*s).to_string());
 
                                 let response = format!(
                                     "HTTP/1.1 400 Bad Request\r\n\
                                     Content-Type: text/html\r\n\
                                     Connection: close\r\n\r\n\
                                     <html><body><h1>Authentication failed</h1>\
-                                    <p>{}</p></body></html>",
-                                    description
+                                    <p>{description}</p></body></html>"
                                 );
 
                                 let _ = stream.write_all(response.as_bytes());
@@ -214,8 +212,7 @@ fn wait_for_callback(expected_state: String) -> Result<(String, String)> {
                     }
                 },
                 Err(e) => {
-                    let _ =
-                        tx.send(Err(Error::oauth(format!("Failed to accept connection: {}", e))));
+                    let _ = tx.send(Err(Error::oauth(format!("Failed to accept connection: {e}"))));
                     break;
                 },
             }
@@ -252,6 +249,7 @@ pub fn clear_credentials(profile: &str) -> Result<()> {
 }
 
 /// Check if credentials exist for a profile.
+#[must_use]
 pub fn has_credentials(profile: &str) -> bool {
     let store = CredentialStore::new();
     store.exists(profile)

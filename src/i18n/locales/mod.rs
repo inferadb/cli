@@ -41,7 +41,7 @@ pub fn detect_locale() -> String {
 ///
 /// Examples:
 /// - "en_US.UTF-8" -> "en-US"
-/// - "en_US" -> "en-US"
+/// - "`en_US`" -> "en-US"
 /// - "en" -> "en"
 pub fn normalize_locale(locale: &str) -> String {
     // Remove encoding suffix (e.g., ".UTF-8")
@@ -57,19 +57,10 @@ pub fn normalize_locale(locale: &str) -> String {
 pub fn resolve_locale(locale: &str) -> &'static str {
     let normalized = normalize_locale(locale);
 
-    // Check exact match or language prefix
-    match normalized.as_str() {
-        "en-US" => "en-US",
-        // Add more supported locales here
-        other => {
-            // Check language prefix
-            match other.split('-').next() {
-                Some("en") => "en-US",
-                // Add more language fallbacks here
-                _ => "en-US",
-            }
-        },
-    }
+    // Currently only en-US is supported, add more locales/language fallbacks here
+    // For now, all locales resolve to en-US
+    let _ = normalized; // Acknowledge normalized is intentionally unused for now
+    "en-US"
 }
 
 #[cfg(test)]

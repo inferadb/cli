@@ -114,6 +114,7 @@ pub struct DevDoctorView {
 
 impl DevDoctorView {
     /// Create a new doctor view.
+    #[must_use]
     pub fn new(width: usize, height: usize) -> Self {
         Self {
             width,
@@ -134,12 +135,14 @@ impl DevDoctorView {
     }
 
     /// Set the overall environment status.
-    pub fn with_status(mut self, status: EnvironmentStatus) -> Self {
+    #[must_use]
+    pub const fn with_status(mut self, status: EnvironmentStatus) -> Self {
         self.status = status;
         self
     }
 
     /// Set the check results.
+    #[must_use]
     pub fn with_results(mut self, results: Vec<CheckResult>) -> Self {
         self.results = results;
         self.sync_rows();
@@ -153,12 +156,14 @@ impl DevDoctorView {
     }
 
     /// Get the overall status.
-    pub fn status(&self) -> EnvironmentStatus {
+    #[must_use]
+    pub const fn status(&self) -> EnvironmentStatus {
         self.status
     }
 
     /// Check if environment is ready.
-    pub fn is_ready(&self) -> bool {
+    #[must_use]
+    pub const fn is_ready(&self) -> bool {
         matches!(self.status, EnvironmentStatus::Ready)
     }
 
@@ -172,7 +177,7 @@ impl DevDoctorView {
     }
 
     /// Get visible rows for the table.
-    fn visible_rows(&self) -> usize {
+    const fn visible_rows(&self) -> usize {
         // title(1) + blank(1) + status(1) + sep(1) + header(1) + sep(1) + footer(1) = 7
         self.height.saturating_sub(7)
     }

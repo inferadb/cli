@@ -163,7 +163,7 @@ pub async fn emails_add(ctx: &Context, email: &str, set_primary: bool) -> Result
     let client = ctx.client().await?;
     let emails_client = client.account().emails();
 
-    ctx.output.info(&format!("Adding email: {}", email));
+    ctx.output.info(&format!("Adding email: {email}"));
 
     let result = emails_client.add(email).await?;
 
@@ -206,7 +206,7 @@ pub async fn emails_resend(ctx: &Context, email: &str) -> Result<()> {
     let client = ctx.client().await?;
     let emails_client = client.account().emails();
 
-    ctx.output.info(&format!("Resending verification to: {}", email));
+    ctx.output.info(&format!("Resending verification to: {email}"));
 
     emails_client.resend_verification(email).await?;
 
@@ -222,7 +222,7 @@ pub async fn emails_remove(ctx: &Context, email_id: &str) -> Result<()> {
     let emails_client = client.account().emails();
 
     if !ctx.yes {
-        let confirmed = ctx.confirm(&format!("Remove email '{}'?", email_id))?;
+        let confirmed = ctx.confirm(&format!("Remove email '{email_id}'?"))?;
         if !confirmed {
             ctx.output.info("Cancelled.");
             return Ok(());
@@ -241,7 +241,7 @@ pub async fn emails_set_primary(ctx: &Context, email_id: &str) -> Result<()> {
     let client = ctx.client().await?;
     let emails_client = client.account().emails();
 
-    ctx.output.info(&format!("Setting primary email: {}", email_id));
+    ctx.output.info(&format!("Setting primary email: {email_id}"));
 
     emails_client.set_primary(email_id).await?;
 
@@ -287,7 +287,7 @@ pub async fn sessions_revoke(ctx: &Context, session_id: &str) -> Result<()> {
     let sessions_client = client.account().sessions();
 
     if !ctx.yes {
-        let confirmed = ctx.confirm(&format!("Revoke session '{}'?", session_id))?;
+        let confirmed = ctx.confirm(&format!("Revoke session '{session_id}'?"))?;
         if !confirmed {
             ctx.output.info("Cancelled.");
             return Ok(());
@@ -337,33 +337,25 @@ pub async fn password_reset(
 ) -> Result<()> {
     if request {
         // Request a password reset email
-        let email = match email {
-            Some(e) => e.to_string(),
-            None => {
-                ctx.output.error("Email required for password reset request.");
-                ctx.output.info("Usage: inferadb account password reset --request --email <email>");
-                return Ok(());
-            },
+        let Some(email) = email else {
+            ctx.output.error("Email required for password reset request.");
+            ctx.output.info("Usage: inferadb account password reset --request --email <email>");
+            return Ok(());
         };
 
-        ctx.output.info(&format!("Requesting password reset for: {}", email));
+        ctx.output.info(&format!("Requesting password reset for: {email}"));
         ctx.output.info("If an account exists with this email, a reset link will be sent.");
 
         // Password reset initiation typically happens through the auth service
         // The SDK may not expose this directly
         ctx.output.warn("Password reset email request submitted.");
         ctx.output.info("Check your inbox for the reset link.");
-
-        Ok(())
     } else if confirm {
         // Confirm password reset with token
-        let token = match token {
-            Some(t) => t,
-            None => {
-                ctx.output.error("Token required for password reset confirmation.");
-                ctx.output.info("Usage: inferadb account password reset --confirm --token <token>");
-                return Ok(());
-            },
+        let Some(token) = token else {
+            ctx.output.error("Token required for password reset confirmation.");
+            ctx.output.info("Usage: inferadb account password reset --confirm --token <token>");
+            return Ok(());
         };
 
         ctx.output.info("Confirming password reset...");
@@ -372,13 +364,12 @@ pub async fn password_reset(
         // Password reset confirmation typically requires entering a new password
         ctx.output.warn("Password reset confirmation requires the web dashboard.");
         ctx.output.info("Please click the link in your email to complete the reset.");
-
-        Ok(())
     } else {
         ctx.output.error("Specify --request or --confirm.");
         ctx.output.info("Usage:");
         ctx.output.info("  inferadb account password reset --request --email <email>");
         ctx.output.info("  inferadb account password reset --confirm --token <token>");
-        Ok(())
     }
+
+    Ok(())
 }

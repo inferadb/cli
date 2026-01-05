@@ -17,9 +17,6 @@ pub async fn check(
     explain: bool,
     context_json: Option<&str>,
 ) -> Result<()> {
-    let client = ctx.client().await?;
-    let vault = client.vault();
-
     #[derive(Serialize)]
     struct CheckResult {
         subject: String,
@@ -30,6 +27,9 @@ pub async fn check(
         reason: Option<String>,
     }
 
+    let client = ctx.client().await?;
+    let vault = client.vault();
+
     // Build check request
     let mut check_req = vault.check(subject, permission, resource);
 
@@ -37,7 +37,7 @@ pub async fn check(
     if let Some(json) = context_json {
         let context_map: std::collections::HashMap<String, serde_json::Value> =
             serde_json::from_str(json)
-                .map_err(|e| Error::parse(format!("Invalid context JSON: {}", e)))?;
+                .map_err(|e| Error::parse(format!("Invalid context JSON: {e}")))?;
 
         let mut ctx_builder = inferadb::Context::new();
         for (key, value) in context_map {
@@ -73,9 +73,9 @@ pub async fn check(
 
     if ctx.output.format() == crate::output::OutputFormat::Table {
         if allowed {
-            ctx.output.success(&format!("{} {} {} → allowed", subject, permission, resource));
+            ctx.output.success(&format!("{subject} {permission} {resource} → allowed"));
         } else {
-            ctx.output.error(&format!("{} {} {} → denied", subject, permission, resource));
+            ctx.output.error(&format!("{subject} {permission} {resource} → denied"));
 
             if explain {
                 ctx.output.info("");
@@ -131,11 +131,9 @@ pub async fn simulate(
     let result = sim.check(subject, permission, resource).await?;
 
     if result.allowed {
-        ctx.output
-            .success(&format!("With changes: {} {} {} → allowed", subject, permission, resource));
+        ctx.output.success(&format!("With changes: {subject} {permission} {resource} → allowed"));
     } else {
-        ctx.output
-            .error(&format!("With changes: {} {} {} → denied", subject, permission, resource));
+        ctx.output.error(&format!("With changes: {subject} {permission} {resource} → denied"));
     }
 
     Ok(())
@@ -146,7 +144,7 @@ pub async fn expand(ctx: &Context, resource: &str, relation: &str, _max_depth: u
     let client = ctx.client().await?;
     let vault = client.vault();
 
-    ctx.output.info(&format!("Expanding {}#{}", resource, relation));
+    ctx.output.info(&format!("Expanding {resource}#{relation}"));
     ctx.output.info("");
 
     // TODO: Implement expand using SDK
@@ -158,7 +156,7 @@ pub async fn expand(ctx: &Context, resource: &str, relation: &str, _max_depth: u
         ctx.output.info("(no subjects found)");
     } else {
         for subject in subjects {
-            println!("  └─ {}", subject);
+            println!("  └─ {subject}");
         }
     }
 
@@ -182,7 +180,7 @@ pub async fn explain_permission(
         .resource(resource)
         .await?;
 
-    ctx.output.info(&format!("Explaining: {} {} {}", subject, permission, resource));
+    ctx.output.info(&format!("Explaining: {subject} {permission} {resource}"));
     ctx.output.info("");
 
     ctx.output.value(&explanation)?;
@@ -212,7 +210,7 @@ pub async fn list_resources(
         ctx.output.info("No accessible resources found.");
     } else {
         for resource in &resources {
-            println!("{}", resource);
+            println!("{resource}");
         }
         ctx.output.info(&format!("\nTotal: {} resources", resources.len()));
     }
@@ -242,7 +240,7 @@ pub async fn list_subjects(
         ctx.output.info("No subjects with access found.");
     } else {
         for subject in &subjects {
-            println!("{}", subject);
+            println!("{subject}");
         }
         ctx.output.info(&format!("\nTotal: {} subjects", subjects.len()));
     }
@@ -254,8 +252,7 @@ pub async fn list_subjects(
 fn parse_relationship(s: &str) -> Result<inferadb::Relationship<'static>> {
     s.parse().map_err(|_| {
         Error::parse(format!(
-            "Invalid relationship format: '{}'. Expected: resource#relation@subject",
-            s
+            "Invalid relationship format: '{s}'. Expected: resource#relation@subject"
         ))
     })
 }

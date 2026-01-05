@@ -123,13 +123,13 @@ pub async fn profiles_show(ctx: &Context, name: Option<&str>) -> Result<()> {
         }
         println!();
         if let Some(ref url) = details.url {
-            println!("URL: {}", url);
+            println!("URL: {url}");
         }
         if let Some(ref org) = details.org {
-            println!("Organization: {}", org);
+            println!("Organization: {org}");
         }
         if let Some(ref vault) = details.vault {
-            println!("Vault: {}", vault);
+            println!("Vault: {vault}");
         }
         println!("Authenticated: {}", if authenticated { "yes" } else { "no" });
     } else {
@@ -148,13 +148,13 @@ pub async fn profiles_create(
     vault: Option<&str>,
 ) -> Result<()> {
     if ctx.config.profiles.contains_key(name) {
-        return Err(Error::config(format!("Profile '{}' already exists", name)));
+        return Err(Error::config(format!("Profile '{name}' already exists")));
     }
 
     let profile = Profile {
-        url: url.map(|s| s.to_string()),
-        org: org.map(|s| s.to_string()),
-        vault: vault.map(|s| s.to_string()),
+        url: url.map(std::string::ToString::to_string),
+        org: org.map(std::string::ToString::to_string),
+        vault: vault.map(std::string::ToString::to_string),
     };
 
     let mut config = ctx.config.clone();
@@ -167,7 +167,7 @@ pub async fn profiles_create(
 
     config.save()?;
 
-    ctx.output.success(&format!("Profile '{}' created.", name));
+    ctx.output.success(&format!("Profile '{name}' created."));
 
     if config.default_profile.as_deref() == Some(name) {
         ctx.output.info("Set as default profile.");
@@ -201,7 +201,7 @@ pub async fn profiles_update(
 
     config.save()?;
 
-    ctx.output.success(&format!("Profile '{}' updated.", name));
+    ctx.output.success(&format!("Profile '{name}' updated."));
 
     Ok(())
 }
@@ -215,7 +215,7 @@ pub async fn profiles_rename(ctx: &Context, old_name: &str, new_name: &str) -> R
     let mut config = ctx.config.clone();
 
     if config.profiles.contains_key(new_name) {
-        return Err(Error::config(format!("Profile '{}' already exists", new_name)));
+        return Err(Error::config(format!("Profile '{new_name}' already exists")));
     }
 
     let profile = config
@@ -239,7 +239,7 @@ pub async fn profiles_rename(ctx: &Context, old_name: &str, new_name: &str) -> R
         let _ = store.delete(old_name);
     }
 
-    ctx.output.success(&format!("Profile '{}' renamed to '{}'.", old_name, new_name));
+    ctx.output.success(&format!("Profile '{old_name}' renamed to '{new_name}'."));
 
     Ok(())
 }
@@ -250,7 +250,7 @@ pub async fn profiles_delete(ctx: &Context, name: &str) -> Result<()> {
         return Err(Error::ProfileNotFound(name.to_string()));
     }
 
-    if !ctx.yes && !ctx.confirm(&format!("Delete profile '{}'?", name))? {
+    if !ctx.yes && !ctx.confirm(&format!("Delete profile '{name}'?"))? {
         ctx.output.info("Cancelled.");
         return Ok(());
     }
@@ -270,7 +270,7 @@ pub async fn profiles_delete(ctx: &Context, name: &str) -> Result<()> {
     let store = crate::config::CredentialStore::new();
     let _ = store.delete(name);
 
-    ctx.output.success(&format!("Profile '{}' deleted.", name));
+    ctx.output.success(&format!("Profile '{name}' deleted."));
 
     Ok(())
 }
@@ -287,14 +287,15 @@ pub async fn profiles_default(ctx: &Context, name: Option<&str>) -> Result<()> {
             config.set_default(Some(n.to_string()));
             config.save()?;
 
-            ctx.output.success(&format!("Default profile set to '{}'.", n));
+            ctx.output.success(&format!("Default profile set to '{n}'."));
         },
-        None => match &ctx.config.default_profile {
-            Some(p) => println!("{}", p),
-            None => {
+        None => {
+            if let Some(p) = &ctx.config.default_profile {
+                println!("{p}");
+            } else {
                 ctx.output.info("No default profile set.");
                 ctx.output.info("Set one with 'inferadb profiles default <name>'.");
-            },
+            }
         },
     }
 

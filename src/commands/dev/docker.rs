@@ -11,24 +11,22 @@ use super::{
 pub fn docker_container_exists(name: &str) -> bool {
     run_command_optional(
         "docker",
-        &["ps", "-a", "--filter", &format!("name={}", name), "--format", "{{.Names}}"],
+        &["ps", "-a", "--filter", &format!("name={name}"), "--format", "{{.Names}}"],
     )
-    .map(|output| output.lines().any(|line| line.contains(name)))
-    .unwrap_or(false)
+    .is_some_and(|output| output.lines().any(|line| line.contains(name)))
 }
 
 /// Check if a specific container is paused.
 pub fn is_container_paused(container: &str) -> bool {
     run_command_optional("docker", &["inspect", container, "--format", "{{.State.Paused}}"])
-        .map(|output| output.trim() == "true")
-        .unwrap_or(false)
+        .is_some_and(|output| output.trim() == "true")
 }
 
 /// Get all Docker containers for the cluster.
 pub fn get_cluster_containers() -> Vec<String> {
     run_command_optional(
         "docker",
-        &["ps", "-a", "--filter", &format!("name={}", CLUSTER_NAME), "--format", "{{.Names}}"],
+        &["ps", "-a", "--filter", &format!("name={CLUSTER_NAME}"), "--format", "{{.Names}}"],
     )
     .map(|output| output.lines().filter(|line| !line.is_empty()).map(String::from).collect())
     .unwrap_or_default()
@@ -47,15 +45,14 @@ pub fn are_containers_paused() -> bool {
             "ps",
             "-a",
             "--filter",
-            &format!("name={}", CLUSTER_NAME),
+            &format!("name={CLUSTER_NAME}"),
             "--filter",
             "status=paused",
             "--format",
             "{{.Names}}",
         ],
     )
-    .map(|output| !output.trim().is_empty())
-    .unwrap_or(false)
+    .is_some_and(|output| !output.trim().is_empty())
 }
 
 /// Get Docker container IP on a specific network.

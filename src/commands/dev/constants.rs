@@ -23,7 +23,7 @@ pub const DEPLOYMENT_ENGINE: &str = "dev-inferadb-engine";
 pub const DEPLOYMENT_CONTROL: &str = "dev-inferadb-control";
 pub const DEPLOYMENT_DASHBOARD: &str = "dev-inferadb-dashboard";
 
-/// All InferaDB deployments for iteration
+/// All `InferaDB` deployments for iteration
 pub const INFERADB_DEPLOYMENTS: &[&str] =
     &[DEPLOYMENT_ENGINE, DEPLOYMENT_CONTROL, DEPLOYMENT_DASHBOARD];
 

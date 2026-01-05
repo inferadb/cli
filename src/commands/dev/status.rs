@@ -52,7 +52,8 @@ pub async fn dev_status(ctx: &Context, interactive: bool) -> Result<()> {
     if interactive && crate::tui::is_interactive(ctx) {
         return status_interactive();
     }
-    status_with_spinners()
+    status_with_spinners();
+    Ok(())
 }
 
 // ============================================================================
@@ -60,7 +61,7 @@ pub async fn dev_status(ctx: &Context, interactive: bool) -> Result<()> {
 // ============================================================================
 
 /// Status with inline spinners.
-fn status_with_spinners() -> Result<()> {
+fn status_with_spinners() {
     let green = Color::Green.to_ansi_fg();
     let yellow = Color::Yellow.to_ansi_fg();
     let red = Color::Red.to_ansi_fg();
@@ -72,27 +73,27 @@ fn status_with_spinners() -> Result<()> {
     let cluster_status = get_cluster_status();
     match cluster_status {
         ClusterStatus::Offline => {
-            let prefix = format!("{}✗{}", red, reset);
-            let status = format!("{}NOT RUNNING{}", red, reset);
+            let prefix = format!("{red}✗{reset}");
+            let status = format!("{red}NOT RUNNING{reset}");
             print_colored_prefix_dot_leader(&prefix, 1, "Cluster", &status);
             println!();
             print_hint(TIP_START_CLUSTER);
-            return Ok(());
+            return;
         },
         ClusterStatus::Paused => {
-            let prefix = format!("{}⚠{}", yellow, reset);
-            let status = format!("{}STOPPED{}", yellow, reset);
+            let prefix = format!("{yellow}⚠{reset}");
+            let status = format!("{yellow}STOPPED{reset}");
             print_colored_prefix_dot_leader(&prefix, 1, "Cluster", &status);
             println!();
             print_hint(TIP_RESUME_CLUSTER);
-            return Ok(());
+            return;
         },
         ClusterStatus::Online => {
-            let prefix = format!("{}✓{}", green, reset);
+            let prefix = format!("{green}✓{reset}");
             print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "RUNNING");
         },
         ClusterStatus::Unknown => {
-            let prefix = format!("{}○{}", yellow, reset);
+            let prefix = format!("{yellow}○{reset}");
             print_colored_prefix_dot_leader(&prefix, 1, "Cluster", "UNKNOWN");
         },
     }
@@ -112,8 +113,6 @@ fn status_with_spinners() -> Result<()> {
 
     print_section_header("URLs");
     print_urls_status();
-
-    Ok(())
 }
 
 /// Print formatted node status.
@@ -136,14 +135,13 @@ fn print_nodes_status() {
                     let ready = node["status"]["conditions"]
                         .as_array()
                         .and_then(|conditions| conditions.iter().find(|c| c["type"] == "Ready"))
-                        .map(|c| c["status"] == "True")
-                        .unwrap_or(false);
+                        .is_some_and(|c| c["status"] == "True");
 
                     let role = if is_control_plane { "control-plane" } else { "worker" };
                     let status = if ready {
-                        format!("{}Ready{} ({})", green, reset, role)
+                        format!("{green}Ready{reset} ({role})")
                     } else {
-                        format!("{}NotReady{} ({})", red, reset, role)
+                        format!("{red}NotReady{reset} ({role})")
                     };
 
                     let display_name = name.strip_prefix("inferadb-dev-").unwrap_or(name);
@@ -200,9 +198,9 @@ fn print_pods_status() {
             let total_count = ready_statuses.split_whitespace().count().max(1);
 
             let status = match phase {
-                "Running" => format!("{}{}/{} Running{}", green, ready_count, total_count, reset),
-                "Pending" => format!("{}{}/{} Pending{}", yellow, ready_count, total_count, reset),
-                _ => format!("{}{}/{} {}{}", red, ready_count, total_count, phase, reset),
+                "Running" => format!("{green}{ready_count}/{total_count} Running{reset}"),
+                "Pending" => format!("{yellow}{ready_count}/{total_count} Pending{reset}"),
+                _ => format!("{red}{ready_count}/{total_count} {phase}{reset}"),
             };
 
             let display_name = if name.starts_with("controller-manager-") {
@@ -283,7 +281,7 @@ fn print_urls_status() {
                     _ => name,
                 };
 
-                let url = format!("https://{}", hostname);
+                let url = format!("https://{hostname}");
                 print_prefixed_dot_leader(" ", label, &url);
             }
         }

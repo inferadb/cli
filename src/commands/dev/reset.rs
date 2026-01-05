@@ -1,6 +1,6 @@
 //! Reset command for dev cluster.
 //!
-//! Deletes and redeploys InferaDB applications with fresh data.
+//! Deletes and redeploys `InferaDB` applications with fresh data.
 
 use std::time::Duration;
 
@@ -52,7 +52,8 @@ fn reset_with_spinners(yes: bool) -> Result<()> {
         show_reset_preview(can_redeploy)?;
     }
 
-    perform_reset(can_redeploy, &deploy_dir)
+    perform_reset(can_redeploy, &deploy_dir);
+    Ok(())
 }
 
 /// Show what will be reset and prompt for confirmation.
@@ -68,7 +69,7 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
         print_prefixed_dot_leader("○", "FoundationDB Cluster", "none found");
     } else {
         for (name, processes, version) in &fdb_clusters {
-            let detail = format!("{} ({}, {})", name, processes, version);
+            let detail = format!("{name} ({processes}, {version})");
             print_prefixed_dot_leader("○", "FoundationDB Cluster", &detail);
         }
     }
@@ -81,8 +82,8 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
                 .strip_prefix("dev-inferadb-")
                 .or_else(|| name.strip_prefix("inferadb-"))
                 .unwrap_or(name);
-            let detail = format!("{} replica(s), {}", replicas, image);
-            print_prefixed_dot_leader("○", &format!("Deployment: {}", short_name), &detail);
+            let detail = format!("{replicas} replica(s), {image}");
+            print_prefixed_dot_leader("○", &format!("Deployment: {short_name}"), &detail);
         }
     }
 
@@ -95,13 +96,13 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
                 if let Some(pos) = suffix.find('-') {
                     format!("fdb-{}", &suffix[..pos])
                 } else {
-                    format!("fdb-{}", suffix)
+                    format!("fdb-{suffix}")
                 }
             } else {
                 name.clone()
             };
-            let detail = format!("{}, {}", size, status);
-            print_prefixed_dot_leader("○", &format!("Volume: {}", short_name), &detail);
+            let detail = format!("{size}, {status}");
+            print_prefixed_dot_leader("○", &format!("Volume: {short_name}"), &detail);
         }
     }
 
@@ -132,7 +133,7 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
 }
 
 /// Perform the actual reset operation.
-fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) -> Result<()> {
+fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) {
     print_styled_header("Resetting InferaDB Development Cluster");
     println!();
 
@@ -175,21 +176,19 @@ fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) -> Result<()>
 
     // Redeploy if possible
     if can_redeploy {
-        redeploy_applications(deploy_dir)?;
+        redeploy_applications(deploy_dir);
     }
 
     let green = Color::Green.to_ansi_fg();
     let dim = Color::BrightBlack.to_ansi_fg();
     let reset_color = RESET;
     println!();
-    println!("{}✓ Cluster reset complete.{}", green, reset_color);
-    println!("{}  Applications may take a few minutes to become available.{}", dim, reset_color);
-
-    Ok(())
+    println!("{green}✓ Cluster reset complete.{reset_color}");
+    println!("{dim}  Applications may take a few minutes to become available.{reset_color}");
 }
 
 /// Redeploy applications from the deploy directory.
-fn redeploy_applications(deploy_dir: &std::path::Path) -> Result<()> {
+fn redeploy_applications(deploy_dir: &std::path::Path) {
     print_section_header("Redeploying Applications");
 
     let spin = start_spinner("Applying Kubernetes manifests");
@@ -199,15 +198,18 @@ fn redeploy_applications(deploy_dir: &std::path::Path) -> Result<()> {
     );
     spin.clear();
 
-    if let Ok(output) = apply_output {
-        for line in output.lines() {
-            if let Some((resource, status)) = parse_kubectl_apply_line(line) {
-                let prefix =
-                    if status == "created" || status == "configured" { "✓" } else { "○" };
-                println!("  {}", format_reset_dot_leader(prefix, &resource, &status));
+    apply_output.map_or_else(
+        |_| {},
+        |output| {
+            for line in output.lines() {
+                if let Some((resource, status)) = parse_kubectl_apply_line(line) {
+                    let prefix =
+                        if status == "created" || status == "configured" { "✓" } else { "○" };
+                    println!("  {}", format_reset_dot_leader(prefix, &resource, &status));
+                }
             }
-        }
-    }
+        },
+    );
 
     println!();
 
@@ -254,6 +256,4 @@ fn redeploy_applications(deploy_dir: &std::path::Path) -> Result<()> {
         );
         spin.success(&format_dot_leader("Engine deployment restarted", "OK"));
     }
-
-    Ok(())
 }

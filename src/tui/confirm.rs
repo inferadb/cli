@@ -34,8 +34,9 @@ pub enum ConfirmResult {
 
 impl ConfirmResult {
     /// Check if confirmed.
-    pub fn is_confirmed(&self) -> bool {
-        matches!(self, ConfirmResult::Yes)
+    #[must_use]
+    pub const fn is_confirmed(&self) -> bool {
+        matches!(self, Self::Yes)
     }
 }
 
@@ -58,6 +59,7 @@ impl Default for ConfirmOptions {
 
 impl ConfirmOptions {
     /// Create a new confirm options with default value true.
+    #[must_use]
     pub fn default_yes() -> Self {
         Self { default: true, ..Default::default() }
     }
@@ -110,8 +112,8 @@ pub fn confirm_with_options(message: &str, options: &ConfirmOptions) -> crate::e
     let result = match input.as_str() {
         "y" | "yes" => true,
         "n" | "no" => false,
-        "" => options.default, // Use default on empty input
-        _ => options.default,  // Use default on unknown input
+        // Use default on empty or unknown input
+        _ => options.default,
     };
 
     Ok(result)
@@ -131,7 +133,7 @@ pub fn confirm_with_options(message: &str, options: &ConfirmOptions) -> crate::e
 pub fn confirm_danger(message: &str) -> crate::error::Result<bool> {
     // In non-interactive mode, use default (no for danger)
     if !is_tty() || is_ci() {
-        teapot::output::info(&format!("{} [N] (non-interactive, using default)", message));
+        teapot::output::info(&format!("{message} [N] (non-interactive, using default)"));
         return Ok(false);
     }
 

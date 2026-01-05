@@ -96,11 +96,30 @@ unsafe_code = "warn"
 missing_docs = "warn"
 
 [lints.clippy]
-all = "warn"
-pedantic = "warn"
-nursery = "warn"
-cargo = "warn"
-# Allow some pedantic lints that are too noisy
+# Lint groups with lower priority so individual overrides work
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+
+# Allow pedantic lints that are too noisy or not applicable
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
+missing_panics_doc = "allow"        # Many functions can panic but documenting all is verbose
+multiple_crate_versions = "allow"   # Transitive deps often have version conflicts
+future_not_send = "allow"           # CLI doesn't need Send futures
+too_many_lines = "allow"            # Some commands are inherently long
+unused_async = "allow"              # Command handlers are async for consistency
+fn_params_excessive_bools = "allow" # CLI commands often have multiple boolean flags
+struct_excessive_bools = "allow"    # CLI config often needs many boolean options
+return_self_not_must_use = "allow"  # Builder methods don't always need #[must_use]
+cast_possible_truncation = "allow"  # Intentional casts (e.g., exit codes, latencies)
+cast_sign_loss = "allow"            # Intentional casts
+cast_possible_wrap = "allow"        # Intentional casts
+needless_pass_by_value = "allow"    # String args are often intentional for ergonomics
+items_after_statements = "allow"    # Local struct defs in functions are fine
+unused_self = "allow"               # Methods may need self for future use
+missing_fields_in_debug = "allow"   # Debug impls don't need all fields
+format_push_string = "allow"        # Simple formatting patterns are readable
+option_if_let_else = "allow"        # if let is often more readable than map_or

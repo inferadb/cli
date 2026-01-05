@@ -51,47 +51,52 @@ pub enum StatusTab {
 
 impl StatusTab {
     /// Get the tab ID.
-    pub fn id(&self) -> &'static str {
+    #[must_use]
+    pub const fn id(&self) -> &'static str {
         match self {
-            StatusTab::Urls => "urls",
-            StatusTab::Services => "services",
-            StatusTab::Nodes => "nodes",
-            StatusTab::Pods => "pods",
+            Self::Urls => "urls",
+            Self::Services => "services",
+            Self::Nodes => "nodes",
+            Self::Pods => "pods",
         }
     }
 
     /// Get the tab key hint.
-    pub fn key(&self) -> char {
+    #[must_use]
+    pub const fn key(&self) -> char {
         match self {
-            StatusTab::Urls => 'u',
-            StatusTab::Services => 's',
-            StatusTab::Nodes => 'n',
-            StatusTab::Pods => 'p',
+            Self::Urls => 'u',
+            Self::Services => 's',
+            Self::Nodes => 'n',
+            Self::Pods => 'p',
         }
     }
 
     /// Get the tab display name.
-    pub fn label(&self) -> &'static str {
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
         match self {
-            StatusTab::Urls => "urls",
-            StatusTab::Services => "services",
-            StatusTab::Nodes => "nodes",
-            StatusTab::Pods => "pods",
+            Self::Urls => "urls",
+            Self::Services => "services",
+            Self::Nodes => "nodes",
+            Self::Pods => "pods",
         }
     }
 
     /// All tabs in order.
-    pub fn all() -> &'static [StatusTab] {
-        &[StatusTab::Urls, StatusTab::Services, StatusTab::Nodes, StatusTab::Pods]
+    #[must_use]
+    pub const fn all() -> &'static [Self] {
+        &[Self::Urls, Self::Services, Self::Nodes, Self::Pods]
     }
 
     /// Create from ID string.
-    pub fn from_id(id: &str) -> Option<StatusTab> {
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
         match id {
-            "urls" => Some(StatusTab::Urls),
-            "services" => Some(StatusTab::Services),
-            "nodes" => Some(StatusTab::Nodes),
-            "pods" => Some(StatusTab::Pods),
+            "urls" => Some(Self::Urls),
+            "services" => Some(Self::Services),
+            "nodes" => Some(Self::Nodes),
+            "pods" => Some(Self::Pods),
             _ => None,
         }
     }
@@ -106,7 +111,8 @@ pub struct TableRow {
 
 impl TableRow {
     /// Create a new table row with the given cells.
-    pub fn new(cells: Vec<String>) -> Self {
+    #[must_use]
+    pub const fn new(cells: Vec<String>) -> Self {
         Self { cells }
     }
 }
@@ -122,7 +128,8 @@ pub struct TabData {
 
 impl TabData {
     /// Create new tab data with headers and rows.
-    pub fn new(headers: Vec<String>, rows: Vec<TableRow>) -> Self {
+    #[must_use]
+    pub const fn new(headers: Vec<String>, rows: Vec<TableRow>) -> Self {
         Self { headers, rows }
     }
 }
@@ -142,13 +149,14 @@ pub enum ClusterStatus {
 }
 
 impl ClusterStatus {
-    /// Get a StatusBadge for this status.
+    /// Get a `StatusBadge` for this status.
+    #[must_use]
     pub fn badge(&self) -> StatusBadge {
         match self {
-            ClusterStatus::Online => StatusBadge::new("Online").variant(BadgeVariant::Success),
-            ClusterStatus::Offline => StatusBadge::new("Offline").variant(BadgeVariant::Error),
-            ClusterStatus::Paused => StatusBadge::new("Paused").variant(BadgeVariant::Warning),
-            ClusterStatus::Unknown => StatusBadge::new("Unknown").variant(BadgeVariant::Neutral),
+            Self::Online => StatusBadge::new("Online").variant(BadgeVariant::Success),
+            Self::Offline => StatusBadge::new("Offline").variant(BadgeVariant::Error),
+            Self::Paused => StatusBadge::new("Paused").variant(BadgeVariant::Warning),
+            Self::Unknown => StatusBadge::new("Unknown").variant(BadgeVariant::Neutral),
         }
     }
 }
@@ -167,33 +175,37 @@ pub enum EnvironmentStatus {
 
 impl EnvironmentStatus {
     /// Get the display text for this status.
-    pub fn text(&self) -> &'static str {
+    #[must_use]
+    pub const fn text(&self) -> &'static str {
         match self {
-            EnvironmentStatus::Checking => "Checking...",
-            EnvironmentStatus::Ready => "Ready",
-            EnvironmentStatus::NotReady => "Not Ready",
+            Self::Checking => "Checking...",
+            Self::Ready => "Ready",
+            Self::NotReady => "Not Ready",
         }
     }
 
     /// Get the color for this status.
-    pub fn color(&self) -> Color {
+    #[must_use]
+    pub const fn color(&self) -> Color {
         match self {
-            EnvironmentStatus::Checking => Color::Yellow,
-            EnvironmentStatus::Ready => Color::Green,
-            EnvironmentStatus::NotReady => Color::Red,
+            Self::Checking => Color::Yellow,
+            Self::Ready => Color::Green,
+            Self::NotReady => Color::Red,
         }
     }
 
     /// Get the status indicator icon.
-    pub fn indicator(&self) -> &'static str {
+    #[must_use]
+    pub const fn indicator(&self) -> &'static str {
         match self {
-            EnvironmentStatus::Checking => "◌",
-            EnvironmentStatus::Ready => "✓",
-            EnvironmentStatus::NotReady => "✗",
+            Self::Checking => "◌",
+            Self::Ready => "✓",
+            Self::NotReady => "✗",
         }
     }
 
-    /// Get a StatusBadge for this status.
+    /// Get a `StatusBadge` for this status.
+    #[must_use]
     pub fn badge(&self) -> StatusBadge {
         StatusBadge::new(self.text()).icon(self.indicator()).color(self.color())
     }
@@ -285,6 +297,7 @@ pub struct DevStatusView {
 
 impl DevStatusView {
     /// Create a new status view.
+    #[must_use]
     pub fn new(width: usize, height: usize) -> Self {
         let tabs: Vec<Tab> =
             StatusTab::all().iter().map(|t| Tab::new(t.id(), t.label()).key(t.key())).collect();
@@ -335,13 +348,15 @@ impl DevStatusView {
     }
 
     /// Set the refresh interval in seconds (default: 5).
-    pub fn with_refresh_interval(mut self, secs: u64) -> Self {
+    #[must_use]
+    pub const fn with_refresh_interval(mut self, secs: u64) -> Self {
         self.refresh_interval_secs = secs;
         self
     }
 
     /// Set the cluster status.
-    pub fn with_status(mut self, status: ClusterStatus) -> Self {
+    #[must_use]
+    pub const fn with_status(mut self, status: ClusterStatus) -> Self {
         self.cluster_status = status;
         // Show offline modal automatically when cluster is offline
         if matches!(status, ClusterStatus::Offline) {
@@ -351,6 +366,7 @@ impl DevStatusView {
     }
 
     /// Set URLs data.
+    #[must_use]
     pub fn with_urls(mut self, data: TabData) -> Self {
         self.urls_data = data;
         self.sync_current_tab_data();
@@ -358,6 +374,7 @@ impl DevStatusView {
     }
 
     /// Set services data.
+    #[must_use]
     pub fn with_services(mut self, data: TabData) -> Self {
         self.services_data = data;
         self.sync_current_tab_data();
@@ -365,6 +382,7 @@ impl DevStatusView {
     }
 
     /// Set nodes data.
+    #[must_use]
     pub fn with_nodes(mut self, data: TabData) -> Self {
         self.nodes_data = data;
         self.sync_current_tab_data();
@@ -372,6 +390,7 @@ impl DevStatusView {
     }
 
     /// Set pods data.
+    #[must_use]
     pub fn with_pods(mut self, data: TabData) -> Self {
         self.pods_data = data;
         self.sync_current_tab_data();
@@ -401,7 +420,7 @@ impl DevStatusView {
             .map(|(i, h)| {
                 let header_text = if i == self.sort_column && num_cols > 0 {
                     let arrow = if self.sort_ascending { "▲" } else { "▼" };
-                    format!("{} {}", h, arrow)
+                    format!("{h} {arrow}")
                 } else {
                     h.clone()
                 };
@@ -415,8 +434,8 @@ impl DevStatusView {
         if num_cols > 0 {
             let col = self.sort_column;
             sorted_rows.sort_by(|a, b| {
-                let a_val = a.get(col).map(|s| s.as_str()).unwrap_or("");
-                let b_val = b.get(col).map(|s| s.as_str()).unwrap_or("");
+                let a_val = a.get(col).map_or("", std::string::String::as_str);
+                let b_val = b.get(col).map_or("", std::string::String::as_str);
                 let cmp = a_val.cmp(b_val);
                 if self.sort_ascending { cmp } else { cmp.reverse() }
             });
@@ -424,7 +443,7 @@ impl DevStatusView {
         self.rows = sorted_rows;
     }
 
-    /// Handle tab switch: update current_tab and sync data.
+    /// Handle tab switch: update `current_tab` and sync data.
     fn handle_tab_switch(&mut self) {
         if let Some(new_tab) = StatusTab::from_id(self.tab_bar.selected_id()) {
             if new_tab != self.current_tab {
@@ -457,7 +476,7 @@ impl DevStatusView {
     }
 
     /// Get visible rows for the table.
-    fn visible_rows(&self) -> usize {
+    const fn visible_rows(&self) -> usize {
         // title(1) + blank(1) + tabs/status(1) + sep(1) + header(1) + sep(1) + footer(1) = 7
         self.height.saturating_sub(7)
     }

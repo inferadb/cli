@@ -7,7 +7,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 
 use crate::t;
 
-/// InferaDB CLI - Authorization Engine
+/// `InferaDB` CLI - Authorization Engine
 #[derive(Parser, Debug)]
 #[command(name = "inferadb")]
 #[command(version, about, long_about = None)]
@@ -58,7 +58,7 @@ pub struct Cli {
 /// Available CLI commands.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Authenticate with InferaDB
+    /// Authenticate with `InferaDB`
     Login,
 
     /// Remove authentication
@@ -122,7 +122,7 @@ pub enum Commands {
         /// Subject (e.g., user:alice)
         subject: String,
 
-        /// Permission to check (e.g., can_view)
+        /// Permission to check (e.g., `can_view`)
         permission: String,
 
         /// Resource (e.g., document:readme)
@@ -379,7 +379,7 @@ pub enum Shell {
     Zsh,
     /// Fish shell.
     Fish,
-    /// PowerShell.
+    /// `PowerShell`.
     PowerShell,
 }
 
@@ -1231,7 +1231,7 @@ pub enum TeamPermissionsCommands {
         /// Team ID
         team_id: String,
 
-        /// Permission (e.g., OrgPermVaultCreate)
+        /// Permission (e.g., `OrgPermVaultCreate`)
         permission: String,
     },
 
@@ -1645,6 +1645,7 @@ impl Cli {
     ///
     /// This applies translations from the i18n system to all command
     /// and argument help text.
+    #[must_use]
     pub fn command_localized() -> clap::Command {
         let cmd = Self::command();
         localize_command(cmd)
@@ -1656,7 +1657,7 @@ fn localize_command(mut cmd: clap::Command) -> clap::Command {
     let name = cmd.get_name().to_string();
 
     // Localize command about text based on command name
-    let about_key = format!("cmd-{}-about", name);
+    let about_key = format!("cmd-{name}-about");
     if let Some(_i18n) = crate::i18n::try_get() {
         let translated = t!(&about_key);
         // Only apply if we got a real translation (not the key back)
@@ -1719,6 +1720,7 @@ fn localize_root_args(mut cmd: clap::Command) -> clap::Command {
 /// which is more ergonomic than `--profile`.
 ///
 /// Returns the profile name (if any) and the remaining arguments.
+#[must_use]
 pub fn parse_profile_prefix(args: Vec<String>) -> (Option<String>, Vec<String>) {
     if args.len() < 2 {
         return (None, args);

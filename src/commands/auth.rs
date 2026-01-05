@@ -8,7 +8,7 @@ use crate::{
     t, tui,
 };
 
-/// Log in to InferaDB via OAuth.
+/// Log in to `InferaDB` via OAuth.
 pub async fn login(ctx: &Context) -> Result<()> {
     let profile_name = ctx.effective_profile_name().to_string();
 
@@ -78,22 +78,19 @@ pub async fn register(ctx: &Context, email: Option<&str>, name: Option<&str>) ->
 
         form = form.group(group);
 
-        let results = match tui::run_form(form)? {
-            Some(r) => r,
-            None => {
-                ctx.output.info("Registration cancelled.");
-                return Ok(());
-            },
+        let Some(results) = tui::run_form(form)? else {
+            ctx.output.info("Registration cancelled.");
+            return Ok(());
         };
 
         let email = email
-            .map(|e| e.to_string())
-            .or_else(|| results.get_string("email").map(|s| s.to_string()))
+            .map(std::string::ToString::to_string)
+            .or_else(|| results.get_string("email").map(std::string::ToString::to_string))
             .unwrap_or_default();
 
         let name = name
-            .map(|n| n.to_string())
-            .or_else(|| results.get_string("name").map(|s| s.to_string()))
+            .map(std::string::ToString::to_string)
+            .or_else(|| results.get_string("name").map(std::string::ToString::to_string))
             .unwrap_or_default();
 
         (email, name)

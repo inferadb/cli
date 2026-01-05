@@ -36,10 +36,10 @@ pub async fn generate(ctx: &Context, ttl: Option<&str>, role: Option<&str>) -> R
     ctx.output.info("Use 'inferadb login' to authenticate and obtain tokens.");
 
     if let Some(t) = ttl {
-        ctx.output.info(&format!("Requested TTL: {}", t));
+        ctx.output.info(&format!("Requested TTL: {t}"));
     }
     if let Some(r) = role {
-        ctx.output.info(&format!("Requested role: {}", r));
+        ctx.output.info(&format!("Requested role: {r}"));
     }
 
     ctx.output.info("For API clients with custom tokens, use the web dashboard.");
@@ -54,30 +54,25 @@ pub async fn list(ctx: &Context) -> Result<()> {
 
     // Check each configured profile for credentials
     for name in ctx.config.profiles.keys() {
-        let status;
-        let expires;
-        let can_refresh;
-
-        if let Ok(Some(creds)) = store.load(name) {
-            if creds.is_expired() {
-                status = "expired".to_string();
+        let (status, expires, can_refresh) = if let Ok(Some(creds)) = store.load(name) {
+            let status = if creds.is_expired() {
+                "expired".to_string()
             } else if creds.expires_soon() {
-                status = "expires soon".to_string();
+                "expires soon".to_string()
             } else {
-                status = "valid".to_string();
-            }
+                "valid".to_string()
+            };
 
-            expires = creds
-                .expires_at
-                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+            let expires = creds.expires_at.map_or_else(
+                || "unknown".to_string(),
+                |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
+            );
 
-            can_refresh = if creds.can_refresh() { "yes" } else { "no" }.to_string();
+            let can_refresh = if creds.can_refresh() { "yes" } else { "no" }.to_string();
+            (status, expires, can_refresh)
         } else {
-            status = "not authenticated".to_string();
-            expires = "-".to_string();
-            can_refresh = "-".to_string();
-        }
+            ("not authenticated".to_string(), "-".to_string(), "-".to_string())
+        };
 
         rows.push(TokenRow { profile: name.clone(), status, expires, can_refresh });
     }
@@ -93,10 +88,10 @@ pub async fn list(ctx: &Context) -> Result<()> {
                 "valid".to_string()
             };
 
-            let expires = creds
-                .expires_at
-                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+            let expires = creds.expires_at.map_or_else(
+                || "unknown".to_string(),
+                |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
+            );
 
             let can_refresh = if creds.can_refresh() { "yes" } else { "no" }.to_string();
 
@@ -118,17 +113,17 @@ pub async fn revoke(ctx: &Context, id: &str) -> Result<()> {
     let store = CredentialStore::new();
 
     if !store.exists(id) {
-        ctx.output.error(&format!("No credentials found for profile '{}'.", id));
+        ctx.output.error(&format!("No credentials found for profile '{id}'."));
         return Ok(());
     }
 
-    if !ctx.confirm(&format!("Revoke token for profile '{}'?", id))? {
+    if !ctx.confirm(&format!("Revoke token for profile '{id}'?"))? {
         ctx.output.info("Cancelled.");
         return Ok(());
     }
 
     store.delete(id)?;
-    ctx.output.success(&format!("Token for profile '{}' has been revoked.", id));
+    ctx.output.success(&format!("Token for profile '{id}' has been revoked."));
 
     Ok(())
 }
@@ -138,12 +133,9 @@ pub async fn refresh(ctx: &Context) -> Result<()> {
     let profile_name = ctx.effective_profile_name();
     let store = CredentialStore::new();
 
-    let creds = match store.load(profile_name)? {
-        Some(c) => c,
-        None => {
-            ctx.output.error("Not authenticated. Run 'inferadb login' first.");
-            return Ok(());
-        },
+    let Some(creds) = store.load(profile_name)? else {
+        ctx.output.error("Not authenticated. Run 'inferadb login' first.");
+        return Ok(());
     };
 
     if !creds.can_refresh() {
@@ -166,21 +158,18 @@ pub async fn refresh(ctx: &Context) -> Result<()> {
 
 /// Inspect token details.
 pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result<()> {
-    let token_to_inspect = match token {
-        Some(t) => t.to_string(),
-        None => {
-            // Use current profile's token
-            let profile_name = ctx.effective_profile_name();
-            let store = CredentialStore::new();
+    let token_to_inspect = if let Some(t) = token {
+        t.to_string()
+    } else {
+        // Use current profile's token
+        let profile_name = ctx.effective_profile_name();
+        let store = CredentialStore::new();
 
-            match store.load(profile_name)? {
-                Some(creds) => creds.access_token,
-                None => {
-                    ctx.output.error("Not authenticated. Run 'inferadb login' first.");
-                    return Ok(());
-                },
-            }
-        },
+        let Some(creds) = store.load(profile_name)? else {
+            ctx.output.error("Not authenticated. Run 'inferadb login' first.");
+            return Ok(());
+        };
+        creds.access_token
     };
 
     // Decode JWT token (without verification)
@@ -197,7 +186,7 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
             println!("{}", serde_json::to_string_pretty(&header)?);
         },
         Err(e) => {
-            ctx.output.error(&format!("Failed to decode header: {}", e));
+            ctx.output.error(&format!("Failed to decode header: {e}"));
         },
     }
 
@@ -210,7 +199,7 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
             println!("{}", serde_json::to_string_pretty(&payload)?);
 
             // Show human-readable expiration
-            if let Some(exp) = payload.get("exp").and_then(|v| v.as_i64()) {
+            if let Some(exp) = payload.get("exp").and_then(serde_json::Value::as_i64) {
                 let exp_time = chrono::DateTime::from_timestamp(exp, 0);
                 if let Some(dt) = exp_time {
                     let now = chrono::Utc::now();
@@ -234,14 +223,14 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
             }
 
             // Show issued at
-            if let Some(iat) = payload.get("iat").and_then(|v| v.as_i64()) {
+            if let Some(iat) = payload.get("iat").and_then(serde_json::Value::as_i64) {
                 if let Some(dt) = chrono::DateTime::from_timestamp(iat, 0) {
                     println!("Issued: {}", dt.format("%Y-%m-%d %H:%M:%S UTC"));
                 }
             }
         },
         Err(e) => {
-            ctx.output.error(&format!("Failed to decode payload: {}", e));
+            ctx.output.error(&format!("Failed to decode payload: {e}"));
         },
     }
 
@@ -257,7 +246,7 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
 fn decode_jwt_part(encoded: &str) -> Result<serde_json::Value> {
     let decoded = URL_SAFE_NO_PAD
         .decode(encoded)
-        .map_err(|e| crate::error::Error::config(format!("Base64 decode error: {}", e)))?;
+        .map_err(|e| crate::error::Error::config(format!("Base64 decode error: {e}")))?;
     let json: serde_json::Value = serde_json::from_slice(&decoded)?;
     Ok(json)
 }
@@ -273,10 +262,10 @@ fn format_duration(duration: chrono::Duration) -> String {
     let mins = (total_secs % 3600) / 60;
 
     if days > 0 {
-        format!("{}d {}h", days, hours)
+        format!("{days}d {hours}h")
     } else if hours > 0 {
-        format!("{}h {}m", hours, mins)
+        format!("{hours}h {mins}m")
     } else {
-        format!("{}m", mins)
+        format!("{mins}m")
     }
 }

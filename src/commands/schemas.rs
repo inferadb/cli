@@ -54,8 +54,7 @@ pub async fn list(ctx: &Context, all: bool) -> Result<()> {
             created_at: s.created_at.format("%Y-%m-%d %H:%M").to_string(),
             activated_at: s
                 .activated_at
-                .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
-                .unwrap_or_else(|| "-".to_string()),
+                .map_or_else(|| "-".to_string(), |t| t.format("%Y-%m-%d %H:%M").to_string()),
         })
         .collect();
 
@@ -104,7 +103,7 @@ pub async fn preview(ctx: &Context, file: &str, base: Option<&str>, impact: bool
     // If impact analysis requested and we have a base version, show diff
     if impact {
         let base_version = base.unwrap_or("active");
-        ctx.output.info(&format!("Comparing against version '{}'...", base_version));
+        ctx.output.info(&format!("Comparing against version '{base_version}'..."));
 
         // Push to get a version, then diff
         // For now, just show validation result
@@ -163,10 +162,10 @@ pub async fn push(
     }
 
     let version = &result.schema.version;
-    ctx.output.success(&format!("Schema version {} created.", version));
+    ctx.output.success(&format!("Schema version {version} created."));
 
     if let Some(msg) = message {
-        ctx.output.info(&format!("Message: {}", msg));
+        ctx.output.info(&format!("Message: {msg}"));
     }
 
     if result.validation.has_warnings() {
@@ -179,9 +178,9 @@ pub async fn push(
     if activate {
         // Activate with spinner
         tui::spin("Activating schema...", schemas.activate(version)).await?;
-        ctx.output.success(&format!("Schema version {} is now active.", version));
+        ctx.output.success(&format!("Schema version {version} is now active."));
     } else {
-        ctx.output.info(&format!("To activate: inferadb schemas activate {}", version));
+        ctx.output.info(&format!("To activate: inferadb schemas activate {version}"));
     }
 
     Ok(())
@@ -193,7 +192,7 @@ pub async fn activate(ctx: &Context, version: &str) -> Result<()> {
     let client = ctx.client().await?;
     let schemas = client.vault().schemas();
 
-    ctx.output.info(&format!("Activating schema version {}...", version));
+    ctx.output.info(&format!("Activating schema version {version}..."));
     let schema = schemas.activate(version).await?;
 
     ctx.output.success(&format!("Schema version {} is now active.", schema.version));
@@ -221,17 +220,17 @@ pub async fn rollback(ctx: &Context, version: Option<&str>) -> Result<()> {
         }
     };
 
-    if !ctx.confirm_danger(&format!("Rollback to schema version {}?", target_version))? {
+    if !ctx.confirm_danger(&format!("Rollback to schema version {target_version}?"))? {
         ctx.output.info("Cancelled.");
         return Ok(());
     }
 
     tui::spin(
-        format!("Rolling back to version {}...", target_version),
+        format!("Rolling back to version {target_version}..."),
         schemas.activate(&target_version),
     )
     .await?;
-    ctx.output.success(&format!("Rolled back to schema version {}.", target_version));
+    ctx.output.success(&format!("Rolled back to schema version {target_version}."));
 
     Ok(())
 }
@@ -257,7 +256,7 @@ pub async fn diff(ctx: &Context, from: &str, to: &str) -> Result<()> {
 
     for change in &diff.changes {
         let breaking_marker = if change.is_breaking { " [BREAKING]" } else { "" };
-        let entity = change.entity_type.as_deref().map(|e| format!(" ({})", e)).unwrap_or_default();
+        let entity = change.entity_type.as_deref().map(|e| format!(" ({e})")).unwrap_or_default();
         println!("  {} {}{}{}", change.change_type, change.description, entity, breaking_marker);
     }
 
@@ -313,16 +312,16 @@ pub async fn init(ctx: &Context, path: &str, template: &str) -> Result<()> {
 
     let content = match template {
         "blank" => {
-            r#"// InferaDB Schema (IPL)
+            r"// InferaDB Schema (IPL)
 // Documentation: https://docs.inferadb.com/schema
 
 entity User {
     // Define relations and permissions here
 }
-"#
+"
         },
         "basic" => {
-            r#"// InferaDB Schema (IPL)
+            r"// InferaDB Schema (IPL)
 // Basic document sharing model
 
 entity User {}
@@ -353,10 +352,10 @@ entity Document {
         view: owner | editor | viewer | parent.member
     }
 }
-"#
+"
         },
         "rbac" => {
-            r#"// InferaDB Schema (IPL)
+            r"// InferaDB Schema (IPL)
 // Role-based access control model
 
 entity User {}
@@ -380,12 +379,11 @@ entity Resource {
         view: admin | edit | viewer_role.assignee
     }
 }
-"#
+"
         },
         _ => {
             return Err(crate::error::Error::invalid_arg(format!(
-                "Unknown template '{}'. Use: blank, basic, rbac",
-                template
+                "Unknown template '{template}'. Use: blank, basic, rbac"
             )));
         },
     };
@@ -416,13 +414,13 @@ pub async fn delete(ctx: &Context, version: &str) -> Result<()> {
         return Ok(());
     }
 
-    if !ctx.confirm_danger(&format!("Delete schema version {}?", version))? {
+    if !ctx.confirm_danger(&format!("Delete schema version {version}?"))? {
         ctx.output.info("Cancelled.");
         return Ok(());
     }
 
     schemas.delete(version).await?;
-    ctx.output.success(&format!("Schema version {} deleted.", version));
+    ctx.output.success(&format!("Schema version {version} deleted."));
 
     Ok(())
 }
@@ -466,14 +464,14 @@ pub async fn activate_with_options(
 
     // Canary deployment
     if let Some(percent) = canary_percent {
-        ctx.output.info(&format!("Starting canary deployment at {}%...", percent));
+        ctx.output.info(&format!("Starting canary deployment at {percent}%..."));
         // Note: Canary deployment API would be used here when available
         ctx.output.warn("Canary deployment not yet supported by SDK.");
         ctx.output.info("Proceeding with full activation.");
     }
 
     let schema =
-        tui::spin(format!("Activating schema version {}...", version), schemas.activate(version))
+        tui::spin(format!("Activating schema version {version}..."), schemas.activate(version))
             .await?;
 
     ctx.output.success(&format!("Schema version {} is now active.", schema.version));
@@ -521,7 +519,7 @@ pub async fn test(
     let schema_path = schema_file.unwrap_or("schema.ipl");
 
     if !std::path::Path::new(tests_path).exists() {
-        ctx.output.error(&format!("Test file not found: {}", tests_path));
+        ctx.output.error(&format!("Test file not found: {tests_path}"));
         ctx.output.info("Create a test file with check assertions.");
         ctx.output.info("");
         ctx.output.info("Example schema.test.yaml:");
@@ -533,14 +531,14 @@ pub async fn test(
     }
 
     if !std::path::Path::new(schema_path).exists() {
-        ctx.output.error(&format!("Schema file not found: {}", schema_path));
+        ctx.output.error(&format!("Schema file not found: {schema_path}"));
         return Ok(());
     }
 
-    ctx.output.info(&format!("Running tests from {}...", tests_path));
+    ctx.output.info(&format!("Running tests from {tests_path}..."));
 
     if let Some(filter) = name_filter {
-        ctx.output.info(&format!("Filtering by: {}", filter));
+        ctx.output.info(&format!("Filtering by: {filter}"));
     }
 
     // Note: Schema testing would parse the test file and run checks
@@ -556,11 +554,11 @@ pub async fn watch(ctx: &Context, file: &str, run_tests: bool, auto_push: bool) 
     use std::path::Path;
 
     if !Path::new(file).exists() {
-        ctx.output.error(&format!("Schema file not found: {}", file));
+        ctx.output.error(&format!("Schema file not found: {file}"));
         return Ok(());
     }
 
-    ctx.output.info(&format!("Watching {} for changes...", file));
+    ctx.output.info(&format!("Watching {file} for changes..."));
     if run_tests {
         ctx.output.info("Will run tests on change.");
     }
@@ -622,7 +620,7 @@ pub async fn analyze(
         schema.content
     };
 
-    ctx.output.info(&format!("Analyzing schema: {}", file));
+    ctx.output.info(&format!("Analyzing schema: {file}"));
     println!();
 
     // Parse and validate the schema
@@ -632,13 +630,12 @@ pub async fn analyze(
     let validation = schemas.validate(&content).await?;
 
     // Display analysis results
-    println!("Schema Analysis: {}", file);
+    println!("Schema Analysis: {file}");
     println!();
 
     // Check for specific analysis types
-    let checks_list: Vec<&str> = checks
-        .map(|c| c.split(',').collect())
-        .unwrap_or_else(|| vec!["unused", "cycles", "shadowing"]);
+    let checks_list: Vec<&str> =
+        checks.map_or_else(|| vec!["unused", "cycles", "shadowing"], |c| c.split(',').collect());
 
     // Basic validation results
     if validation.is_valid {
@@ -685,7 +682,7 @@ pub async fn analyze(
                 println!("  ✓ No permission shadowing detected");
             },
             other => {
-                println!("  ? Unknown check: {}", other);
+                println!("  ? Unknown check: {other}");
             },
         }
     }
@@ -693,7 +690,7 @@ pub async fn analyze(
     // Compare mode
     if let Some(compare_version) = compare {
         println!();
-        println!("Comparison with version {}:", compare_version);
+        println!("Comparison with version {compare_version}:");
         ctx.output.info("Use 'inferadb schemas diff' for detailed version comparison.");
     }
 
@@ -746,9 +743,9 @@ pub async fn visualize(
 
             // Simple ASCII box representation
             if let Some(focus) = entity {
-                println!("Focused on entity: {}", focus);
+                println!("Focused on entity: {focus}");
                 println!("┌─────────────────────────────────────────────┐");
-                println!("│ {}                                          │", focus);
+                println!("│ {focus}                                          │");
                 println!("├─────────────────────────────────────────────┤");
                 if show_permissions {
                     println!("│ permissions: (use --show-permissions)       │");
@@ -784,7 +781,7 @@ pub async fn visualize(
             ctx.output.info("For detailed visualization, parse the schema content.");
         },
         _ => {
-            ctx.output.error(&format!("Unknown format: {}. Use ascii, mermaid, or dot.", format));
+            ctx.output.error(&format!("Unknown format: {format}. Use ascii, mermaid, or dot."));
         },
     }
 
@@ -806,8 +803,9 @@ pub async fn copy(
     let client = ctx.client().await?;
 
     // Determine source vault
-    let source_vault =
-        from_vault.map(|s| s.to_string()).or_else(|| ctx.profile_vault_id().map(|s| s.to_string()));
+    let source_vault = from_vault
+        .map(std::string::ToString::to_string)
+        .or_else(|| ctx.profile_vault_id().map(std::string::ToString::to_string));
 
     if source_vault.is_none() {
         ctx.output.error("No source vault specified. Use --from-vault or configure a profile.");
@@ -815,30 +813,28 @@ pub async fn copy(
     }
     let source_vault = source_vault.unwrap();
 
-    ctx.output
-        .info(&format!("Copying schema from vault '{}' to vault '{}'", source_vault, to_vault));
+    ctx.output.info(&format!("Copying schema from vault '{source_vault}' to vault '{to_vault}'"));
 
     // Handle cross-org copy
     if from_org.is_some() || to_org.is_some() {
         ctx.output.warn("Cross-organization copy requires access to both organizations.");
         if let Some(fo) = from_org {
-            ctx.output.info(&format!("  From org: {}", fo));
+            ctx.output.info(&format!("  From org: {fo}"));
         }
         if let Some(to) = to_org {
-            ctx.output.info(&format!("  To org: {}", to));
+            ctx.output.info(&format!("  To org: {to}"));
         }
     }
 
     // Get the source schema
     let version_desc = version.unwrap_or("active");
-    ctx.output.info(&format!("  Source version: {}", version_desc));
+    ctx.output.info(&format!("  Source version: {version_desc}"));
 
     if dry_run {
         ctx.output.info("");
         ctx.output.info("[DRY RUN] Would perform the following:");
-        ctx.output
-            .info(&format!("  1. Fetch schema '{}' from vault '{}'", version_desc, source_vault));
-        ctx.output.info(&format!("  2. Push schema to vault '{}'", to_vault));
+        ctx.output.info(&format!("  1. Fetch schema '{version_desc}' from vault '{source_vault}'"));
+        ctx.output.info(&format!("  2. Push schema to vault '{to_vault}'"));
         if activate {
             ctx.output.info("  3. Activate the pushed schema in target vault");
         }
@@ -846,7 +842,7 @@ pub async fn copy(
     }
 
     // Get source schema content
-    let source_org = from_org.or(ctx.profile_org_id());
+    let source_org = from_org.or_else(|| ctx.profile_org_id());
     if source_org.is_none() {
         ctx.output.error("No source organization. Use --from-org or configure a profile.");
         return Ok(());
@@ -870,7 +866,7 @@ pub async fn copy(
     };
 
     // Push to target vault
-    let target_org = to_org.or(ctx.profile_org_id());
+    let target_org = to_org.or_else(|| ctx.profile_org_id());
     if target_org.is_none() {
         ctx.output.error("No target organization. Use --to-org or configure a profile.");
         return Ok(());
@@ -948,7 +944,7 @@ pub async fn migrate(ctx: &Context, from: Option<&str>, to: &str, format: &str) 
         },
         "yaml" => {
             println!("from: {}", from.unwrap_or("active"));
-            println!("to: {}", to);
+            println!("to: {to}");
             println!("breaking_changes: []");
             println!("migrations: []");
             println!("note: Detailed migration analysis requires schema diff API");
@@ -963,13 +959,13 @@ pub async fn migrate(ctx: &Context, from: Option<&str>, to: &str, format: &str) 
             println!("Migration Commands:");
             println!();
             println!("  # Preview the changes");
-            println!("  inferadb schemas preview {}", to);
+            println!("  inferadb schemas preview {to}");
             println!();
             println!("  # Compare schemas in detail");
             println!("  inferadb schemas diff {} {}", from.unwrap_or("active"), to);
             println!();
             println!("  # Push and activate");
-            println!("  inferadb schemas push {} --activate", to);
+            println!("  inferadb schemas push {to} --activate");
             println!();
 
             ctx.output.info(

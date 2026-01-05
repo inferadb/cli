@@ -37,8 +37,7 @@ impl OutputFormat {
             "yaml" => Ok(Self::Yaml),
             "jsonl" | "jsonlines" => Ok(Self::JsonLines),
             _ => Err(crate::error::Error::invalid_arg(format!(
-                "Unknown output format '{}'. Use: table, json, yaml, jsonl",
-                s
+                "Unknown output format '{s}'. Use: table, json, yaml, jsonl"
             ))),
         }
     }
@@ -67,7 +66,8 @@ pub struct Output {
 
 impl Output {
     /// Create a new output writer.
-    pub fn new(format: OutputFormat, color: bool, quiet: bool) -> Self {
+    #[must_use]
+    pub const fn new(format: OutputFormat, color: bool, quiet: bool) -> Self {
         Self { format, color, quiet }
     }
 
@@ -104,14 +104,14 @@ impl Output {
                 let columns: Vec<Column> =
                     T::table_headers().into_iter().map(Column::new).collect();
 
-                let rows: Vec<Vec<String>> = items.iter().map(|item| item.table_row()).collect();
+                let rows: Vec<Vec<String>> = items.iter().map(Displayable::table_row).collect();
 
                 let table =
                     Table::new().columns(columns).rows(rows).show_borders(false).focused(false);
 
                 let output = table.render();
                 if self.color {
-                    println!("{}", output);
+                    println!("{output}");
                 } else {
                     println!("{}", toutput::strip_ansi(&output));
                 }
@@ -119,12 +119,12 @@ impl Output {
             },
             OutputFormat::Json => {
                 let json = serde_json::to_string_pretty(&items)?;
-                println!("{}", json);
+                println!("{json}");
                 Ok(())
             },
             OutputFormat::Yaml => {
                 let yaml = serde_yaml::to_string(&items)?;
-                print!("{}", yaml);
+                print!("{yaml}");
                 Ok(())
             },
             OutputFormat::JsonLines => {
@@ -151,7 +151,7 @@ impl Output {
 
                 let output = table.render();
                 if self.color {
-                    println!("{}", output);
+                    println!("{output}");
                 } else {
                     println!("{}", toutput::strip_ansi(&output));
                 }
@@ -166,21 +166,21 @@ impl Output {
     /// Output raw JSON.
     fn json<T: Serialize + ?Sized>(&self, value: &T) -> Result<()> {
         let json = serde_json::to_string_pretty(value)?;
-        println!("{}", json);
+        println!("{json}");
         Ok(())
     }
 
     /// Output YAML.
     fn yaml<T: Serialize + ?Sized>(&self, value: &T) -> Result<()> {
         let yaml = serde_yaml::to_string(value)?;
-        print!("{}", yaml);
+        print!("{yaml}");
         Ok(())
     }
 
     /// Output JSON Lines (one object per line).
     fn jsonl<T: Serialize>(&self, value: &T) -> Result<()> {
         let json = serde_json::to_string(value)?;
-        println!("{}", json);
+        println!("{json}");
         Ok(())
     }
 
@@ -196,7 +196,7 @@ impl Output {
             if self.color {
                 toutput::info(message);
             } else {
-                eprintln!("- {}", message);
+                eprintln!("- {message}");
             }
         }
     }
@@ -208,7 +208,7 @@ impl Output {
             if self.color {
                 toutput::success(message);
             } else {
-                eprintln!("+ {}", message);
+                eprintln!("+ {message}");
             }
         }
     }
@@ -220,7 +220,7 @@ impl Output {
             if self.color {
                 toutput::warning(message);
             } else {
-                eprintln!("! {}", message);
+                eprintln!("! {message}");
             }
         }
     }
@@ -231,7 +231,7 @@ impl Output {
         if self.color {
             toutput::error(message);
         } else {
-            eprintln!("x {}", message);
+            eprintln!("x {message}");
         }
     }
 
@@ -240,12 +240,14 @@ impl Output {
     // -------------------------------------------------------------------------
 
     /// Check if output is in quiet mode.
-    pub fn is_quiet(&self) -> bool {
+    #[must_use]
+    pub const fn is_quiet(&self) -> bool {
         self.quiet
     }
 
     /// Get the current output format.
-    pub fn format(&self) -> OutputFormat {
+    #[must_use]
+    pub const fn format(&self) -> OutputFormat {
         self.format
     }
 }

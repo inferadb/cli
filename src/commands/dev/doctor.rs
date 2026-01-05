@@ -85,7 +85,7 @@ pub const DEPENDENCIES: &[Dependency] = &[
 ];
 
 /// Get the appropriate install hint for the current platform.
-pub fn get_install_hint(dep: &Dependency) -> &'static str {
+pub const fn get_install_hint(dep: &Dependency) -> &'static str {
     if cfg!(target_os = "macos") {
         dep.install_hint_mac
     } else if cfg!(target_os = "windows") {
@@ -100,8 +100,7 @@ pub fn check_dependency(dep: &Dependency) -> (CheckResult, bool) {
     let exists = command_exists(dep.command);
     let version = if exists {
         run_command_optional(dep.command, dep.version_args)
-            .map(|v| extract_version_string(&v, dep.command))
-            .unwrap_or_else(|| "installed".to_string())
+            .map_or_else(|| "installed".to_string(), |v| extract_version_string(&v, dep.command))
     } else {
         String::new()
     };
@@ -143,16 +142,13 @@ pub fn check_tailscale_connection() -> Option<CheckResult> {
         return None;
     }
 
-    match run_command_optional("tailscale", &["status", "--json"]) {
-        Some(output) => {
-            if output.contains("\"BackendState\"") && output.contains("\"Running\"") {
-                Some(CheckResult::success("Services", "Tailscale", "CONNECTED"))
-            } else {
-                Some(CheckResult::optional("Services", "Tailscale", "not connected → tailscale up"))
-            }
-        },
-        None => None,
-    }
+    run_command_optional("tailscale", &["status", "--json"]).map(|output| {
+        if output.contains("\"BackendState\"") && output.contains("\"Running\"") {
+            CheckResult::success("Services", "Tailscale", "CONNECTED")
+        } else {
+            CheckResult::optional("Services", "Tailscale", "not connected → tailscale up")
+        }
+    })
 }
 
 /// Check for cached Tailscale OAuth credentials.
@@ -169,7 +165,7 @@ pub fn check_tailscale_credentials() -> CheckResult {
     }
 }
 
-/// Extract the detail from a CheckResult status string.
+/// Extract the detail from a `CheckResult` status string.
 pub fn extract_status_detail(status: &str) -> &str {
     status.trim_start_matches("✓ ").trim_start_matches("✗ ").trim_start_matches("○ ")
 }

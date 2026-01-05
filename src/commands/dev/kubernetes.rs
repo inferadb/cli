@@ -36,9 +36,8 @@ pub fn kubectl_list<T, F>(resource: &str, namespace: &str, mapper: F) -> Vec<T>
 where
     F: Fn(&serde_json::Value) -> Option<T>,
 {
-    let json = match kubectl_get_json(resource, namespace) {
-        Some(j) => j,
-        None => return Vec::new(),
+    let Some(json) = kubectl_get_json(resource, namespace) else {
+        return Vec::new();
     };
 
     json.get("items")
@@ -57,9 +56,8 @@ pub fn kubectl_list_with_selector<T, F>(
 where
     F: Fn(&serde_json::Value) -> Option<T>,
 {
-    let json = match kubectl_get_json_with_selector(resource, namespace, selector) {
-        Some(j) => j,
-        None => return Vec::new(),
+    let Some(json) = kubectl_get_json_with_selector(resource, namespace, selector) else {
+        return Vec::new();
     };
 
     json.get("items")
@@ -86,10 +84,10 @@ pub fn wait_for_deployment(name: &str, namespace: &str, timeout: &str) -> Result
         &[
             "wait",
             "--for=condition=available",
-            &format!("deployment/{}", name),
+            &format!("deployment/{name}"),
             "-n",
             namespace,
-            &format!("--timeout={}", timeout),
+            &format!("--timeout={timeout}"),
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -108,8 +106,8 @@ pub fn ensure_namespace(namespace: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Get FoundationDB clusters in the inferadb namespace.
-/// Returns: Vec<(name, process_count, version)>
+/// Get `FoundationDB` clusters in the inferadb namespace.
+/// Returns: Vec<(name, `process_count`, version)>
 pub fn get_fdb_clusters() -> Vec<(String, String, String)> {
     kubectl_list("foundationdbcluster", INFERADB_NAMESPACE, |item| {
         let name = item.pointer("/metadata/name").and_then(|v| v.as_str())?.to_string();
@@ -118,11 +116,10 @@ pub fn get_fdb_clusters() -> Vec<(String, String, String)> {
         let total_processes: i64 = item
             .pointer("/spec/processCounts")
             .and_then(|counts| counts.as_object())
-            .map(|obj| obj.values().filter_map(|v| v.as_i64()).sum())
-            .unwrap_or(0);
+            .map_or(0, |obj| obj.values().filter_map(serde_json::Value::as_i64).sum());
 
         let processes = if total_processes > 0 {
-            format!("{} processes", total_processes)
+            format!("{total_processes} processes")
         } else {
             "unknown".to_string()
         };
@@ -130,15 +127,14 @@ pub fn get_fdb_clusters() -> Vec<(String, String, String)> {
         let version = item
             .pointer("/status/runningVersion")
             .and_then(|v| v.as_str())
-            .map(|v| format!("v{}", v))
-            .unwrap_or_else(|| "unknown".to_string());
+            .map_or_else(|| "unknown".to_string(), |v| format!("v{v}"));
 
         Some((name, processes, version))
     })
 }
 
-/// Get InferaDB deployments in the inferadb namespace.
-/// Returns: Vec<(name, replicas, image_tag)>
+/// Get `InferaDB` deployments in the inferadb namespace.
+/// Returns: Vec<(name, replicas, `image_tag`)>
 pub fn get_inferadb_deployments() -> Vec<(String, String, String)> {
     let selector =
         "app.kubernetes.io/name in (inferadb-engine,inferadb-control,inferadb-dashboard)";
@@ -148,9 +144,8 @@ pub fn get_inferadb_deployments() -> Vec<(String, String, String)> {
 
         let replicas = item
             .pointer("/spec/replicas")
-            .and_then(|v| v.as_i64())
-            .map(|r| r.to_string())
-            .unwrap_or_else(|| "1".to_string());
+            .and_then(serde_json::Value::as_i64)
+            .map_or_else(|| "1".to_string(), |r| r.to_string());
 
         // Get image and extract just the tag
         let image = item
@@ -158,13 +153,10 @@ pub fn get_inferadb_deployments() -> Vec<(String, String, String)> {
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let image_tag = if let Some(tag_pos) = image.rfind(':') {
-            &image[tag_pos + 1..]
-        } else if let Some(slash_pos) = image.rfind('/') {
-            &image[slash_pos + 1..]
-        } else {
-            image
-        };
+        let image_tag = image.rfind(':').map_or_else(
+            || image.rfind('/').map_or(image, |slash_pos| &image[slash_pos + 1..]),
+            |tag_pos| &image[tag_pos + 1..],
+        );
 
         Some((name, replicas, image_tag.to_string()))
     })
@@ -191,12 +183,9 @@ pub fn get_pvcs() -> Vec<(String, String, String)> {
 
 /// Check if a Helm repo exists.
 pub fn helm_repo_exists(name: &str) -> bool {
-    run_command_optional("helm", &["repo", "list", "-o", "json"])
-        .map(|output| {
-            output.contains(&format!("\"{}\"", name))
-                || output.contains(&format!("\"name\":\"{}\"", name))
-        })
-        .unwrap_or(false)
+    run_command_optional("helm", &["repo", "list", "-o", "json"]).is_some_and(|output| {
+        output.contains(&format!("\"{name}\"")) || output.contains(&format!("\"name\":\"{name}\""))
+    })
 }
 
 /// Add a Helm repository.

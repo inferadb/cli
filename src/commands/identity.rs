@@ -8,8 +8,6 @@ use crate::{client::Context, config::CredentialStore, error::Result};
 
 /// Show current user and profile info.
 pub async fn whoami(ctx: &Context) -> Result<()> {
-    let profile_name = ctx.effective_profile_name();
-
     #[derive(Serialize)]
     struct WhoamiOutput {
         profile: String,
@@ -20,6 +18,7 @@ pub async fn whoami(ctx: &Context) -> Result<()> {
         token_expires: Option<String>,
     }
 
+    let profile_name = ctx.effective_profile_name();
     let store = CredentialStore::new();
     let credentials = store.load(profile_name)?;
     let authenticated = credentials.is_some();
@@ -38,15 +37,15 @@ pub async fn whoami(ctx: &Context) -> Result<()> {
         println!("Profile: {}", output.profile);
         println!("URL: {}", output.url);
         if let Some(ref org) = output.org {
-            println!("Organization: {}", org);
+            println!("Organization: {org}");
         }
         if let Some(ref vault) = output.vault {
-            println!("Vault: {}", vault);
+            println!("Vault: {vault}");
         }
         if output.authenticated {
             println!("Authenticated: yes");
             if let Some(ref expires) = output.token_expires {
-                println!("Token expires: {}", expires);
+                println!("Token expires: {expires}");
             }
         } else {
             println!("Authenticated: no");
@@ -70,13 +69,13 @@ pub async fn status(ctx: &Context) -> Result<()> {
 
     let url = ctx.profile.url_or_default();
 
-    ctx.output.info(&format!("Checking status of {}...", url));
+    ctx.output.info(&format!("Checking status of {url}..."));
 
     // Try to connect (without auth)
     let start = Instant::now();
     let client = reqwest::Client::new();
     let response =
-        client.get(format!("{}/health", url)).timeout(Duration::from_secs(10)).send().await;
+        client.get(format!("{url}/health")).timeout(Duration::from_secs(10)).send().await;
 
     let (status, latency_ms) = match response {
         Ok(resp) => {
@@ -93,7 +92,7 @@ pub async fn status(ctx: &Context) -> Result<()> {
             } else if e.is_connect() {
                 ("connection failed".to_string(), None)
             } else {
-                (format!("error: {}", e), None)
+                (format!("error: {e}"), None)
             }
         },
     };
@@ -104,7 +103,7 @@ pub async fn status(ctx: &Context) -> Result<()> {
         if status == "healthy" {
             ctx.output.success(&format!("Service: {} ({}ms)", status, latency_ms.unwrap_or(0)));
         } else {
-            ctx.output.error(&format!("Service: {}", status));
+            ctx.output.error(&format!("Service: {status}"));
         }
     } else {
         ctx.output.value(&output)?;
@@ -125,7 +124,7 @@ pub async fn ping(ctx: &Context, count: u32, control: bool, engine: bool) -> Res
         "service"
     };
 
-    ctx.output.info(&format!("Pinging {} at {}...", target, url));
+    ctx.output.info(&format!("Pinging {target} at {url}..."));
 
     let client = reqwest::Client::new();
     let mut latencies = Vec::new();
@@ -133,7 +132,7 @@ pub async fn ping(ctx: &Context, count: u32, control: bool, engine: bool) -> Res
     for i in 0..count {
         let start = Instant::now();
         let response =
-            client.get(format!("{}/health", url)).timeout(Duration::from_secs(5)).send().await;
+            client.get(format!("{url}/health")).timeout(Duration::from_secs(5)).send().await;
 
         match response {
             Ok(resp) if resp.status().is_success() => {
@@ -164,7 +163,7 @@ pub async fn ping(ctx: &Context, count: u32, control: bool, engine: bool) -> Res
         let avg = latencies.iter().sum::<u64>() / latencies.len() as u64;
         println!();
         println!("Statistics:");
-        println!("  min: {}ms, max: {}ms, avg: {}ms", min, max, avg);
+        println!("  min: {min}ms, max: {max}ms, avg: {avg}ms");
         println!("  {} of {} pings succeeded", latencies.len(), count);
     }
 
@@ -185,12 +184,12 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
     match url::Url::parse(url) {
         Ok(parsed) => {
             if let Some(host) = parsed.host_str() {
-                match tokio::net::lookup_host(format!("{}:443", host)).await {
+                match tokio::net::lookup_host(format!("{host}:443")).await {
                     Ok(_) => {
                         println!("✓ ({}ms)", start.elapsed().as_millis());
                     },
                     Err(e) => {
-                        println!("✗ Failed: {}", e);
+                        println!("✗ Failed: {e}");
                     },
                 }
             } else {
@@ -198,14 +197,14 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
             }
         },
         Err(e) => {
-            println!("✗ Invalid URL: {}", e);
+            println!("✗ Invalid URL: {e}");
         },
     }
 
     // HTTPS check
     print!("TLS connection... ");
     let start = Instant::now();
-    match client.get(format!("{}/health", url)).timeout(Duration::from_secs(10)).send().await {
+    match client.get(format!("{url}/health")).timeout(Duration::from_secs(10)).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 println!("✓ ({}ms)", start.elapsed().as_millis());
@@ -219,7 +218,7 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
             } else if e.is_connect() {
                 println!("✗ Connection failed");
             } else {
-                println!("✗ Error: {}", e);
+                println!("✗ Error: {e}");
             }
         },
     }
@@ -228,22 +227,19 @@ pub async fn doctor(ctx: &Context) -> Result<()> {
     print!("Authentication... ");
     let store = CredentialStore::new();
     let profile_name = ctx.effective_profile_name();
-    match store.load(profile_name)? {
-        Some(creds) => {
-            if creds.is_expired() {
-                println!("⚠ Token expired");
-                println!("   Run: inferadb login");
-            } else if creds.expires_soon() {
-                println!("⚠ Token expires soon");
-                println!("   Consider running: inferadb login");
-            } else {
-                println!("✓ Valid token");
-            }
-        },
-        None => {
-            println!("✗ Not authenticated");
+    if let Some(creds) = store.load(profile_name)? {
+        if creds.is_expired() {
+            println!("⚠ Token expired");
             println!("   Run: inferadb login");
-        },
+        } else if creds.expires_soon() {
+            println!("⚠ Token expires soon");
+            println!("   Consider running: inferadb login");
+        } else {
+            println!("✓ Valid token");
+        }
+    } else {
+        println!("✗ Not authenticated");
+        println!("   Run: inferadb login");
     }
 
     // Profile check
@@ -286,7 +282,7 @@ async fn show_health(ctx: &Context, verbose: bool) -> Result<()> {
     let client = reqwest::Client::new();
     let start = Instant::now();
     let response =
-        client.get(format!("{}/health", url)).timeout(Duration::from_secs(10)).send().await;
+        client.get(format!("{url}/health")).timeout(Duration::from_secs(10)).send().await;
 
     match response {
         Ok(resp) if resp.status().is_success() => {
@@ -297,7 +293,7 @@ async fn show_health(ctx: &Context, verbose: bool) -> Result<()> {
                 if let Ok(body) = resp.text().await {
                     println!();
                     println!("Response:");
-                    println!("{}", body);
+                    println!("{body}");
                 }
             }
         },
@@ -323,7 +319,7 @@ pub async fn version(ctx: &Context, check_updates: bool) -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
     let name = env!("CARGO_PKG_NAME");
 
-    println!("{} {}", name, version);
+    println!("{name} {version}");
 
     if check_updates {
         ctx.output.info("Checking for updates...");
@@ -340,18 +336,18 @@ pub async fn config_show(ctx: &Context, key: Option<&str>) -> Result<()> {
         match k {
             "default_profile" => {
                 if let Some(ref p) = ctx.config.default_profile {
-                    println!("{}", p);
+                    println!("{p}");
                 }
             },
             "output.format" => println!("{}", ctx.config.output.format),
             "output.color" => println!("{}", ctx.config.output.color),
             _ => {
-                return Err(crate::error::Error::invalid_arg(format!("Unknown key: {}", k)));
+                return Err(crate::error::Error::invalid_arg(format!("Unknown key: {k}")));
             },
         }
     } else {
         let yaml = serde_yaml::to_string(&ctx.config)?;
-        print!("{}", yaml);
+        print!("{yaml}");
     }
     Ok(())
 }
@@ -370,7 +366,7 @@ pub async fn config_edit(ctx: &Context, editor: Option<&str>) -> Result<()> {
     }
 
     let editor = editor
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .or_else(|| std::env::var("EDITOR").ok())
         .or_else(|| std::env::var("VISUAL").ok())
         .unwrap_or_else(|| "vi".to_string());
@@ -411,10 +407,10 @@ pub async fn config_explain(ctx: &Context) -> Result<()> {
     println!("  Profile: {}", ctx.effective_profile_name());
     println!("  URL: {}", ctx.profile.url_or_default());
     if let Some(ref org) = ctx.profile.org {
-        println!("  Organization: {}", org);
+        println!("  Organization: {org}");
     }
     if let Some(ref vault) = ctx.profile.vault {
-        println!("  Vault: {}", vault);
+        println!("  Vault: {vault}");
     }
     Ok(())
 }
@@ -441,7 +437,7 @@ pub async fn stats(ctx: &Context, trends: bool, compact: bool) -> Result<()> {
         if let Some(ref active) = active_schema {
             print!("(v{} active)", active.version);
         }
-        print!(" relationships:{}", rel_count);
+        print!(" relationships:{rel_count}");
         if has_more {
             print!("+");
         }
@@ -466,9 +462,9 @@ pub async fn stats(ctx: &Context, trends: bool, compact: bool) -> Result<()> {
     println!();
     println!("Relationships:");
     if has_more {
-        println!("  Count: {}+ (sampled)", rel_count);
+        println!("  Count: {rel_count}+ (sampled)");
     } else {
-        println!("  Count: {}", rel_count);
+        println!("  Count: {rel_count}");
     }
 
     if trends {
@@ -500,7 +496,7 @@ pub async fn what_changed(
 
     ctx.output.info(&format!("Showing changes since {}", since.unwrap_or("1 day ago")));
     if let Some(u) = until {
-        ctx.output.info(&format!("Until {}", u));
+        ctx.output.info(&format!("Until {u}"));
     }
     println!();
 
@@ -738,7 +734,7 @@ pub async fn templates(
                     show_export_backup_template(format);
                 },
                 _ => {
-                    ctx.output.error(&format!("Unknown template: {}", template_name));
+                    ctx.output.error(&format!("Unknown template: {template_name}"));
                     ctx.output.info("Run 'inferadb templates' to see available templates.");
                 },
             }
@@ -753,7 +749,7 @@ fn show_user_offboarding_template(subject: &str, format: &str) {
         println!("# User Offboarding Script");
         println!("# Generated by: inferadb templates user-offboarding");
         println!();
-        println!("USER=\"{}\"", subject);
+        println!("USER=\"{subject}\"");
         println!();
         println!("# Step 1: Export current access");
         println!(
@@ -776,21 +772,21 @@ fn show_user_offboarding_template(subject: &str, format: &str) {
         println!();
         println!("Use this workflow to safely remove all access for a departing user.");
         println!();
-        println!("SUBJECT: {}", subject);
+        println!("SUBJECT: {subject}");
         println!();
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!();
         println!("# Step 1: Review what the user has access to");
-        println!("inferadb relationships list --subject {} -o json > access-backup.json", subject);
+        println!("inferadb relationships list --subject {subject} -o json > access-backup.json");
         println!();
         println!("# Step 2: Remove all relationships for this user");
         println!("# (Review the backup file first!)");
-        println!("inferadb relationships list --subject {} | while read rel; do", subject);
+        println!("inferadb relationships list --subject {subject} | while read rel; do");
         println!("  inferadb relationships delete $rel");
         println!("done");
         println!();
         println!("# Step 3: Verify all access is removed");
-        println!("inferadb relationships list --subject {}", subject);
+        println!("inferadb relationships list --subject {subject}");
         println!();
         println!("TIP: Use --format script to get an executable script version.");
     }
@@ -801,7 +797,7 @@ fn show_batch_check_template(subject: &str, format: &str) {
         println!("#!/bin/bash");
         println!("# Batch Permission Check");
         println!();
-        println!("USER=\"{}\"", subject);
+        println!("USER=\"{subject}\"");
         println!("RESOURCES=(\"document:readme\" \"folder:private\" \"project:main\")");
         println!("PERMISSIONS=(\"view\" \"edit\" \"admin\")");
         println!();
@@ -818,15 +814,15 @@ fn show_batch_check_template(subject: &str, format: &str) {
         println!();
         println!("Check multiple permissions efficiently.");
         println!();
-        println!("SUBJECT: {}", subject);
+        println!("SUBJECT: {subject}");
         println!();
         println!("# Check multiple resources");
         println!("for resource in document:a document:b document:c; do");
-        println!("  inferadb check {} view $resource", subject);
+        println!("  inferadb check {subject} view $resource");
         println!("done");
         println!();
         println!("# Check with JSON output for parsing");
-        println!("inferadb check {} view document:readme -o json", subject);
+        println!("inferadb check {subject} view document:readme -o json");
     }
 }
 
@@ -835,7 +831,7 @@ fn show_debug_denial_template(subject: &str, format: &str) {
         println!("#!/bin/bash");
         println!("# Debug Access Denial");
         println!();
-        println!("USER=\"{}\"", subject);
+        println!("USER=\"{subject}\"");
         println!("RESOURCE=\"document:example\"");
         println!("PERMISSION=\"view\"");
         println!();
@@ -854,16 +850,16 @@ fn show_debug_denial_template(subject: &str, format: &str) {
         println!();
         println!("Investigate why access was denied.");
         println!();
-        println!("SUBJECT: {}", subject);
+        println!("SUBJECT: {subject}");
         println!();
         println!("# Step 1: Check with explanation");
-        println!("inferadb check {} view document:example --explain", subject);
+        println!("inferadb check {subject} view document:example --explain");
         println!();
         println!("# Step 2: See who can access the resource");
         println!("inferadb expand document:example viewer");
         println!();
         println!("# Step 3: Check user's relationships");
-        println!("inferadb relationships list --subject {}", subject);
+        println!("inferadb relationships list --subject {subject}");
         println!();
         println!("# Step 4: Check active schema");
         println!("inferadb schemas get active");
@@ -1017,7 +1013,7 @@ pub async fn guide(ctx: &Context, name: Option<&str>) -> Result<()> {
             "production-checklist" => show_production_checklist_guide(),
             "incident-response" => show_incident_response_guide(),
             _ => {
-                ctx.output.error(&format!("Unknown guide: {}", guide_name));
+                ctx.output.error(&format!("Unknown guide: {guide_name}"));
                 ctx.output.info("Run 'inferadb guide' to see available guides.");
             },
         },
@@ -1203,7 +1199,7 @@ fn parse_time_spec(spec: &str) -> chrono::DateTime<chrono::Utc> {
     // Try relative formats
     match spec.to_lowercase().as_str() {
         "yesterday" => now - Duration::days(1),
-        "today" => now - Duration::hours(now.hour() as i64),
+        "today" => now - Duration::hours(i64::from(now.hour())),
         _ => {
             // Try parsing as duration like "1h", "1d", "30m"
             if let Some(stripped) = spec.strip_suffix('h') {

@@ -58,12 +58,14 @@ impl ProgressBar {
     }
 
     /// Get current progress value.
+    #[must_use]
     pub fn current(&self) -> u64 {
         self.current.load(Ordering::SeqCst)
     }
 
     /// Get total count.
-    pub fn total(&self) -> u64 {
+    #[must_use]
+    pub const fn total(&self) -> u64 {
         self.total
     }
 
@@ -73,6 +75,7 @@ impl ProgressBar {
     }
 
     /// Get elapsed time.
+    #[must_use]
     pub fn elapsed(&self) -> Duration {
         self.start_time.elapsed()
     }
@@ -82,7 +85,7 @@ impl ProgressBar {
         self.stop();
         clear_line();
         let elapsed = format_duration(self.elapsed());
-        teapot::output::success(&format!("{} ({})", message, elapsed));
+        teapot::output::success(&format!("{message} ({elapsed})"));
     }
 
     /// Finish with an error message.
@@ -132,7 +135,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
 
     // In non-interactive mode, just print the message
     if !is_tty() || is_ci() {
-        teapot::output::info(&format!("{} (0/{})", message, total));
+        teapot::output::info(&format!("{message} (0/{total})"));
         return ProgressBar { current, total, message, running, join_handle: None, start_time };
     }
 
@@ -167,7 +170,7 @@ pub fn progress(message: impl Into<String>, total: u64) -> ProgressBar {
         }
 
         // Clear line when done
-        eprint!("\r{}", CLEAR_LINE);
+        eprint!("\r{CLEAR_LINE}");
         let _ = io::stderr().flush();
     });
 
@@ -292,11 +295,12 @@ impl MultiProgressBar {
                 elapsed
             ));
         } else {
-            teapot::output::success(&format!("{} ({} tasks, {})", message, completed, elapsed));
+            teapot::output::success(&format!("{message} ({completed} tasks, {elapsed})"));
         }
     }
 
     /// Get elapsed time.
+    #[must_use]
     pub fn elapsed(&self) -> Duration {
         self.start_time.elapsed()
     }
@@ -331,7 +335,7 @@ pub fn multi_progress(title: impl Into<String>) -> MultiProgressBar {
 fn format_duration(duration: Duration) -> String {
     let secs = duration.as_secs();
     if secs < 60 {
-        format!("{}s", secs)
+        format!("{secs}s")
     } else if secs < 3600 {
         format!("{}m {}s", secs / 60, secs % 60)
     } else {
@@ -342,7 +346,7 @@ fn format_duration(duration: Duration) -> String {
 /// Clear the current line.
 fn clear_line() {
     if is_tty() && !is_ci() {
-        eprint!("\r{}", CLEAR_LINE);
+        eprint!("\r{CLEAR_LINE}");
         let _ = io::stderr().flush();
     }
 }
@@ -351,7 +355,7 @@ fn clear_line() {
 fn clear_lines(count: usize) {
     if is_tty() && !is_ci() {
         for _ in 0..count {
-            eprint!("{}{}", CURSOR_UP, CLEAR_LINE);
+            eprint!("{CURSOR_UP}{CLEAR_LINE}");
         }
         let _ = io::stderr().flush();
     }

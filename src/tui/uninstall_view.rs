@@ -62,16 +62,17 @@ pub struct UninstallInfo {
 
 impl UninstallInfo {
     /// Get description lines for what will be removed.
+    #[must_use]
     pub fn removal_lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
         if self.has_cluster {
             let status = self.cluster_status.as_deref().unwrap_or("unknown");
-            lines.push(format!("Talos cluster '{}' ({})", CLUSTER_NAME, status));
+            lines.push(format!("Talos cluster '{CLUSTER_NAME}' ({status})"));
         }
 
         if self.has_registry {
-            lines.push(format!("Local Docker registry '{}'", REGISTRY_NAME));
+            lines.push(format!("Local Docker registry '{REGISTRY_NAME}'"));
         }
 
         if self.has_deploy_dir {
@@ -97,7 +98,8 @@ impl UninstallInfo {
     }
 
     /// Check if there's anything to uninstall.
-    pub fn has_anything(&self) -> bool {
+    #[must_use]
+    pub const fn has_anything(&self) -> bool {
         self.has_cluster
             || self.has_registry
             || self.has_deploy_dir
@@ -124,7 +126,7 @@ struct UninstallContext {
 // ============================================================================
 
 /// Message type for uninstall view.
-/// This is a type alias to the underlying TaskProgressMsg.
+/// This is a type alias to the underlying `TaskProgressMsg`.
 pub type DevUninstallViewMsg = TaskProgressMsg;
 
 // ============================================================================
@@ -139,9 +141,9 @@ pub struct DevUninstallView {
 impl DevUninstallView {
     /// Create a new uninstall view with the given steps and info.
     pub fn new(steps: Vec<InstallStep>, info: UninstallInfo, with_credentials: bool) -> Self {
-        let task_steps: Vec<TaskStep> = steps.into_iter().map(|s| s.into()).collect();
+        let task_steps: Vec<TaskStep> = steps.into_iter().map(std::convert::Into::into).collect();
 
-        let context = UninstallContext { info: info.clone(), with_credentials };
+        let context = UninstallContext { info, with_credentials };
 
         let inner = TaskProgressView::with_context(task_steps, context)
             .title("InferaDB Development Cluster")
@@ -186,26 +188,31 @@ impl DevUninstallView {
     }
 
     /// Check if the view should quit.
+    #[must_use]
     pub fn should_quit(&self) -> bool {
         self.inner.should_quit()
     }
 
     /// Check if uninstall was cancelled by user.
+    #[must_use]
     pub fn was_cancelled(&self) -> bool {
         self.inner.was_cancelled()
     }
 
     /// Check if uninstall completed successfully.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.inner.is_success()
     }
 
     /// Check if there was a failure.
+    #[must_use]
     pub fn has_failure(&self) -> bool {
         self.inner.has_failure()
     }
 
     /// Get the current phase.
+    #[must_use]
     pub fn phase(&self) -> &Phase {
         self.inner.phase()
     }

@@ -20,15 +20,15 @@ use teapot::{
 // ============================================================================
 
 /// Type alias for step executor function.
-/// Returns Ok(detail) on success, or Err(error_message) on failure.
+/// Returns Ok(detail) on success, or `Err(error_message)` on failure.
 pub type StepExecutor = Arc<dyn Fn() -> Result<Option<String>, String> + Send + Sync>;
 
 /// Message type for install view.
-/// This is a type alias to the underlying TaskProgressMsg.
+/// This is a type alias to the underlying `TaskProgressMsg`.
 pub type DevInstallViewMsg = TaskProgressMsg;
 
 /// Installation step definition.
-/// This is a compatibility wrapper around Ferment's TaskStep.
+/// This is a compatibility wrapper around Teapot's `TaskStep`.
 #[derive(Clone)]
 pub struct InstallStep {
     /// Step name displayed to user.
@@ -64,9 +64,9 @@ impl InstallStep {
 impl From<InstallStep> for TaskStep {
     fn from(step: InstallStep) -> Self {
         if let Some(ex) = step.executor {
-            TaskStep::with_executor(step.name, move || ex())
+            Self::with_executor(step.name, move || ex())
         } else {
-            TaskStep::new(step.name)
+            Self::new(step.name)
         }
     }
 }
@@ -83,7 +83,7 @@ pub struct DevInstallView {
 impl DevInstallView {
     /// Create a new install view with the given steps.
     pub fn new(steps: Vec<InstallStep>) -> Self {
-        let task_steps: Vec<TaskStep> = steps.into_iter().map(|s| s.into()).collect();
+        let task_steps: Vec<TaskStep> = steps.into_iter().map(std::convert::Into::into).collect();
 
         let inner = TaskProgressView::builder(task_steps)
             .title("InferaDB Development Cluster")
@@ -118,26 +118,31 @@ impl DevInstallView {
     }
 
     /// Check if the view should quit.
+    #[must_use]
     pub fn should_quit(&self) -> bool {
         self.inner.should_quit()
     }
 
     /// Check if install was cancelled by user.
+    #[must_use]
     pub fn was_cancelled(&self) -> bool {
         self.inner.was_cancelled()
     }
 
     /// Check if install completed successfully.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.inner.is_success()
     }
 
     /// Check if there was a failure.
+    #[must_use]
     pub fn has_failure(&self) -> bool {
         self.inner.has_failure()
     }
 
     /// Get the current phase.
+    #[must_use]
     pub fn phase(&self) -> &Phase {
         self.inner.phase()
     }
@@ -153,16 +158,19 @@ impl DevInstallView {
     }
 
     /// Check if a task is currently running.
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.inner.is_running()
     }
 
     /// Check if all tasks are complete.
+    #[must_use]
     pub fn is_all_complete(&self) -> bool {
         self.inner.is_all_complete()
     }
 
     /// Get current task index.
+    #[must_use]
     pub fn current_task_index(&self) -> Option<usize> {
         self.inner.current_task_index()
     }

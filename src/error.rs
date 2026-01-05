@@ -1,4 +1,4 @@
-//! Error types for the InferaDB CLI.
+//! Error types for the `InferaDB` CLI.
 //!
 //! This module provides structured error handling with semantic exit codes
 //! following the CLI specification.
@@ -32,7 +32,7 @@ pub enum Error {
     #[error("Vault not specified. Use --vault or configure a default profile.")]
     VaultNotSpecified,
 
-    /// API/SDK error from the InferaDB SDK.
+    /// API/SDK error from the `InferaDB` SDK.
     #[error("{0}")]
     Api(#[from] inferadb::Error),
 
@@ -100,96 +100,88 @@ impl Error {
     /// - 11: Server error
     /// - 20: Authorization denied (check command)
     /// - 21: Indeterminate
+    #[must_use]
     pub fn exit_code(&self) -> i32 {
         match self {
             // Argument/config errors
-            Error::Config(_) => 2,
-            Error::InvalidArgument(_) => 2,
-            Error::Parse(_) => 2,
+            Self::Config(_)
+            | Self::InvalidArgument(_)
+            | Self::Parse(_)
+            | Self::OrgNotSpecified
+            | Self::VaultNotSpecified => 2,
 
             // Auth errors
-            Error::AuthRequired => 3,
-            Error::Credential(_) => 3,
-            Error::OAuth(_) => 3,
+            Self::AuthRequired | Self::Credential(_) | Self::OAuth(_) => 3,
 
             // Not found
-            Error::ProfileNotFound(_) => 5,
-            Error::OrgNotSpecified => 2,
-            Error::VaultNotSpecified => 2,
+            Self::ProfileNotFound(_) => 5,
 
             // Authorization decisions
-            Error::AccessDenied => 20,
-            Error::Indeterminate => 21,
+            Self::AccessDenied => 20,
+            Self::Indeterminate => 21,
 
             // API errors mapped by kind
-            Error::Api(e) => match e.kind() {
+            Self::Api(e) => match e.kind() {
                 inferadb::ErrorKind::Unauthorized => 3,
                 inferadb::ErrorKind::Forbidden => 4,
                 inferadb::ErrorKind::NotFound => 5,
                 inferadb::ErrorKind::Conflict => 6,
                 inferadb::ErrorKind::RateLimited => 7,
-                inferadb::ErrorKind::Connection => 10,
-                inferadb::ErrorKind::Timeout => 10,
-                inferadb::ErrorKind::Unavailable => 11,
-                inferadb::ErrorKind::Internal => 11,
+                inferadb::ErrorKind::Connection | inferadb::ErrorKind::Timeout => 10,
+                inferadb::ErrorKind::Unavailable | inferadb::ErrorKind::Internal => 11,
                 _ => 1,
             },
 
             // IO/network
-            Error::Io(_) => 10,
+            Self::Io(_) => 10,
 
-            // Serialization
-            Error::Json(_) => 1,
-            Error::Yaml(_) => 1,
-
-            // User action
-            Error::Cancelled => 1,
-
-            // Fallback
-            Error::Other(_) => 1,
+            // Serialization, User action, Fallback
+            Self::Json(_) | Self::Yaml(_) | Self::Cancelled | Self::Other(_) => 1,
         }
     }
 
     /// Returns true if this error should show a hint about logging in.
+    #[must_use]
     pub fn should_suggest_login(&self) -> bool {
-        matches!(self, Error::AuthRequired | Error::Credential(_))
-            || matches!(self, Error::Api(e) if e.kind() == inferadb::ErrorKind::Unauthorized)
+        matches!(self, Self::AuthRequired | Self::Credential(_))
+            || matches!(self, Self::Api(e) if e.kind() == inferadb::ErrorKind::Unauthorized)
     }
 
     /// Create a configuration error.
     pub fn config(msg: impl Into<String>) -> Self {
-        Error::Config(msg.into())
+        Self::Config(msg.into())
     }
 
     /// Create an invalid argument error.
     pub fn invalid_arg(msg: impl Into<String>) -> Self {
-        Error::InvalidArgument(msg.into())
+        Self::InvalidArgument(msg.into())
     }
 
     /// Create a parse error.
     pub fn parse(msg: impl Into<String>) -> Self {
-        Error::Parse(msg.into())
+        Self::Parse(msg.into())
     }
 
     /// Create a credential error.
     pub fn credential(msg: impl Into<String>) -> Self {
-        Error::Credential(msg.into())
+        Self::Credential(msg.into())
     }
 
     /// Create an OAuth error.
     pub fn oauth(msg: impl Into<String>) -> Self {
-        Error::OAuth(msg.into())
+        Self::OAuth(msg.into())
     }
 
     /// Create a general error.
     pub fn other(msg: impl Into<String>) -> Self {
-        Error::Other(msg.into())
+        Self::Other(msg.into())
     }
 
     /// Get a localized error message.
     ///
     /// Uses the i18n system if initialized, otherwise falls back to
     /// the default error message.
+    #[must_use]
     pub fn localized_message(&self) -> Cow<'_, str> {
         // Check if i18n is initialized
         let Some(_i18n) = crate::i18n::try_get() else {
@@ -198,46 +190,44 @@ impl Error {
         };
 
         match self {
-            Error::AuthRequired => Cow::Owned(t!("error-auth-required")),
-            Error::ProfileNotFound(name) => {
+            Self::AuthRequired => Cow::Owned(t!("error-auth-required")),
+            Self::ProfileNotFound(name) => {
                 Cow::Owned(t!("error-profile-not-found", "name" => name))
             },
-            Error::OrgNotSpecified => Cow::Owned(t!("error-org-required")),
-            Error::VaultNotSpecified => Cow::Owned(t!("error-vault-required")),
-            Error::Config(details) => Cow::Owned(t!("error-config-parse", "details" => details)),
-            Error::InvalidArgument(details) => {
+            Self::OrgNotSpecified => Cow::Owned(t!("error-org-required")),
+            Self::VaultNotSpecified => Cow::Owned(t!("error-vault-required")),
+            Self::Config(details) => Cow::Owned(t!("error-config-parse", "details" => details)),
+            Self::InvalidArgument(details) => {
                 Cow::Owned(t!("error-invalid-argument", "details" => details))
             },
-            Error::AccessDenied => Cow::Owned(t!("error-permission-denied")),
-            Error::Cancelled => Cow::Borrowed("Operation cancelled"),
-            Error::Indeterminate => Cow::Borrowed("Authorization check indeterminate"),
+            Self::AccessDenied => Cow::Owned(t!("error-permission-denied")),
+            Self::Cancelled => Cow::Borrowed("Operation cancelled"),
+            Self::Indeterminate => Cow::Borrowed("Authorization check indeterminate"),
 
             // For API errors, use the SDK's message with our prefix
-            Error::Api(e) => Cow::Owned(t!("error-api-error", "message" => &e.to_string())),
+            Self::Api(e) => Cow::Owned(t!("error-api-error", "message" => &e.to_string())),
 
             // For IO errors, include the underlying message
-            Error::Io(e) => Cow::Owned(format!("IO error: {}", e)),
+            Self::Io(e) => Cow::Owned(format!("IO error: {e}")),
 
             // Serialization errors keep their technical messages
-            Error::Json(e) => Cow::Owned(format!("JSON error: {}", e)),
-            Error::Yaml(e) => Cow::Owned(format!("YAML error: {}", e)),
+            Self::Json(e) => Cow::Owned(format!("JSON error: {e}")),
+            Self::Yaml(e) => Cow::Owned(format!("YAML error: {e}")),
 
             // Parse and credential errors include their details
-            Error::Parse(details) => Cow::Owned(format!("Parse error: {}", details)),
-            Error::Credential(details) => {
-                Cow::Owned(format!("Credential storage error: {}", details))
-            },
-            Error::OAuth(details) => Cow::Owned(format!("Authentication error: {}", details)),
+            Self::Parse(details) => Cow::Owned(format!("Parse error: {details}")),
+            Self::Credential(details) => Cow::Owned(format!("Credential storage error: {details}")),
+            Self::OAuth(details) => Cow::Owned(format!("Authentication error: {details}")),
 
             // Other errors pass through
-            Error::Other(msg) => Cow::Borrowed(msg),
+            Self::Other(msg) => Cow::Borrowed(msg),
         }
     }
 }
 
 impl From<keyring::Error> for Error {
     fn from(err: keyring::Error) -> Self {
-        Error::Credential(err.to_string())
+        Self::Credential(err.to_string())
     }
 }
 

@@ -1,4 +1,4 @@
-//! Configuration system for the InferaDB CLI.
+//! Configuration system for the `InferaDB` CLI.
 //!
 //! The configuration follows XDG Base Directory Specification and supports:
 //! - User config: `~/.config/inferadb/cli.yaml`
@@ -70,7 +70,7 @@ impl Config {
     /// 4. User config (`~/.config/inferadb/cli.yaml`)
     /// 5. Defaults
     pub fn load() -> Result<Self> {
-        let mut config = Config::default();
+        let mut config = Self::default();
 
         // Load user config first (lowest precedence)
         if let Some(path) = Self::user_config_path() {
@@ -127,7 +127,7 @@ impl Config {
     }
 
     /// Merge another config into this one (other takes precedence).
-    fn merge(&mut self, other: Config) {
+    fn merge(&mut self, other: Self) {
         if other.default_profile.is_some() {
             self.default_profile = other.default_profile;
         }
@@ -177,6 +177,7 @@ impl Config {
     /// Follows XDG Base Directory Specification:
     /// - Uses `XDG_CONFIG_HOME/inferadb/cli.yaml` if set
     /// - Falls back to `~/.config/inferadb/cli.yaml`
+    #[must_use]
     pub fn user_config_path() -> Option<PathBuf> {
         Self::config_dir().map(|p| p.join("cli.yaml"))
     }
@@ -187,6 +188,7 @@ impl Config {
     /// - If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/inferadb`
     /// - Linux/macOS: Falls back to `~/.config/inferadb` (XDG default)
     /// - Windows: Falls back to `%APPDATA%\inferadb`
+    #[must_use]
     pub fn config_dir() -> Option<PathBuf> {
         // Check XDG_CONFIG_HOME first (works on all platforms if explicitly set)
         if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
@@ -214,6 +216,7 @@ impl Config {
     /// - If `XDG_STATE_HOME` is set, uses `$XDG_STATE_HOME/inferadb`
     /// - Linux/macOS: Falls back to `~/.local/state/inferadb` (XDG default)
     /// - Windows: Falls back to `%LOCALAPPDATA%\inferadb`
+    #[must_use]
     pub fn state_dir() -> Option<PathBuf> {
         // Check XDG_STATE_HOME first
         if let Ok(xdg_state) = std::env::var("XDG_STATE_HOME") {
@@ -243,6 +246,7 @@ impl Config {
     /// - Windows: Falls back to `%APPDATA%\inferadb`
     ///
     /// Used for user-specific data files (e.g., deploy repository clone).
+    #[must_use]
     pub fn data_dir() -> Option<PathBuf> {
         // Check XDG_DATA_HOME first
         if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
@@ -265,11 +269,13 @@ impl Config {
     }
 
     /// Get a profile by name.
+    #[must_use]
     pub fn get_profile(&self, name: &str) -> Option<&Profile> {
         self.profiles.get(name)
     }
 
     /// Get the default profile.
+    #[must_use]
     pub fn get_default_profile(&self) -> Option<&Profile> {
         self.default_profile.as_ref().and_then(|name| self.profiles.get(name))
     }

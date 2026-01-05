@@ -122,14 +122,14 @@ fn clone_repo(
     };
 
     if !clone_ok {
-        return Err(format!("Failed to clone {}", repo_url));
+        return Err(format!("Failed to clone {repo_url}"));
     }
 
     if let Some(ref_spec) = commit {
         if run_command_optional("git", &["-C", target_dir.to_str().unwrap(), "checkout", ref_spec])
             .is_none()
         {
-            return Err(format!("Failed to checkout '{}'", ref_spec));
+            return Err(format!("Failed to checkout '{ref_spec}'"));
         }
         let _ = run_command_optional(
             "git",
@@ -167,7 +167,7 @@ fn step_clone_component(
     match clone_repo(repo_url, target_dir, force, None) {
         Ok(Some(_)) => Ok(StepOutcome::Skipped),
         Ok(None) => Ok(StepOutcome::Success),
-        Err(e) => Err(format!("Failed to clone {}: {}", name, e)),
+        Err(e) => Err(format!("Failed to clone {name}: {e}")),
     }
 }
 
@@ -184,7 +184,7 @@ fn step_create_config_dir() -> std::result::Result<Option<String>, String> {
     }
 
     fs::create_dir_all(&config_dir)
-        .map_err(|e| format!("Failed to create config directory: {}", e))?;
+        .map_err(|e| format!("Failed to create config directory: {e}"))?;
 
     Ok(None)
 }
@@ -213,7 +213,7 @@ fn cleanup_stale_contexts() {
     let _ = run_command_optional("kubectl", &["config", "delete-cluster", CLUSTER_NAME]);
     let _ = run_command_optional(
         "kubectl",
-        &["config", "delete-user", &format!("admin@{}", CLUSTER_NAME)],
+        &["config", "delete-user", &format!("admin@{CLUSTER_NAME}")],
     );
 
     // Clean talosctl context
@@ -238,12 +238,12 @@ fn setup_container_registry() -> Result<String> {
                         "network",
                         "ls",
                         "--filter",
-                        &format!("name={}", CLUSTER_NAME),
+                        &format!("name={CLUSTER_NAME}"),
                         "--format",
                         "{{.Name}}",
                     ],
                 )
-                .and_then(|s| s.lines().next().map(|l| l.to_string()))
+                .and_then(|s| s.lines().next().map(std::string::ToString::to_string))
                 .unwrap_or_else(|| CLUSTER_NAME.to_string());
 
                 run_command(
@@ -256,7 +256,7 @@ fn setup_container_registry() -> Result<String> {
                         "--network",
                         &talos_network,
                         "-p",
-                        &format!("{}:5000", REGISTRY_PORT),
+                        &format!("{REGISTRY_PORT}:5000"),
                         "--restart",
                         "always",
                         "registry:2",
@@ -297,23 +297,20 @@ fn build_and_push_images(_registry_ip: &str) -> std::result::Result<StepOutcome,
         if dockerfile.exists() {
             run_command(
                 "docker",
-                &["build", "-t", &format!("{}:latest", name), dir.to_str().unwrap()],
+                &["build", "-t", &format!("{name}:latest"), dir.to_str().unwrap()],
             )
             .map_err(|e| e.to_string())?;
             run_command(
                 "docker",
                 &[
                     "tag",
-                    &format!("{}:latest", name),
-                    &format!("localhost:{}/{}:latest", REGISTRY_PORT, name),
+                    &format!("{name}:latest"),
+                    &format!("localhost:{REGISTRY_PORT}/{name}:latest"),
                 ],
             )
             .map_err(|e| e.to_string())?;
-            run_command(
-                "docker",
-                &["push", &format!("localhost:{}/{}:latest", REGISTRY_PORT, name)],
-            )
-            .map_err(|e| e.to_string())?;
+            run_command("docker", &["push", &format!("localhost:{REGISTRY_PORT}/{name}:latest")])
+                .map_err(|e| e.to_string())?;
             built_count += 1;
         }
     }
@@ -394,9 +391,9 @@ fn install_tailscale_operator(
             "--namespace",
             "tailscale-system",
             "--set",
-            &format!("oauth.clientId={}", client_id),
+            &format!("oauth.clientId={client_id}"),
             "--set",
-            &format!("oauth.clientSecret={}", client_secret),
+            &format!("oauth.clientSecret={client_secret}"),
             "--set",
             "apiServerProxyConfig.mode=noauth",
             "--wait",
@@ -408,12 +405,11 @@ fn install_tailscale_operator(
     Ok(StepOutcome::Success)
 }
 
-/// Install FoundationDB operator.
+/// Install `FoundationDB` operator.
 fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
     let fdb_version = "v2.19.0";
     let fdb_url = format!(
-        "https://raw.githubusercontent.com/FoundationDB/fdb-kubernetes-operator/{}/config",
-        fdb_version
+        "https://raw.githubusercontent.com/FoundationDB/fdb-kubernetes-operator/{fdb_version}/config"
     );
 
     for crd in &[
@@ -421,7 +417,7 @@ fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
         "crd/bases/apps.foundationdb.org_foundationdbbackups.yaml",
         "crd/bases/apps.foundationdb.org_foundationdbrestores.yaml",
     ] {
-        run_command("kubectl", &["apply", "-f", &format!("{}/{}", fdb_url, crd)])
+        run_command("kubectl", &["apply", "-f", &format!("{fdb_url}/{crd}")])
             .map_err(|e| e.to_string())?;
     }
 
@@ -436,17 +432,16 @@ fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
     )
     .map_err(|e| e.to_string())?;
 
-    run_command("kubectl", &["apply", "-f", &format!("{}/rbac/cluster_role.yaml", fdb_url)])
+    run_command("kubectl", &["apply", "-f", &format!("{fdb_url}/rbac/cluster_role.yaml")])
         .map_err(|e| e.to_string())?;
     run_command(
         "kubectl",
-        &["apply", "-f", &format!("{}/rbac/role.yaml", fdb_url), "-n", "fdb-system"],
+        &["apply", "-f", &format!("{fdb_url}/rbac/role.yaml"), "-n", "fdb-system"],
     )
     .map_err(|e| e.to_string())?;
 
-    let manager_yaml =
-        run_command("curl", &["-s", &format!("{}/deployment/manager.yaml", fdb_url)])
-            .map_err(|e| e.to_string())?;
+    let manager_yaml = run_command("curl", &["-s", &format!("{fdb_url}/deployment/manager.yaml")])
+        .map_err(|e| e.to_string())?;
     let yaml_with_sa_fix = manager_yaml.replace(
         "serviceAccountName: fdb-kubernetes-operator-controller-manager",
         "serviceAccountName: controller-manager",
@@ -487,20 +482,19 @@ fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
         ("fdb-operator-manager-clusterrolebinding", "manager-clusterrole"),
     ] {
         let binding_yaml = format!(
-            r#"apiVersion: rbac.authorization.k8s.io/v1
+            r"apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {}
+  name: {name}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {}
+  name: {role}
 subjects:
 - kind: ServiceAccount
   name: controller-manager
   namespace: fdb-system
-"#,
-            name, role
+"
         );
         apply_yaml(&binding_yaml)?;
     }
@@ -515,13 +509,13 @@ subjects:
 // Deployment
 // ============================================================================
 
-/// Deploy InferaDB applications and return tailnet suffix.
+/// Deploy `InferaDB` applications and return tailnet suffix.
 fn deploy_inferadb(
     deploy_dir: &std::path::Path,
     registry_ip: &str,
 ) -> std::result::Result<(StepOutcome, Option<String>), String> {
     let registry_patch = format!(
-        r#"# Auto-generated by inferadb dev start
+        r"# Auto-generated by inferadb dev start
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -532,7 +526,7 @@ spec:
     spec:
       containers:
         - name: inferadb-engine
-          image: {}:5000/inferadb-engine:latest
+          image: {registry_ip}:5000/inferadb-engine:latest
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -544,7 +538,7 @@ spec:
     spec:
       containers:
         - name: inferadb-control
-          image: {}:5000/inferadb-control:latest
+          image: {registry_ip}:5000/inferadb-control:latest
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -556,9 +550,8 @@ spec:
     spec:
       containers:
         - name: inferadb-dashboard
-          image: {}:5000/inferadb-dashboard:latest
-"#,
-        registry_ip, registry_ip, registry_ip
+          image: {registry_ip}:5000/inferadb-dashboard:latest
+"
     );
 
     let patch_file = deploy_dir.join("flux/apps/dev/registry-patch.yaml");
@@ -584,12 +577,12 @@ fn show_final_success(tailnet_suffix: Option<&str>) {
     let reset = RESET;
 
     println!();
-    println!("{}✓{} Development cluster ready", green, reset);
+    println!("{green}✓{reset} Development cluster ready");
     println!();
 
     if let Some(suffix) = tailnet_suffix {
-        println!("  API: https://inferadb-api.{}", suffix);
-        println!("  Dashboard: https://inferadb-dashboard.{}", suffix);
+        println!("  API: https://inferadb-api.{suffix}");
+        println!("  Dashboard: https://inferadb-dashboard.{suffix}");
     } else {
         println!("  API: https://inferadb-api.<your-tailnet>.ts.net");
         println!("  Dashboard: https://inferadb-dashboard.<your-tailnet>.ts.net");
@@ -611,7 +604,7 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
     use crate::tui::DevStartView;
 
     let deploy_dir = get_deploy_dir();
-    let commit_owned = commit.map(|s| s.to_string());
+    let commit_owned = commit.map(std::string::ToString::to_string);
 
     let view = DevStartView::new(skip_build)
         .with_prereq_checker({
@@ -621,8 +614,7 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
                 for cmd in &["docker", "talosctl", "kubectl", "helm"] {
                     if !command_exists(cmd) {
                         return Err(format!(
-                            "{} is not installed. Run 'inferadb dev doctor' for setup instructions.",
-                            cmd
+                            "{cmd} is not installed. Run 'inferadb dev doctor' for setup instructions."
                         ));
                     }
                 }
@@ -649,8 +641,7 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
             save_tailscale_credentials(id, secret).map_err(|e| e.to_string())
         })
         .with_step_builder({
-            let deploy_dir = deploy_dir.clone();
-            let commit = commit_owned.clone();
+            let commit = commit_owned;
             move |client_id, client_secret, skip_build| {
                 build_start_steps(
                     client_id,
@@ -688,7 +679,7 @@ fn build_start_steps(
     deploy_dir: &std::path::Path,
 ) -> Vec<InstallStep> {
     let deploy_dir_owned = deploy_dir.to_path_buf();
-    let commit_owned = commit.map(|s| s.to_string());
+    let commit_owned = commit.map(std::string::ToString::to_string);
     let is_paused = docker_container_exists(CLUSTER_NAME) && are_containers_paused();
 
     let mut steps = Vec::new();
@@ -699,7 +690,7 @@ fn build_start_steps(
         let containers = get_cluster_containers();
         for container in containers {
             let container_name = container.clone();
-            steps.push(InstallStep::with_executor(format!("Resuming {}", container), move || {
+            steps.push(InstallStep::with_executor(format!("Resuming {container}"), move || {
                 run_command("docker", &["unpause", &container_name]).map(|_| None).or_else(|e| {
                     if e.to_string().contains("not paused") { Ok(None) } else { Err(e.to_string()) }
                 })
@@ -708,7 +699,7 @@ fn build_start_steps(
 
         // Resume registry
         if docker_container_exists(REGISTRY_NAME) {
-            steps.push(InstallStep::with_executor(format!("Resuming {}", REGISTRY_NAME), || {
+            steps.push(InstallStep::with_executor(format!("Resuming {REGISTRY_NAME}"), || {
                 let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
                 Ok(None)
             }));
@@ -722,8 +713,8 @@ fn build_start_steps(
 
     // Phase 1: Conditioning environment
     steps.push(InstallStep::with_executor("Cloning deployment repository", {
-        let deploy_dir = deploy_dir_owned.clone();
-        let commit = commit_owned.clone();
+        let deploy_dir = deploy_dir_owned;
+        let commit = commit_owned;
         move || step_clone_repo(&deploy_dir, force, commit.as_deref())
     }));
     steps.push(InstallStep::with_executor(
@@ -806,8 +797,8 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
         let containers = get_cluster_containers();
         for container in &containers {
             let container_name = container.clone();
-            let in_progress = format!("Resuming {}", container);
-            let completed = format!("Resumed {}", container);
+            let in_progress = format!("Resuming {container}");
+            let completed = format!("Resumed {container}");
             run_step(&StartStep::with_ok(&in_progress, &completed), || {
                 if !is_container_paused(&container_name) {
                     return Ok(StepOutcome::Skipped);
@@ -827,8 +818,8 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
         if docker_container_exists(REGISTRY_NAME) {
             run_step(
                 &StartStep::with_ok(
-                    &format!("Resuming {}", REGISTRY_NAME),
-                    &format!("Resumed {}", REGISTRY_NAME),
+                    &format!("Resuming {REGISTRY_NAME}"),
+                    &format!("Resumed {REGISTRY_NAME}"),
                 ),
                 || {
                     if !is_container_paused(REGISTRY_NAME) {
@@ -928,8 +919,7 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
         for cmd in &["docker", "talosctl", "kubectl", "helm"] {
             if !command_exists(cmd) {
                 return Err(format!(
-                    "{} is not installed. Run 'inferadb dev doctor' for setup instructions.",
-                    cmd
+                    "{cmd} is not installed. Run 'inferadb dev doctor' for setup instructions."
                 ));
             }
         }

@@ -47,6 +47,7 @@ use crate::client::Context;
 /// - Running in CI
 /// - Output is not a TTY
 /// - Quiet mode is enabled
+#[must_use]
 pub fn is_interactive(ctx: &Context) -> bool {
     !ctx.output.is_quiet() && teapot::output::is_tty() && !teapot::output::is_ci()
 }

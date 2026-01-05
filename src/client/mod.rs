@@ -1,4 +1,4 @@
-//! Client module for InferaDB API interactions.
+//! Client module for `InferaDB` API interactions.
 //!
 //! Wraps the `inferadb` SDK with CLI-specific functionality like
 //! profile-based configuration and credential management.
@@ -17,7 +17,7 @@ use crate::{
     error::{Error, Result},
 };
 
-/// CLI client that wraps the InferaDB SDK client.
+/// CLI client that wraps the `InferaDB` SDK client.
 pub struct CliClient {
     inner: Client,
     org_id: String,
@@ -57,7 +57,7 @@ impl CliClient {
 
         // Determine which profile name to use for credentials
         let cred_profile = profile_name
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .or_else(|| config.default_profile.clone())
             .unwrap_or_else(|| "default".to_string());
 
@@ -74,27 +74,32 @@ impl CliClient {
         Self::from_profile(&profile, &credentials).await
     }
 
-    /// Get the underlying InferaDB client.
-    pub fn inner(&self) -> &Client {
+    /// Get the underlying `InferaDB` client.
+    #[must_use]
+    pub const fn inner(&self) -> &Client {
         &self.inner
     }
 
     /// Get a vault client for the configured organization and vault.
+    #[must_use]
     pub fn vault(&self) -> VaultClient {
         self.inner.organization(&self.org_id).vault(&self.vault_id)
     }
 
     /// Get the organization ID.
+    #[must_use]
     pub fn org_id(&self) -> &str {
         &self.org_id
     }
 
     /// Get the vault ID.
+    #[must_use]
     pub fn vault_id(&self) -> &str {
         &self.vault_id
     }
 
     /// Get an organizations client for listing and creating organizations.
+    #[must_use]
     pub fn organizations(&self) -> OrganizationsClient {
         self.inner.organizations()
     }
@@ -105,11 +110,13 @@ impl CliClient {
     }
 
     /// Get an account client for the current user.
+    #[must_use]
     pub fn account(&self) -> AccountClient {
         self.inner.account()
     }
 
     /// Get a JWKS client for key operations.
+    #[must_use]
     pub fn jwks(&self) -> JwksClient {
         self.inner.jwks()
     }
@@ -195,6 +202,7 @@ impl Context {
     }
 
     /// Check if the user is authenticated.
+    #[must_use]
     pub fn is_authenticated(&self) -> bool {
         self.credentials().is_ok()
     }
@@ -218,16 +226,19 @@ impl Context {
     }
 
     /// Get the profile name being used.
+    #[must_use]
     pub fn effective_profile_name(&self) -> &str {
         self.profile_name.as_deref().or(self.config.default_profile.as_deref()).unwrap_or("default")
     }
 
     /// Get the organization ID from the profile.
+    #[must_use]
     pub fn profile_org_id(&self) -> Option<&str> {
         self.profile.org.as_deref()
     }
 
     /// Get the vault ID from the profile.
+    #[must_use]
     pub fn profile_vault_id(&self) -> Option<&str> {
         self.profile.vault.as_deref()
     }

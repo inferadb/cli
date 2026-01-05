@@ -20,15 +20,15 @@ use super::install_view::{InstallStep, StepExecutor, StepResult};
 
 /// Create a clickable terminal hyperlink using OSC 8 escape sequences.
 ///
-/// Most modern terminals support this (iTerm2, Kitty, WezTerm, VS Code, etc.).
+/// Most modern terminals support this (iTerm2, Kitty, `WezTerm`, VS Code, etc.).
 /// Terminals that don't support it will just show the underlined text without the link.
 fn hyperlink(url: &str, text: &str) -> String {
     // OSC 8 for hyperlink + underline styling to indicate clickability
-    format!("\x1b]8;;{}\x07{}{}{}\x1b]8;;\x07", url, UNDERLINE, text, RESET)
+    format!("\x1b]8;;{url}\x07{UNDERLINE}{text}{RESET}\x1b]8;;\x07")
 }
 
 /// Phase of the start view.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StartPhase {
     /// Checking prerequisites.
     CheckingPrereqs,
@@ -113,7 +113,7 @@ pub struct DevStartView {
     client_id_input: TextInput,
     /// Tailscale client secret input.
     client_secret_input: TextInput,
-    /// Which credential field is focused (0 = client_id, 1 = client_secret).
+    /// Which credential field is focused (0 = `client_id`, 1 = `client_secret`).
     focused_field: usize,
     /// Saved Tailscale credentials.
     tailscale_credentials: Option<(String, String)>,
@@ -129,6 +129,7 @@ pub struct DevStartView {
 
 impl DevStartView {
     /// Create a new start view.
+    #[must_use]
     pub fn new(skip_build: bool) -> Self {
         let (width, height) = teapot::terminal::size().unwrap_or((80, 24));
 
@@ -198,21 +199,25 @@ impl DevStartView {
     }
 
     /// Check if the view should quit.
-    pub fn should_quit(&self) -> bool {
+    #[must_use]
+    pub const fn should_quit(&self) -> bool {
         self.should_quit
     }
 
     /// Check if start was cancelled by user.
-    pub fn was_cancelled(&self) -> bool {
+    #[must_use]
+    pub const fn was_cancelled(&self) -> bool {
         self.was_cancelled
     }
 
     /// Check if start completed successfully.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.phase == StartPhase::Completed
     }
 
     /// Check if there was a failure.
+    #[must_use]
     pub fn has_failure(&self) -> bool {
         self.phase == StartPhase::Failed || self.task_list.has_failure()
     }
@@ -238,9 +243,8 @@ impl DevStartView {
             StartPhase::CredentialsInput => {
                 vec![("tab", "switch"), ("enter", "submit"), ("q", "cancel")]
             },
-            StartPhase::Running => vec![("q", "cancel")],
             StartPhase::Completed | StartPhase::Failed => vec![("q", "quit")],
-            _ => vec![("q", "cancel")],
+            StartPhase::CheckingPrereqs | StartPhase::Running => vec![("q", "cancel")],
         };
 
         FooterHints::new().hints(hints).width(self.width as usize).with_separator().render()
@@ -257,7 +261,7 @@ impl DevStartView {
         let oauth_url = "https://login.tailscale.com/admin/settings/oauth";
 
         let content = format!(
-            r#"Tailscale OAuth credentials are required for the Kubernetes operator.
+            r"Tailscale OAuth credentials are required for the Kubernetes operator.
 
 Step 1: Enable HTTPS on your tailnet (one-time setup)
   Go to: {}
@@ -274,7 +278,7 @@ Step 3: Create OAuth client
   Add scopes:
     - Devices > Core: Read & Write, tag: k8s-operator
     - Keys > Auth Keys: Read & Write, tag: k8s-operator
-  Click 'Generate client' and copy the credentials"#,
+  Click 'Generate client' and copy the credentials",
             hyperlink(dns_url, dns_url),
             hyperlink(tags_url, tags_url),
             hyperlink(oauth_url, oauth_url)
@@ -379,7 +383,7 @@ Step 3: Create OAuth client
                 .border_color(Color::Red)
                 .title("Error")
                 .title_color(Color::Red)
-                .content(format!("Failed: {}\n\n{}", task_name, error_msg))
+                .content(format!("Failed: {task_name}\n\n{error_msg}"))
                 .footer_hint("esc", "close");
 
             modal.render_overlay(self.width as usize, self.height as usize, background)

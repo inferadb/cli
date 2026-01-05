@@ -1,6 +1,6 @@
 //! Bulk export and import operations.
 
-use std::path::Path;
+use std::{fmt::Write, path::Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -40,7 +40,7 @@ pub async fn export(
     let mut req = rels.list().limit(1000);
 
     if let Some(rt) = resource_type {
-        req = req.resource(format!("{}:*", rt));
+        req = req.resource(format!("{rt}:*"));
     }
 
     let page = req.await?;
@@ -75,12 +75,12 @@ pub async fn export(
         "csv" => {
             let mut csv = String::from("resource,relation,subject\n");
             for rel in &export_data.relationships {
-                csv.push_str(&format!("{},{},{}\n", rel.resource, rel.relation, rel.subject));
+                let _ = writeln!(csv, "{},{},{}", rel.resource, rel.relation, rel.subject);
             }
             csv
         },
         _ => {
-            ctx.output.error(&format!("Unknown format: {}. Use json, yaml, or csv.", format));
+            ctx.output.error(&format!("Unknown format: {format}. Use json, yaml, or csv."));
             return Ok(());
         },
     };
@@ -96,7 +96,7 @@ pub async fn export(
             ));
         },
         None => {
-            println!("{}", content);
+            println!("{content}");
         },
     }
 
@@ -112,16 +112,19 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
     // Read and parse the file
     let path = Path::new(file);
     if !path.exists() {
-        ctx.output.error(&format!("File not found: {}", file));
+        ctx.output.error(&format!("File not found: {file}"));
         return Ok(());
     }
 
     let content = std::fs::read_to_string(path)?;
 
     // Detect format from extension or content
-    let relationships = if file.ends_with(".csv") {
+    let relationships = if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("csv")) {
         parse_csv(&content)?
-    } else if file.ends_with(".yaml") || file.ends_with(".yml") {
+    } else if path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml"))
+    {
         let data: ExportData = serde_yaml::from_str(&content)?;
         data.relationships
     } else {
@@ -140,7 +143,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
     }
 
     ctx.output.info(&format!("Found {} relationships to import.", relationships.len()));
-    ctx.output.info(&format!("Mode: {}", mode));
+    ctx.output.info(&format!("Mode: {mode}"));
 
     if dry_run {
         ctx.output.warn("Dry run mode - no changes will be made.");
@@ -161,7 +164,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
             }
         }
 
-        ctx.output.info(&format!("Valid: {}, Invalid: {}", valid, invalid));
+        ctx.output.info(&format!("Valid: {valid}, Invalid: {invalid}"));
         return Ok(());
     }
 
@@ -203,7 +206,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
                 }
             }
 
-            ctx.output.success(&format!("Imported {} relationships ({} failed).", success, failed));
+            ctx.output.success(&format!("Imported {success} relationships ({failed} failed)."));
         },
         "replace" => {
             ctx.output.warn("Replace mode will delete all existing relationships first.");
@@ -239,7 +242,7 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
                 }
             }
 
-            ctx.output.info(&format!("Deleted {} relationships.", deleted));
+            ctx.output.info(&format!("Deleted {deleted} relationships."));
 
             // Now write the new relationships
             let mut success = 0;
@@ -251,10 +254,10 @@ pub async fn import(ctx: &Context, file: &str, yes: bool, dry_run: bool, mode: &
                 }
             }
 
-            ctx.output.success(&format!("Imported {} relationships.", success));
+            ctx.output.success(&format!("Imported {success} relationships."));
         },
         _ => {
-            ctx.output.error(&format!("Unknown mode: {}. Use merge, upsert, or replace.", mode));
+            ctx.output.error(&format!("Unknown mode: {mode}. Use merge, upsert, or replace."));
         },
     }
 
@@ -268,8 +271,7 @@ fn parse_csv(content: &str) -> Result<Vec<ExportedRelationship>> {
     // Skip header
     if let Some(header) = lines.next() {
         // Verify it's a valid header
-        let parts: Vec<&str> = header.split(',').collect();
-        if parts.len() < 3 {
+        if header.split(',').count() < 3 {
             return Err(crate::error::Error::config(
                 "Invalid CSV format: expected resource,relation,subject",
             ));
@@ -281,15 +283,15 @@ fn parse_csv(content: &str) -> Result<Vec<ExportedRelationship>> {
             continue;
         }
 
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() < 3 {
-            continue;
-        }
+        let mut parts = line.split(',');
+        let Some(resource) = parts.next() else { continue };
+        let Some(relation) = parts.next() else { continue };
+        let Some(subject) = parts.next() else { continue };
 
         relationships.push(ExportedRelationship {
-            resource: parts[0].trim().to_string(),
-            relation: parts[1].trim().to_string(),
-            subject: parts[2].trim().to_string(),
+            resource: resource.trim().to_string(),
+            relation: relation.trim().to_string(),
+            subject: subject.trim().to_string(),
         });
     }
 

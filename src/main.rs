@@ -1,6 +1,6 @@
-//! InferaDB CLI
+//! `InferaDB` CLI
 //!
-//! Command-line interface for the InferaDB authorization engine.
+//! Command-line interface for the `InferaDB` authorization engine.
 
 use std::process::ExitCode;
 
@@ -14,7 +14,7 @@ async fn main() -> ExitCode {
             // Don't print if it's an empty error (e.g., from clap --help)
             let msg = e.to_string();
             if !msg.is_empty() {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
 
                 // Show hint if relevant
                 if e.should_suggest_login() {

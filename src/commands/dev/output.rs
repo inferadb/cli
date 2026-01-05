@@ -11,7 +11,7 @@ use crate::{
 };
 
 // ============================================================================
-// Color Constants (using Ferment's Color for consistency)
+// Color Constants (using Teapot's Color for consistency)
 // ============================================================================
 
 // Static color strings cached for performance (Color::*.to_ansi_fg() allocates)
@@ -22,31 +22,31 @@ const RED_ANSI: &str = "\x1b[31m"; // Color::Red
 
 /// Get ANSI escape code for dim/gray text.
 #[inline]
-fn dim() -> &'static str {
+const fn dim() -> &'static str {
     DIM_ANSI
 }
 
 /// Get ANSI escape code for green text.
 #[inline]
-fn green() -> &'static str {
+const fn green() -> &'static str {
     GREEN_ANSI
 }
 
 /// Get ANSI escape code for yellow text.
 #[inline]
-fn yellow() -> &'static str {
+const fn yellow() -> &'static str {
     YELLOW_ANSI
 }
 
 /// Get ANSI escape code for red text.
 #[inline]
-fn red() -> &'static str {
+const fn red() -> &'static str {
     RED_ANSI
 }
 
 /// Get ANSI reset code.
 #[inline]
-fn reset() -> &'static str {
+const fn reset() -> &'static str {
     RESET
 }
 
@@ -94,9 +94,9 @@ pub enum StepOutcome {
 impl From<std::result::Result<Option<String>, String>> for StepOutcome {
     fn from(result: std::result::Result<Option<String>, String>) -> Self {
         match result {
-            Ok(Some(_)) => StepOutcome::Skipped,
-            Ok(None) => StepOutcome::Success,
-            Err(e) => StepOutcome::Failed(e),
+            Ok(Some(_)) => Self::Skipped,
+            Ok(None) => Self::Success,
+            Err(e) => Self::Failed(e),
         }
     }
 }
@@ -132,7 +132,7 @@ impl<'a> DotLeaderConfig<'a> {
     }
 
     /// Create a dot leader with a colored prefix.
-    pub fn with_colored_prefix(
+    pub const fn with_colored_prefix(
         prefix: &'a str,
         prefix_color: &'a str,
         text: &'a str,
@@ -267,12 +267,12 @@ pub fn print_colored_prefix_dot_leader(
 
 /// Print a phase header.
 pub fn print_phase_header(title: &str) {
-    println!("\n  {} ...\n", title);
+    println!("\n  {title} ...\n");
 }
 
 /// Print a styled header for major sections.
 pub fn print_styled_header(title: &str) {
-    println!("\n  {}", title);
+    println!("\n  {title}");
 }
 
 /// Print a section header for subsections.
@@ -342,13 +342,13 @@ pub fn run_step<F>(step: &StartStep, executor: F) -> Result<()>
 where
     F: FnOnce() -> std::result::Result<StepOutcome, String>,
 {
-    let spin = start_spinner(step.in_progress.to_string());
+    let spin = start_spinner(step.in_progress.clone());
 
     match executor() {
         Ok(outcome) => {
             let (success_text, is_skipped) = match &outcome {
-                StepOutcome::Success => (step.completed.to_string(), false),
-                StepOutcome::Skipped => (step.completed.to_string(), true),
+                StepOutcome::Success => (step.completed.clone(), false),
+                StepOutcome::Skipped => (step.completed.clone(), true),
                 StepOutcome::Failed(err) => {
                     spin.failure(err);
                     return Err(Error::Other(err.clone()));
@@ -383,13 +383,13 @@ pub fn run_step_with_result<F, T>(step: &StartStep, executor: F) -> Result<T>
 where
     F: FnOnce() -> std::result::Result<(StepOutcome, T), String>,
 {
-    let spin = start_spinner(step.in_progress.to_string());
+    let spin = start_spinner(step.in_progress.clone());
 
     match executor() {
         Ok((outcome, value)) => {
             let (success_text, is_skipped) = match &outcome {
-                StepOutcome::Success => (step.completed.to_string(), false),
-                StepOutcome::Skipped => (step.completed.to_string(), true),
+                StepOutcome::Success => (step.completed.clone(), false),
+                StepOutcome::Skipped => (step.completed.clone(), true),
                 StepOutcome::Failed(err) => {
                     spin.failure(err);
                     return Err(Error::Other(err.clone()));
@@ -429,7 +429,7 @@ where
 pub fn confirm_prompt(message: &str) -> std::io::Result<bool> {
     use std::io::{self, Write};
 
-    print!("{} [y/N] ", message);
+    print!("{message} [y/N] ");
     io::stdout().flush()?;
 
     let mut input = String::new();

@@ -42,6 +42,7 @@ pub fn run_form(mut form: Form) -> Result<Option<FormResults>> {
 }
 
 /// Check if forms should use accessible (plain text) mode.
+#[must_use]
 pub fn is_accessible() -> bool {
     std::env::var("ACCESSIBLE").is_ok() || !is_tty() || is_ci()
 }

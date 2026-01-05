@@ -73,7 +73,7 @@ pub async fn relationships_list(
     ctx.output.table(&rows)?;
 
     if !ctx.output.is_quiet() && rows.len() == limit as usize {
-        ctx.output.info(&format!("\nShowing {} results. Use --cursor for pagination.", limit));
+        ctx.output.info(&format!("\nShowing {limit} results. Use --cursor for pagination."));
     }
 
     Ok(())
@@ -98,7 +98,7 @@ pub async fn relationships_add(
 
     match result {
         Ok(_) => {
-            ctx.output.success(&format!("Added: {} {} {}", subject, relation, resource));
+            ctx.output.success(&format!("Added: {subject} {relation} {resource}"));
         },
         Err(e) => {
             // Check if it's a duplicate error
@@ -129,8 +129,8 @@ pub async fn relationships_delete(
     let result = vault.relationships().delete(rel).await;
 
     match result {
-        Ok(_) => {
-            ctx.output.success(&format!("Deleted: {} {} {}", subject, relation, resource));
+        Ok(()) => {
+            ctx.output.success(&format!("Deleted: {subject} {relation} {resource}"));
         },
         Err(e) => {
             if if_exists && e.kind() == inferadb::ErrorKind::NotFound {
@@ -157,17 +157,13 @@ pub async fn history(
 
 /// Validate relationships against schema.
 pub async fn validate(ctx: &Context, file: Option<&str>) -> Result<()> {
-    match file {
-        Some(f) => {
-            ctx.output.info(&format!("Validating relationships in '{}'...", f));
-            // TODO: Read file and validate
-            ctx.output.info("Validation not yet implemented.");
-        },
-        None => {
-            ctx.output.info("Validating relationships in current vault...");
-            // TODO: Validate against active schema
-            ctx.output.info("Validation not yet implemented.");
-        },
+    if let Some(f) = file {
+        ctx.output.info(&format!("Validating relationships in '{f}'..."));
+        // TODO: Read file and validate
+    } else {
+        ctx.output.info("Validating relationships in current vault...");
+        // TODO: Validate against active schema
     }
+    ctx.output.info("Validation not yet implemented.");
     Ok(())
 }
