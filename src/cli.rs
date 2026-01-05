@@ -52,7 +52,7 @@ pub struct Cli {
 
     /// Subcommand to execute.
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Box<Commands>,
 }
 
 /// Available CLI commands.
