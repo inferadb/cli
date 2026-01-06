@@ -1,9 +1,13 @@
-# Dependabot configuration
-# Managed by .github/maintenance/repos.sh - do not edit manually
-# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# yaml-language-server: $schema=https://json.schemastore.org/dependabot-2.0.json
+#
+# Dependabot configuration for inferadb/cli
+# Managed by github/tools/repos.sh - manual edits will be overwritten
+#
+# To customize: update repos.json and run ./repos.sh --dependabot
 
 version: 2
 updates:
+
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
@@ -12,15 +16,18 @@ updates:
       time: "09:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    labels:
+      - "area/deps"
     commit-message:
       prefix: "deps"
       include: "scope"
-    labels:
-      - "area/deps"
     groups:
-        all-dependencies:
-          patterns:
-            - "*"
+      rust-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/.github/workflows"
@@ -30,12 +37,13 @@ updates:
       time: "09:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-      include: "scope"
     labels:
       - "area/deps"
+      - "area/ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
     groups:
-        all-dependencies:
-          patterns:
-            - "*"
+      github-actions:
+        patterns:
+          - "*"
