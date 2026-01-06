@@ -1,6 +1,10 @@
 <div align="center">
     <p><a href="https://inferadb.com"><img src=".github/inferadb.png" width="100" /></a></p>
     <h1>InferaDB CLI</h1>
+    <p>
+        <a href="https://discord.gg/inferadb"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+        <a href="#license"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg" alt="License" /></a>
+    </p>
     <p>Complete authorization management without leaving your terminal</p>
 </div>
 
@@ -396,6 +400,10 @@ cargo +nightly fmt
 ```
 
 See [CLAUDE.md](CLAUDE.md) for architecture details.
+
+## Community
+
+Join us on [Discord](https://discord.gg/inferadb) to discuss InferaDB, get help with your projects, and connect with other developers. Whether you have questions, want to share what you're building, or are interested in contributing, we'd love to have you!
 
 ## License
 
