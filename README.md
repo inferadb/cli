@@ -11,7 +11,7 @@
 > [!IMPORTANT]
 > Under active development. Not production-ready.
 
-The [InferaDB](https://inferadb.com) CLI gives you instant visibility into authorization decisions, lets you test policy changes before deploying, and provides complete control over tenants, schemas, and relationships. From local development to production debugging, everything is one command away.
+The [InferaDB](https://inferadb.com) CLI provides visibility into authorization decisions, lets you test policy changes before deployment, and gives complete control over tenants, schemas, and relationships. From development to production debugging, everything is one command away.
 
 ## Installation
 
@@ -62,14 +62,14 @@ inferadb relationships list --resource document:readme
 | `inferadb login`    | Authenticate with InferaDB    |
 | `inferadb logout`   | Remove authentication         |
 | `inferadb register` | Create a new account          |
-| `inferadb whoami`   | Show current user and profile |
+| `inferadb whoami`   | Show current user             |
 
 ### Authorization Queries
 
 | Command                                                         | Description                                   |
 | --------------------------------------------------------------- | --------------------------------------------- |
 | `inferadb check <subject> <permission> <resource>`              | Check if authorized                           |
-| `inferadb simulate <subject> <permission> <resource>`           | Simulate with hypothetical changes            |
+| `inferadb simulate <subject> <permission> <resource>`           | Simulate hypothetical changes                 |
 | `inferadb expand <resource> <relation>`                         | Show userset expansion tree                   |
 | `inferadb explain-permission <subject> <permission> <resource>` | Explain permission computation                |
 | `inferadb list-resources <subject> <permission>`                | List accessible resources (alias: `what-can`) |
@@ -82,7 +82,7 @@ inferadb relationships list --resource document:readme
 | `inferadb relationships list`           | List relationships                   |
 | `inferadb relationships add <tuple>`    | Add a relationship                   |
 | `inferadb relationships delete <tuple>` | Remove a relationship                |
-| `inferadb relationships history`        | Show relationship history            |
+| `inferadb relationships history`        | Show history                         |
 | `inferadb relationships validate`       | Validate relationship tuples         |
 | `inferadb export`                       | Export relationships to file         |
 | `inferadb import <file>`                | Import relationships from file       |
@@ -92,7 +92,7 @@ inferadb relationships list --resource document:readme
 
 | Command                               | Description                     |
 | ------------------------------------- | ------------------------------- |
-| `inferadb schemas init`               | Initialize a new schema project |
+| `inferadb schemas init`               | Initialize schema project       |
 | `inferadb schemas list`               | List schema versions            |
 | `inferadb schemas get <version>`      | Show schema details             |
 | `inferadb schemas preview`            | Preview schema changes          |
@@ -216,10 +216,10 @@ inferadb relationships list --resource document:readme
 | -------------------------- | ----------------------------- |
 | `inferadb status`          | Check service status          |
 | `inferadb ping`            | Measure latency to service    |
-| `inferadb doctor`          | Run connectivity diagnostics  |
+| `inferadb doctor`          | Run diagnostics               |
 | `inferadb health`          | Show service health dashboard |
-| `inferadb stats`           | Vault relationship statistics |
-| `inferadb what-changed`    | Recent vault changes summary  |
+| `inferadb stats`           | Vault statistics              |
+| `inferadb what-changed`    | Recent vault changes          |
 | `inferadb orgs audit-logs` | View audit logs               |
 | `inferadb jwks`            | JWKS debugging operations     |
 
@@ -301,7 +301,7 @@ These flags are available on specific commands to support scripting:
 | ----------------------------- | --------------------------- |
 | `~/.config/inferadb/cli.yaml` | User configuration          |
 | `.inferadb-cli.yaml`          | Project configuration       |
-| OS Keychain                   | Credentials (via `keyring`) |
+| OS Keychain                   | Credentials                 |
 
 ### Environment Variables
 
@@ -352,7 +352,7 @@ inferadb --output jsonl export              # JSON Lines
 | Code | Meaning                 | Next Steps                    |
 | ---- | ----------------------- | ----------------------------- |
 | 0    | Success                 | None                          |
-| 1    | General error           | Check `--help`                |
+| 1    | General error           | See `--help`                  |
 | 2    | Invalid arguments       | Fix argument format           |
 | 3    | Authentication required | Run `inferadb login`          |
 | 4    | Permission denied       | Contact org admin             |
@@ -373,7 +373,6 @@ The `check` command uses dedicated exit codes to distinguish authorization decis
 | 21   | Indeterminate | Could not determine (missing data, policy error)     |
 
 ```bash
-# Use in scripts
 inferadb check user:alice can_view document:readme
 case $? in
   0)  echo "Access granted" ;;
@@ -403,7 +402,7 @@ See [CLAUDE.md](CLAUDE.md) for architecture details.
 
 ## Community
 
-Join us on [Discord](https://discord.gg/inferadb) to discuss InferaDB, get help with your projects, and connect with other developers. Whether you have questions, want to share what you're building, or are interested in contributing, we'd love to have you!
+Join us on [Discord](https://discord.gg/inferadb) to discuss InferaDB, get help, and connect with other developers.
 
 ## License
 
