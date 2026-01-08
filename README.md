@@ -11,7 +11,7 @@
 > [!IMPORTANT]
 > Under active development. Not production-ready.
 
-The [InferaDB](https://inferadb.com) CLI provides visibility into authorization decisions, lets you test policy changes before deployment, and gives complete control over tenants, schemas, and relationships. From development to production debugging, everything is one command away.
+Test policy changes, debug authorization decisions, and manage tenants, schemas, and relationships—all from your terminal.
 
 ## Installation
 
@@ -402,13 +402,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture details.
 
 ## Community
 
-Join us on [Discord](https://discord.gg/inferadb) to discuss InferaDB, get help, and connect with other developers.
+Join us on [Discord](https://discord.gg/inferadb) for questions, discussions, and contributions.
 
 ## License
 
-Licensed under either of:
-
-- [Apache License, Version 2.0](LICENSE-APACHE)
-- [MIT License](LICENSE-MIT)
-
-at your option.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE).
