@@ -50,7 +50,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        uses: step-security/action-gh-release@5f6a6ab53a5a2c000ff3a16fad038291e5b97ce7 # v2.4.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -102,7 +102,7 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -139,7 +139,7 @@ jobs:
           fi
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        uses: step-security/rust-cache@f8fba7098297c8c53a7c9a30575ec2ad4ad85056 # v2.8.2
         with:
           shared-key: release-${{ matrix.os }}-${{ matrix.target }}
 
@@ -195,7 +195,7 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
 
       - name: Install system dependencies
         run: |

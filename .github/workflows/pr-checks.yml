@@ -24,7 +24,7 @@ jobs:
           egress-policy: audit
 
       - name: Validate PR title
-        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        uses: step-security/action-semantic-pull-request@bc0cf74f5be4ce34accdec1ae908dff38dc5def1 # v6.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
