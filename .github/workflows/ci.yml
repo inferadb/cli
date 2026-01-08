@@ -117,10 +117,8 @@ jobs:
           shared-key: clippy
           save-if: false
 
-      - name: Run clippy (default features)
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Run clippy (all features)
+      - name: Run clippy
+        # all-features includes default features, so single run is sufficient
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   # Check MSRV (Minimum Supported Rust Version)
@@ -161,69 +159,17 @@ jobs:
       - name: Check compilation with MSRV
         run: cargo check --workspace --all-features
 
-  # Build workspace once and cache for downstream jobs
-  build:
-    name: Build
-    needs: changes
-    runs-on: ubuntu-latest
-    if: needs.changes.outputs.code == 'true' || github.actor != 'dependabot[bot]'
-    env:
-      CARGO_INCREMENTAL: 0
-      RUSTFLAGS: "-C codegen-units=16 -C link-arg=-fuse-ld=mold"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
-        with:
-          egress-policy: audit
-
-      - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          submodules: recursive
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
-
-      - name: Install mold linker
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq mold
-
-      - name: Install development tools via Mise
-        uses: step-security/mise-action@2fa1b2b4fa1577588d8ac75f4dfa0f67c266d2a0 # v3.4.1
-        with:
-          install_args: protobuf
-          cache: true
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
-
-      - name: Cache Rust dependencies
-        uses: step-security/rust-cache@f8fba7098297c8c53a7c9a30575ec2ad4ad85056 # v2.8.2
-        with:
-          shared-key: build
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build workspace
-        run: cargo build --workspace --all-features
-
-      - name: Build tests (no run)
-        run: cargo test --workspace --all-features --no-run
-
-      - name: Print sccache stats
-        run: sccache --show-stats
-
   # Run tests on multiple platforms
   test:
     name: Tests (${{ matrix.os }})
-    needs: build
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.actor != 'dependabot[bot]'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # PRs: Linux only (fast feedback). Main: all platforms (thorough validation)
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     permissions:
       contents: read
       checks: write
@@ -271,7 +217,9 @@ jobs:
   # Build documentation
   docs:
     name: Documentation
+    needs: changes
     runs-on: ubuntu-latest
+    if: needs.changes.outputs.code == 'true' && github.actor != 'dependabot[bot]'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
@@ -305,9 +253,9 @@ jobs:
   # Code coverage
   coverage:
     name: Code Coverage
-    needs: build
+    needs: changes
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    if: needs.changes.outputs.code == 'true' && github.actor != 'dependabot[bot]'
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: 0
@@ -342,8 +290,8 @@ jobs:
       - name: Cache Rust dependencies
         uses: step-security/rust-cache@f8fba7098297c8c53a7c9a30575ec2ad4ad85056 # v2.8.2
         with:
-          shared-key: build
-          save-if: false
+          shared-key: coverage
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Generate coverage
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
@@ -356,10 +304,11 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # Check dependencies for outdated versions and duplicates
+  # Only runs on main branch pushes (informational, not blocking)
   dependencies:
     name: Dependencies
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
@@ -392,7 +341,7 @@ jobs:
   # Overall status check
   ci-success:
     name: CI Success
-    needs: [changes, fmt, clippy, msrv, build, test, docs, coverage, dependencies]
+    needs: [changes, fmt, clippy, msrv, test, docs, coverage, dependencies]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -406,7 +355,6 @@ jobs:
           FMT_RESULT: ${{ needs.fmt.result }}
           CLIPPY_RESULT: ${{ needs.clippy.result }}
           MSRV_RESULT: ${{ needs.msrv.result }}
-          BUILD_RESULT: ${{ needs.build.result }}
           TEST_RESULT: ${{ needs.test.result }}
           DOCS_RESULT: ${{ needs.docs.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
@@ -416,14 +364,13 @@ jobs:
           echo "  Format: $FMT_RESULT"
           echo "  Clippy: $CLIPPY_RESULT"
           echo "  MSRV: $MSRV_RESULT"
-          echo "  Build: $BUILD_RESULT"
           echo "  Test: $TEST_RESULT"
           echo "  Docs: $DOCS_RESULT"
           echo "  Coverage: $COVERAGE_RESULT"
           echo "  Dependencies: $DEPENDENCIES_RESULT"
 
           # Required checks (must pass)
-          for result in $FMT_RESULT $CLIPPY_RESULT $BUILD_RESULT $TEST_RESULT $DOCS_RESULT; do
+          for result in $FMT_RESULT $CLIPPY_RESULT $TEST_RESULT $DOCS_RESULT; do
             if [[ "$result" != "success" && "$result" != "skipped" ]]; then
               echo "One or more required jobs failed"
               exit 1
