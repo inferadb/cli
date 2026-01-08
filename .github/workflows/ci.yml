@@ -7,6 +7,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Nightly at midnight UTC (for coverage)
+    - cron: "0 0 * * *"
 
 # Cancel in-progress runs when new commits are pushed
 # We only care about the latest commit on any branch/PR
@@ -251,12 +254,12 @@ jobs:
           RUSTDOCFLAGS: -D warnings --cfg docsrs
         run: cargo +nightly doc --workspace --no-deps --all-features
 
-  # Code coverage
+  # Code coverage (nightly only to reduce CI costs)
   coverage:
     name: Code Coverage
     needs: changes
     runs-on: ubuntu-latest
-    if: needs.changes.outputs.code == 'true' && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'schedule'
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: 0
