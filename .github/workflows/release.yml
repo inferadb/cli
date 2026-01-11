@@ -102,7 +102,7 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@881ba7bf39a41cda34ac9e123fb41b44ed08232f # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -195,7 +195,7 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@881ba7bf39a41cda34ac9e123fb41b44ed08232f # stable
 
       - name: Install mold linker
         run: |
