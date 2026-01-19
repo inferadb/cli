@@ -1620,7 +1620,7 @@ pub enum DevCommands {
         #[arg(short, long)]
         follow: bool,
 
-        /// Service to show logs for (engine, control, dashboard, fdb)
+        /// Service to show logs for (engine, control, dashboard, ledger)
         #[arg(short, long)]
         service: Option<String>,
 

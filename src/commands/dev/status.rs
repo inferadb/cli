@@ -171,18 +171,6 @@ fn print_pods_status() {
         ],
     );
 
-    let fdb_pods = run_command_optional(
-        "kubectl",
-        &[
-            "get",
-            "pods",
-            "-n",
-            "fdb-system",
-            "-o",
-            "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{.status.containerStatuses[*].ready}{\"\\n\"}{end}",
-        ],
-    );
-
     let format_pod = |line: &str| -> Option<(String, String)> {
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() >= 2 {
@@ -203,9 +191,7 @@ fn print_pods_status() {
                 _ => format!("{red}{ready_count}/{total_count} {phase}{reset}"),
             };
 
-            let display_name = if name.starts_with("controller-manager-") {
-                "fdb-operator".to_string()
-            } else {
+            let display_name = {
                 let base = name
                     .strip_prefix("dev-inferadb-")
                     .or_else(|| name.strip_prefix("inferadb-"))
@@ -229,16 +215,6 @@ fn print_pods_status() {
     let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     if let Some(output) = inferadb_pods {
-        for line in output.lines() {
-            if let Some((name, status)) = format_pod(line) {
-                if seen_names.insert(name.clone()) {
-                    print_prefixed_dot_leader(" ", &name, &status);
-                }
-            }
-        }
-    }
-
-    if let Some(output) = fdb_pods {
         for line in output.lines() {
             if let Some((name, status)) = format_pod(line) {
                 if seen_names.insert(name.clone()) {

@@ -1,7 +1,7 @@
 //! Local development cluster commands.
 //!
 //! Manages a local Talos Kubernetes cluster for `InferaDB` development,
-//! including `FoundationDB`, the engine, control plane, and dashboard.
+//! including Ledger, the engine, control plane, and dashboard.
 //!
 //! # Module Structure
 //!
@@ -98,7 +98,7 @@ pub async fn logs(_ctx: &Context, follow: bool, service: Option<&str>, tail: u32
         Some("engine") => ("app.kubernetes.io/name=inferadb-engine", "engine"),
         Some("control") => ("app.kubernetes.io/name=inferadb-control", "control"),
         Some("dashboard") => ("app.kubernetes.io/name=inferadb-dashboard", "dashboard"),
-        Some("fdb" | "foundationdb") => ("app.kubernetes.io/name=fdb", "fdb"),
+        Some("ledger") => ("app.kubernetes.io/name=inferadb-ledger", "ledger"),
         Some(s) => (s, s),
         None => ("app.kubernetes.io/part-of=inferadb", "all"),
     };

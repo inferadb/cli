@@ -11,7 +11,7 @@ use super::{
     commands::{parse_kubectl_apply_line, run_command, run_command_optional},
     constants::{INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS},
     docker::docker_container_exists,
-    kubernetes::{get_fdb_clusters, get_inferadb_deployments, get_pvcs},
+    kubernetes::{get_inferadb_deployments, get_pvcs},
     output::{
         confirm_warning, format_dot_leader, format_reset_dot_leader, print_prefixed_dot_leader,
         print_section_header, print_styled_header,
@@ -58,21 +58,11 @@ fn reset_with_spinners(yes: bool) -> Result<()> {
 
 /// Show what will be reset and prompt for confirmation.
 fn show_reset_preview(can_redeploy: bool) -> Result<()> {
-    let fdb_clusters = get_fdb_clusters();
     let deployments = get_inferadb_deployments();
     let pvcs = get_pvcs();
 
     print_styled_header("Reset InferaDB Development Cluster");
     print_section_header("Resources to be deleted");
-
-    if fdb_clusters.is_empty() {
-        print_prefixed_dot_leader("○", "FoundationDB Cluster", "none found");
-    } else {
-        for (name, processes, version) in &fdb_clusters {
-            let detail = format!("{name} ({processes}, {version})");
-            print_prefixed_dot_leader("○", "FoundationDB Cluster", &detail);
-        }
-    }
 
     if deployments.is_empty() {
         print_prefixed_dot_leader("○", "Deployment", "none found");
@@ -91,12 +81,12 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
         print_prefixed_dot_leader("○", "Persistent Volume", "none found");
     } else {
         for (name, size, status) in &pvcs {
-            let short_name = if name.starts_with("dev-inferadb-fdb-") {
-                let suffix = name.strip_prefix("dev-inferadb-fdb-").unwrap_or(name);
+            let short_name = if name.starts_with("dev-inferadb-ledger-") {
+                let suffix = name.strip_prefix("dev-inferadb-ledger-").unwrap_or(name);
                 if let Some(pos) = suffix.find('-') {
-                    format!("fdb-{}", &suffix[..pos])
+                    format!("ledger-{}", &suffix[..pos])
                 } else {
-                    format!("fdb-{suffix}")
+                    format!("ledger-{suffix}")
                 }
             } else {
                 name.clone()
@@ -110,7 +100,7 @@ fn show_reset_preview(can_redeploy: bool) -> Result<()> {
 
     if can_redeploy {
         print_prefixed_dot_leader("○", "Redeploy from", "deploy/flux/apps/dev");
-        print_prefixed_dot_leader("○", "FoundationDB", "new cluster with empty data");
+        print_prefixed_dot_leader("○", "Ledger", "new cluster with empty data");
         print_prefixed_dot_leader("○", "InferaDB Engine", "fresh deployment");
         print_prefixed_dot_leader("○", "InferaDB Control", "fresh deployment");
         print_prefixed_dot_leader("○", "InferaDB Dashboard", "fresh deployment");
@@ -137,14 +127,14 @@ fn perform_reset(can_redeploy: bool, deploy_dir: &std::path::Path) {
     print_styled_header("Resetting InferaDB Development Cluster");
     println!();
 
-    // Delete FDB cluster
+    // Delete Ledger StatefulSet
     {
-        let spin = start_spinner("Deleting FoundationDB Cluster");
+        let spin = start_spinner("Deleting Ledger StatefulSet");
         let _ = run_command_optional(
             "kubectl",
-            &["delete", "foundationdbcluster", "--all", "-n", INFERADB_NAMESPACE],
+            &["delete", "statefulset", "--all", "-n", INFERADB_NAMESPACE],
         );
-        spin.success(&format_dot_leader("Deleted FoundationDB Cluster", "OK"));
+        spin.success(&format_dot_leader("Deleted Ledger StatefulSet", "OK"));
     }
 
     // Delete InferaDB deployments
@@ -213,24 +203,24 @@ fn redeploy_applications(deploy_dir: &std::path::Path) {
 
     println!();
 
-    // Wait for FDB cluster
+    // Wait for Ledger cluster
     {
-        let spin = start_spinner("Waiting for FoundationDB cluster");
+        let spin = start_spinner("Waiting for Ledger cluster");
         let mut ready = false;
         for _ in 0..150 {
             if let Some(output) = run_command_optional(
                 "kubectl",
                 &[
                     "get",
-                    "foundationdbcluster",
-                    "dev-inferadb-fdb",
+                    "statefulset",
+                    "dev-inferadb-ledger",
                     "-n",
                     INFERADB_NAMESPACE,
                     "-o",
-                    "jsonpath={.status.health.available}",
+                    "jsonpath={.status.readyReplicas}",
                 ],
             ) {
-                if output.trim() == "true" {
+                if output.trim() == "1" {
                     ready = true;
                     break;
                 }
@@ -238,18 +228,15 @@ fn redeploy_applications(deploy_dir: &std::path::Path) {
             std::thread::sleep(Duration::from_secs(2));
         }
         if ready {
-            spin.success(&format_dot_leader("FoundationDB cluster ready", "OK"));
+            spin.success(&format_dot_leader("Ledger cluster ready", "OK"));
         } else {
-            spin.success(&format_dot_leader(
-                "FoundationDB cluster",
-                "WAITING (may take a few minutes)",
-            ));
+            spin.success(&format_dot_leader("Ledger cluster", "WAITING (may take a few minutes)"));
         }
     }
 
-    // Restart engine to pick up new cluster file
+    // Restart engine to pick up new Ledger connection
     {
-        let spin = start_spinner("Restarting engine to pick up new cluster file");
+        let spin = start_spinner("Restarting engine to connect to Ledger");
         let _ = run_command_optional(
             "kubectl",
             &["rollout", "restart", "deployment/dev-inferadb-engine", "-n", INFERADB_NAMESPACE],

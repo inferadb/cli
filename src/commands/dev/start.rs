@@ -2,12 +2,7 @@
 //!
 //! Handles creating, resuming, and setting up the local development cluster.
 
-use std::{
-    fs,
-    io::Write as IoWrite,
-    process::{Command, Stdio},
-    time::Duration,
-};
+use std::{fs, time::Duration};
 
 use teapot::style::{Color, RESET};
 
@@ -25,7 +20,7 @@ use super::{
     },
     kubernetes::{
         ensure_namespace, helm_repo_add, helm_repo_exists, helm_repo_update,
-        kubectl_current_context, kubectl_use_context, wait_for_deployment,
+        kubectl_current_context, kubectl_use_context,
     },
     output::{
         StartStep, StepOutcome, print_hint, print_phase_header, print_styled_header, run_step,
@@ -322,28 +317,11 @@ fn build_and_push_images(_registry_ip: &str) -> std::result::Result<StepOutcome,
     Ok(StepOutcome::Success)
 }
 
-/// Apply YAML to Kubernetes via stdin.
-fn apply_yaml(yaml: &str) -> std::result::Result<(), String> {
-    let mut child = Command::new("kubectl")
-        .args(["apply", "-f", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(yaml.as_bytes()).map_err(|e| e.to_string())?;
-    }
-    child.wait().map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 /// Set up Kubernetes resources.
 #[allow(clippy::unnecessary_wraps)]
 fn setup_kubernetes_resources(_registry_ip: &str) -> std::result::Result<StepOutcome, String> {
     // Create namespaces
-    let namespaces = ["inferadb", "fdb-system", "local-path-storage", "tailscale-system"];
+    let namespaces = ["inferadb", "local-path-storage", "tailscale-system"];
     for ns in &namespaces {
         ensure_namespace(ns)?;
     }
@@ -402,106 +380,6 @@ fn install_tailscale_operator(
         ],
     )
     .map_err(|e| e.to_string())?;
-    Ok(StepOutcome::Success)
-}
-
-/// Install `FoundationDB` operator.
-fn install_fdb_operator() -> std::result::Result<StepOutcome, String> {
-    let fdb_version = "v2.19.0";
-    let fdb_url = format!(
-        "https://raw.githubusercontent.com/FoundationDB/fdb-kubernetes-operator/{fdb_version}/config"
-    );
-
-    for crd in &[
-        "crd/bases/apps.foundationdb.org_foundationdbclusters.yaml",
-        "crd/bases/apps.foundationdb.org_foundationdbbackups.yaml",
-        "crd/bases/apps.foundationdb.org_foundationdbrestores.yaml",
-    ] {
-        run_command("kubectl", &["apply", "-f", &format!("{fdb_url}/{crd}")])
-            .map_err(|e| e.to_string())?;
-    }
-
-    run_command(
-        "kubectl",
-        &[
-            "wait",
-            "--for=condition=established",
-            "--timeout=60s",
-            "crd/foundationdbclusters.apps.foundationdb.org",
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-
-    run_command("kubectl", &["apply", "-f", &format!("{fdb_url}/rbac/cluster_role.yaml")])
-        .map_err(|e| e.to_string())?;
-    run_command(
-        "kubectl",
-        &["apply", "-f", &format!("{fdb_url}/rbac/role.yaml"), "-n", "fdb-system"],
-    )
-    .map_err(|e| e.to_string())?;
-
-    let manager_yaml = run_command("curl", &["-s", &format!("{fdb_url}/deployment/manager.yaml")])
-        .map_err(|e| e.to_string())?;
-    let yaml_with_sa_fix = manager_yaml.replace(
-        "serviceAccountName: fdb-kubernetes-operator-controller-manager",
-        "serviceAccountName: controller-manager",
-    );
-
-    let mut modified_lines = Vec::new();
-    let mut in_watch_namespace_block = false;
-    for line in yaml_with_sa_fix.lines() {
-        if line.contains("WATCH_NAMESPACE") {
-            in_watch_namespace_block = true;
-            continue;
-        }
-        if in_watch_namespace_block {
-            if line.contains("fieldPath:") {
-                in_watch_namespace_block = false;
-                continue;
-            }
-            continue;
-        }
-        modified_lines.push(line);
-    }
-
-    let mut child = Command::new("kubectl")
-        .args(["apply", "-n", "fdb-system", "-f", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(modified_lines.join("\n").as_bytes()).map_err(|e| e.to_string())?;
-    }
-    child.wait().map_err(|e| e.to_string())?;
-
-    for (name, role) in &[
-        ("fdb-operator-manager-role-global", "manager-role"),
-        ("fdb-operator-manager-clusterrolebinding", "manager-clusterrole"),
-    ] {
-        let binding_yaml = format!(
-            r"apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {name}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {role}
-subjects:
-- kind: ServiceAccount
-  name: controller-manager
-  namespace: fdb-system
-"
-        );
-        apply_yaml(&binding_yaml)?;
-    }
-
-    // Wait for FDB operator deployment to be ready
-    wait_for_deployment("controller-manager", "fdb-system", "5m")?;
-
     Ok(StepOutcome::Success)
 }
 
@@ -1013,11 +891,6 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     run_step(
         &StartStep::with_ok("Installing Tailscale operator", "Installed Tailscale operator"),
         || install_tailscale_operator(&ts_client_id, &ts_client_secret),
-    )?;
-
-    run_step(
-        &StartStep::with_ok("Installing FoundationDB operator", "Installed FoundationDB operator"),
-        install_fdb_operator,
     )?;
 
     let tailnet_suffix = run_step_with_result(

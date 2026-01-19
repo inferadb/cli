@@ -77,23 +77,6 @@ pub fn kubectl_use_context(context: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Wait for a deployment to be ready.
-pub fn wait_for_deployment(name: &str, namespace: &str, timeout: &str) -> Result<(), String> {
-    run_command(
-        "kubectl",
-        &[
-            "wait",
-            "--for=condition=available",
-            &format!("deployment/{name}"),
-            "-n",
-            namespace,
-            &format!("--timeout={timeout}"),
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 /// Create a namespace if it doesn't exist.
 pub fn ensure_namespace(namespace: &str) -> Result<(), String> {
     // Check if namespace exists
@@ -104,33 +87,6 @@ pub fn ensure_namespace(namespace: &str) -> Result<(), String> {
     // Create namespace
     run_command("kubectl", &["create", "namespace", namespace]).map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// Get `FoundationDB` clusters in the inferadb namespace.
-/// Returns: Vec<(name, `process_count`, version)>
-pub fn get_fdb_clusters() -> Vec<(String, String, String)> {
-    kubectl_list("foundationdbcluster", INFERADB_NAMESPACE, |item| {
-        let name = item.pointer("/metadata/name").and_then(|v| v.as_str())?.to_string();
-
-        // Sum up all process counts
-        let total_processes: i64 = item
-            .pointer("/spec/processCounts")
-            .and_then(|counts| counts.as_object())
-            .map_or(0, |obj| obj.values().filter_map(serde_json::Value::as_i64).sum());
-
-        let processes = if total_processes > 0 {
-            format!("{total_processes} processes")
-        } else {
-            "unknown".to_string()
-        };
-
-        let version = item
-            .pointer("/status/runningVersion")
-            .and_then(|v| v.as_str())
-            .map_or_else(|| "unknown".to_string(), |v| format!("v{v}"));
-
-        Some((name, processes, version))
-    })
 }
 
 /// Get `InferaDB` deployments in the inferadb namespace.
