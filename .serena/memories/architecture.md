@@ -12,7 +12,7 @@ InferaDB CLI is a command-line tool for managing authorization in InferaDB. It p
 
 ## Tech Stack
 
-- **Language**: Rust 2021, MSRV 1.88
+- **Language**: Rust 2021, MSRV 1.92
 - **CLI Framework**: `clap` 4.x with derive macros
 - **Async Runtime**: `tokio` (full features)
 - **API Client**: `inferadb` SDK crate (REST with rustls)

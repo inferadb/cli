@@ -24,7 +24,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  MSRV: "1.88"
+  MSRV: "1.92"
 
 jobs:
   # Detect if this is a workflow-only change (for skipping builds on Dependabot workflow PRs)
@@ -132,7 +132,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' || github.actor != 'dependabot[bot]'
     env:
-      RUST_VERSION: "1.88"
+      RUST_VERSION: "1.92"
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
@@ -147,7 +147,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@881ba7bf39a41cda34ac9e123fb41b44ed08232f # master
         with:
-          toolchain: "1.88"
+          toolchain: "1.92"
 
       - name: Install development tools via Mise
         uses: step-security/mise-action@2fa1b2b4fa1577588d8ac75f4dfa0f67c266d2a0 # v3.4.1

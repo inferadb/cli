@@ -1,8 +1,8 @@
 [package]
 name = "inferadb-cli"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.88"
+edition = "2024"
+rust-version = "1.92"
 authors = ["InferaDB Team"]
 description = "InferaDB CLI—debug authorization decisions, test policies, and manage tenants from your terminal"
 license = "MIT OR Apache-2.0"

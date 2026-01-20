@@ -3,7 +3,7 @@
 ## Rust Edition & Toolchain
 
 - **Edition**: Rust 2021
-- **MSRV**: 1.88
+- **MSRV**: 1.92
 - **Toolchain**: Stable (with nightly for rustfmt)
 - **Components**: clippy, rust-analyzer, rust-src, rustfmt
 
