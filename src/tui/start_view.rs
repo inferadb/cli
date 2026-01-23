@@ -363,11 +363,11 @@ Step 3: Create OAuth client
 
     /// Poll for worker result.
     fn poll_worker_result(&mut self) -> Option<WorkerResult> {
-        if let Some(ref handle) = self.worker {
-            if let Some(result) = handle.try_recv() {
-                self.worker = None;
-                return Some(result);
-            }
+        if let Some(ref handle) = self.worker
+            && let Some(result) = handle.try_recv()
+        {
+            self.worker = None;
+            return Some(result);
         }
         None
     }
@@ -429,16 +429,15 @@ impl Model for DevStartView {
                             match checker() {
                                 Ok(()) => {
                                     // Check for existing credentials
-                                    if let Some(loader) = &self.credentials_loader {
-                                        if let Some((id, secret)) = loader() {
-                                            self.tailscale_credentials = Some((id, secret));
-                                            self.phase = StartPhase::Running;
-                                            self.initialize_steps();
-                                            return Some(Cmd::tick(
-                                                Duration::from_millis(100),
-                                                |_| DevStartViewMsg::StartRunning,
-                                            ));
-                                        }
+                                    if let Some(loader) = &self.credentials_loader
+                                        && let Some((id, secret)) = loader()
+                                    {
+                                        self.tailscale_credentials = Some((id, secret));
+                                        self.phase = StartPhase::Running;
+                                        self.initialize_steps();
+                                        return Some(Cmd::tick(Duration::from_millis(100), |_| {
+                                            DevStartViewMsg::StartRunning
+                                        }));
                                     }
                                     // No credentials, show setup
                                     self.phase = StartPhase::SetupInstructions;
@@ -450,15 +449,15 @@ impl Model for DevStartView {
                             }
                         } else {
                             // No prereq checker, skip to credentials check
-                            if let Some(loader) = &self.credentials_loader {
-                                if let Some((id, secret)) = loader() {
-                                    self.tailscale_credentials = Some((id, secret));
-                                    self.phase = StartPhase::Running;
-                                    self.initialize_steps();
-                                    return Some(Cmd::tick(Duration::from_millis(100), |_| {
-                                        DevStartViewMsg::StartRunning
-                                    }));
-                                }
+                            if let Some(loader) = &self.credentials_loader
+                                && let Some((id, secret)) = loader()
+                            {
+                                self.tailscale_credentials = Some((id, secret));
+                                self.phase = StartPhase::Running;
+                                self.initialize_steps();
+                                return Some(Cmd::tick(Duration::from_millis(100), |_| {
+                                    DevStartViewMsg::StartRunning
+                                }));
                             }
                             self.phase = StartPhase::SetupInstructions;
                         }
@@ -506,15 +505,15 @@ impl Model for DevStartView {
                 match result {
                     Ok(()) => {
                         // Check for credentials
-                        if let Some(loader) = &self.credentials_loader {
-                            if let Some((id, secret)) = loader() {
-                                self.tailscale_credentials = Some((id, secret));
-                                self.phase = StartPhase::Running;
-                                self.initialize_steps();
-                                return Some(Cmd::tick(Duration::from_millis(100), |_| {
-                                    DevStartViewMsg::StartRunning
-                                }));
-                            }
+                        if let Some(loader) = &self.credentials_loader
+                            && let Some((id, secret)) = loader()
+                        {
+                            self.tailscale_credentials = Some((id, secret));
+                            self.phase = StartPhase::Running;
+                            self.initialize_steps();
+                            return Some(Cmd::tick(Duration::from_millis(100), |_| {
+                                DevStartViewMsg::StartRunning
+                            }));
                         }
                         self.phase = StartPhase::SetupInstructions;
                     },
@@ -591,11 +590,11 @@ impl Model for DevStartView {
                 }
 
                 // Save credentials
-                if let Some(saver) = &self.credentials_saver {
-                    if let Err(e) = saver(&client_id, &client_secret) {
-                        self.error_modal = Some(("Save Credentials".to_string(), e));
-                        return None;
-                    }
+                if let Some(saver) = &self.credentials_saver
+                    && let Err(e) = saver(&client_id, &client_secret)
+                {
+                    self.error_modal = Some(("Save Credentials".to_string(), e));
+                    return None;
                 }
 
                 self.tailscale_credentials = Some((client_id, client_secret));

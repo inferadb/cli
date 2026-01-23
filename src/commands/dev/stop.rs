@@ -339,24 +339,24 @@ fn cleanup_tailscale_devices() -> Result<()> {
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let response = String::from_utf8_lossy(&output.stdout);
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-        if let Some(devices) = json.get("devices").and_then(|d| d.as_array()) {
-            for device in devices {
-                let name = device.get("hostname").and_then(|n| n.as_str()).unwrap_or("");
-                let id = device.get("id").and_then(|i| i.as_str()).unwrap_or("");
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response)
+        && let Some(devices) = json.get("devices").and_then(|d| d.as_array())
+    {
+        for device in devices {
+            let name = device.get("hostname").and_then(|n| n.as_str()).unwrap_or("");
+            let id = device.get("id").and_then(|i| i.as_str()).unwrap_or("");
 
-                if name.starts_with(TAILSCALE_DEVICE_PREFIX) && !id.is_empty() {
-                    let _ = Command::new("curl")
-                        .args([
-                            "-s",
-                            "-X",
-                            "DELETE",
-                            "-H",
-                            &format!("Authorization: Bearer {token}"),
-                            &format!("https://api.tailscale.com/api/v2/device/{id}"),
-                        ])
-                        .output();
-                }
+            if name.starts_with(TAILSCALE_DEVICE_PREFIX) && !id.is_empty() {
+                let _ = Command::new("curl")
+                    .args([
+                        "-s",
+                        "-X",
+                        "DELETE",
+                        "-H",
+                        &format!("Authorization: Bearer {token}"),
+                        &format!("https://api.tailscale.com/api/v2/device/{id}"),
+                    ])
+                    .output();
             }
         }
     }

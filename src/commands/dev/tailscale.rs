@@ -74,10 +74,10 @@ pub fn get_tailscale_credentials() -> Result<(String, String)> {
     // Try environment variables first
     if let (Ok(id), Ok(secret)) =
         (env::var("TAILSCALE_CLIENT_ID"), env::var("TAILSCALE_CLIENT_SECRET"))
+        && !id.is_empty()
+        && !secret.is_empty()
     {
-        if !id.is_empty() && !secret.is_empty() {
-            return Ok((id, secret));
-        }
+        return Ok((id, secret));
     }
 
     // Try cached credentials

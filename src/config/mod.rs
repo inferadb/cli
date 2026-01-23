@@ -73,11 +73,11 @@ impl Config {
         let mut config = Self::default();
 
         // Load user config first (lowest precedence)
-        if let Some(path) = Self::user_config_path() {
-            if path.exists() {
-                let user_config = Self::load_from_file(&path)?;
-                config.merge(user_config);
-            }
+        if let Some(path) = Self::user_config_path()
+            && path.exists()
+        {
+            let user_config = Self::load_from_file(&path)?;
+            config.merge(user_config);
         }
 
         // Load project config (higher precedence)
@@ -191,10 +191,10 @@ impl Config {
     #[must_use]
     pub fn config_dir() -> Option<PathBuf> {
         // Check XDG_CONFIG_HOME first (works on all platforms if explicitly set)
-        if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-            if !xdg_config.is_empty() {
-                return Some(PathBuf::from(xdg_config).join("inferadb"));
-            }
+        if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME")
+            && !xdg_config.is_empty()
+        {
+            return Some(PathBuf::from(xdg_config).join("inferadb"));
         }
 
         #[cfg(windows)]
@@ -219,10 +219,10 @@ impl Config {
     #[must_use]
     pub fn state_dir() -> Option<PathBuf> {
         // Check XDG_STATE_HOME first
-        if let Ok(xdg_state) = std::env::var("XDG_STATE_HOME") {
-            if !xdg_state.is_empty() {
-                return Some(PathBuf::from(xdg_state).join("inferadb"));
-            }
+        if let Ok(xdg_state) = std::env::var("XDG_STATE_HOME")
+            && !xdg_state.is_empty()
+        {
+            return Some(PathBuf::from(xdg_state).join("inferadb"));
         }
 
         #[cfg(windows)]
@@ -249,10 +249,10 @@ impl Config {
     #[must_use]
     pub fn data_dir() -> Option<PathBuf> {
         // Check XDG_DATA_HOME first
-        if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
-            if !xdg_data.is_empty() {
-                return Some(PathBuf::from(xdg_data).join("inferadb"));
-            }
+        if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME")
+            && !xdg_data.is_empty()
+        {
+            return Some(PathBuf::from(xdg_data).join("inferadb"));
         }
 
         #[cfg(windows)]

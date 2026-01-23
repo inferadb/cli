@@ -123,31 +123,29 @@ fn print_nodes_status() {
     let red = Color::Red.to_ansi_fg();
     let reset = RESET;
 
-    if let Some(output) = output {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output) {
-            if let Some(items) = json["items"].as_array() {
-                for node in items {
-                    let name = node["metadata"]["name"].as_str().unwrap_or("");
-                    let labels = &node["metadata"]["labels"];
-                    let is_control_plane =
-                        labels.get("node-role.kubernetes.io/control-plane").is_some();
+    if let Some(output) = output
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&output)
+        && let Some(items) = json["items"].as_array()
+    {
+        for node in items {
+            let name = node["metadata"]["name"].as_str().unwrap_or("");
+            let labels = &node["metadata"]["labels"];
+            let is_control_plane = labels.get("node-role.kubernetes.io/control-plane").is_some();
 
-                    let ready = node["status"]["conditions"]
-                        .as_array()
-                        .and_then(|conditions| conditions.iter().find(|c| c["type"] == "Ready"))
-                        .is_some_and(|c| c["status"] == "True");
+            let ready = node["status"]["conditions"]
+                .as_array()
+                .and_then(|conditions| conditions.iter().find(|c| c["type"] == "Ready"))
+                .is_some_and(|c| c["status"] == "True");
 
-                    let role = if is_control_plane { "control-plane" } else { "worker" };
-                    let status = if ready {
-                        format!("{green}Ready{reset} ({role})")
-                    } else {
-                        format!("{red}NotReady{reset} ({role})")
-                    };
+            let role = if is_control_plane { "control-plane" } else { "worker" };
+            let status = if ready {
+                format!("{green}Ready{reset} ({role})")
+            } else {
+                format!("{red}NotReady{reset} ({role})")
+            };
 
-                    let display_name = name.strip_prefix("inferadb-dev-").unwrap_or(name);
-                    print_prefixed_dot_leader(" ", display_name, &status);
-                }
-            }
+            let display_name = name.strip_prefix("inferadb-dev-").unwrap_or(name);
+            print_prefixed_dot_leader(" ", display_name, &status);
         }
     }
 }
@@ -216,10 +214,10 @@ fn print_pods_status() {
 
     if let Some(output) = inferadb_pods {
         for line in output.lines() {
-            if let Some((name, status)) = format_pod(line) {
-                if seen_names.insert(name.clone()) {
-                    print_prefixed_dot_leader(" ", &name, &status);
-                }
+            if let Some((name, status)) = format_pod(line)
+                && seen_names.insert(name.clone())
+            {
+                print_prefixed_dot_leader(" ", &name, &status);
             }
         }
     }

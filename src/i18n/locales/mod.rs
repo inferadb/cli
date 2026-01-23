@@ -13,24 +13,28 @@ pub const SUPPORTED_LOCALES: &[&str] = &["en-US"];
 /// Returns "en-US" as the default if no locale is detected.
 pub fn detect_locale() -> String {
     // Check INFERADB_LOCALE first (explicit override)
-    if let Ok(locale) = std::env::var("INFERADB_LOCALE") {
-        if !locale.is_empty() {
-            return normalize_locale(&locale);
-        }
+    if let Ok(locale) = std::env::var("INFERADB_LOCALE")
+        && !locale.is_empty()
+    {
+        return normalize_locale(&locale);
     }
 
     // Check LC_ALL
-    if let Ok(locale) = std::env::var("LC_ALL") {
-        if !locale.is_empty() && locale != "C" && locale != "POSIX" {
-            return normalize_locale(&locale);
-        }
+    if let Ok(locale) = std::env::var("LC_ALL")
+        && !locale.is_empty()
+        && locale != "C"
+        && locale != "POSIX"
+    {
+        return normalize_locale(&locale);
     }
 
     // Check LANG
-    if let Ok(locale) = std::env::var("LANG") {
-        if !locale.is_empty() && locale != "C" && locale != "POSIX" {
-            return normalize_locale(&locale);
-        }
+    if let Ok(locale) = std::env::var("LANG")
+        && !locale.is_empty()
+        && locale != "C"
+        && locale != "POSIX"
+    {
+        return normalize_locale(&locale);
     }
 
     // Default

@@ -219,11 +219,10 @@ fn redeploy_applications(deploy_dir: &std::path::Path) {
                     "-o",
                     "jsonpath={.status.readyReplicas}",
                 ],
-            ) {
-                if output.trim() == "1" {
-                    ready = true;
-                    break;
-                }
+            ) && output.trim() == "1"
+            {
+                ready = true;
+                break;
             }
             std::thread::sleep(Duration::from_secs(2));
         }

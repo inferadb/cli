@@ -596,8 +596,8 @@ async fn cheatsheet(_ctx: &Context, _role: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn print_completions<G: clap_complete::Generator>(gen: G, cmd: &mut clap::Command) {
-    clap_complete::generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
+fn print_completions<G: clap_complete::Generator>(generator: G, cmd: &mut clap::Command) {
+    clap_complete::generate(generator, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
 }
 
 async fn completion(_ctx: &Context, shell: &crate::cli::Shell) -> Result<()> {

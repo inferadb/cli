@@ -78,25 +78,24 @@ pub async fn list(ctx: &Context) -> Result<()> {
     }
 
     // Also check "default" if not in profiles
-    if !ctx.config.profiles.contains_key("default") {
-        if let Ok(Some(creds)) = store.load("default") {
-            let status = if creds.is_expired() {
-                "expired".to_string()
-            } else if creds.expires_soon() {
-                "expires soon".to_string()
-            } else {
-                "valid".to_string()
-            };
+    if !ctx.config.profiles.contains_key("default")
+        && let Ok(Some(creds)) = store.load("default")
+    {
+        let status = if creds.is_expired() {
+            "expired".to_string()
+        } else if creds.expires_soon() {
+            "expires soon".to_string()
+        } else {
+            "valid".to_string()
+        };
 
-            let expires = creds.expires_at.map_or_else(
-                || "unknown".to_string(),
-                |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
-            );
+        let expires = creds
+            .expires_at
+            .map_or_else(|| "unknown".to_string(), |dt| dt.format("%Y-%m-%d %H:%M").to_string());
 
-            let can_refresh = if creds.can_refresh() { "yes" } else { "no" }.to_string();
+        let can_refresh = if creds.can_refresh() { "yes" } else { "no" }.to_string();
 
-            rows.push(TokenRow { profile: "default".to_string(), status, expires, can_refresh });
-        }
+        rows.push(TokenRow { profile: "default".to_string(), status, expires, can_refresh });
     }
 
     if rows.is_empty() {
@@ -223,10 +222,10 @@ pub async fn inspect(ctx: &Context, token: Option<&str>, verify: bool) -> Result
             }
 
             // Show issued at
-            if let Some(iat) = payload.get("iat").and_then(serde_json::Value::as_i64) {
-                if let Some(dt) = chrono::DateTime::from_timestamp(iat, 0) {
-                    println!("Issued: {}", dt.format("%Y-%m-%d %H:%M:%S UTC"));
-                }
+            if let Some(iat) = payload.get("iat").and_then(serde_json::Value::as_i64)
+                && let Some(dt) = chrono::DateTime::from_timestamp(iat, 0)
+            {
+                println!("Issued: {}", dt.format("%Y-%m-%d %H:%M:%S UTC"));
             }
         },
         Err(e) => {

@@ -128,18 +128,18 @@ fn extract_lang_arg(args: &[String]) -> String {
         if let Some(lang) = arg.strip_prefix("--lang=") {
             return lang.to_string();
         }
-        if arg == "--lang" {
-            if let Some(lang) = args.get(i + 1) {
-                return lang.clone();
-            }
+        if arg == "--lang"
+            && let Some(lang) = args.get(i + 1)
+        {
+            return lang.clone();
         }
     }
 
     // Check INFERADB_LANG environment variable
-    if let Ok(lang) = std::env::var("INFERADB_LANG") {
-        if !lang.is_empty() {
-            return lang;
-        }
+    if let Ok(lang) = std::env::var("INFERADB_LANG")
+        && !lang.is_empty()
+    {
+        return lang;
     }
 
     // Default to en-US

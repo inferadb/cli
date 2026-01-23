@@ -289,12 +289,10 @@ async fn show_health(ctx: &Context, verbose: bool) -> Result<()> {
             println!("Status: ✓ healthy");
             println!("Latency: {}ms", start.elapsed().as_millis());
 
-            if verbose {
-                if let Ok(body) = resp.text().await {
-                    println!();
-                    println!("Response:");
-                    println!("{body}");
-                }
+            if verbose && let Ok(body) = resp.text().await {
+                println!();
+                println!("Response:");
+                println!("{body}");
             }
         },
         Ok(resp) => {
@@ -522,17 +520,17 @@ pub async fn what_changed(
             if log.timestamp < since_time {
                 return false;
             }
-            if let Some(ref ut) = until_time {
-                if log.timestamp > *ut {
-                    return false;
-                }
+            if let Some(ref ut) = until_time
+                && log.timestamp > *ut
+            {
+                return false;
             }
 
             // Actor filter
-            if let Some(a) = actor {
-                if !log.actor.id.contains(a) {
-                    return false;
-                }
+            if let Some(a) = actor
+                && !log.actor.id.contains(a)
+            {
+                return false;
             }
 
             // Resource filter
@@ -1202,25 +1200,25 @@ fn parse_time_spec(spec: &str) -> chrono::DateTime<chrono::Utc> {
         "today" => now - Duration::hours(i64::from(now.hour())),
         _ => {
             // Try parsing as duration like "1h", "1d", "30m"
-            if let Some(stripped) = spec.strip_suffix('h') {
-                if let Ok(hours) = stripped.parse::<i64>() {
-                    return now - Duration::hours(hours);
-                }
+            if let Some(stripped) = spec.strip_suffix('h')
+                && let Ok(hours) = stripped.parse::<i64>()
+            {
+                return now - Duration::hours(hours);
             }
-            if let Some(stripped) = spec.strip_suffix('d') {
-                if let Ok(days) = stripped.parse::<i64>() {
-                    return now - Duration::days(days);
-                }
+            if let Some(stripped) = spec.strip_suffix('d')
+                && let Ok(days) = stripped.parse::<i64>()
+            {
+                return now - Duration::days(days);
             }
-            if let Some(stripped) = spec.strip_suffix('m') {
-                if let Ok(mins) = stripped.parse::<i64>() {
-                    return now - Duration::minutes(mins);
-                }
+            if let Some(stripped) = spec.strip_suffix('m')
+                && let Ok(mins) = stripped.parse::<i64>()
+            {
+                return now - Duration::minutes(mins);
             }
-            if let Some(stripped) = spec.strip_suffix('w') {
-                if let Ok(weeks) = stripped.parse::<i64>() {
-                    return now - Duration::weeks(weeks);
-                }
+            if let Some(stripped) = spec.strip_suffix('w')
+                && let Ok(weeks) = stripped.parse::<i64>()
+            {
+                return now - Duration::weeks(weeks);
             }
 
             // Default to 1 day ago

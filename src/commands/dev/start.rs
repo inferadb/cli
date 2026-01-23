@@ -53,10 +53,11 @@ pub async fn start(
     commit: Option<&str>,
 ) -> Result<()> {
     // Save CLI-provided credentials if both are present
-    if let (Some(client_id), Some(client_secret)) = (&tailscale_client, &tailscale_secret) {
-        if !client_id.is_empty() && !client_secret.is_empty() {
-            save_tailscale_credentials(client_id, client_secret)?;
-        }
+    if let (Some(client_id), Some(client_secret)) = (&tailscale_client, &tailscale_secret)
+        && !client_id.is_empty()
+        && !client_secret.is_empty()
+    {
+        save_tailscale_credentials(client_id, client_secret)?;
     }
 
     // For new cluster creation, use interactive mode if requested
@@ -854,10 +855,10 @@ fn start_with_streaming(skip_build: bool, force: bool, commit: Option<&str>) -> 
     )?;
 
     run_step(&StartStep::with_ok("Setting kubectl context", "Set kubectl context"), || {
-        if let Some(current) = kubectl_current_context() {
-            if current == KUBE_CONTEXT {
-                return Ok(StepOutcome::Skipped);
-            }
+        if let Some(current) = kubectl_current_context()
+            && current == KUBE_CONTEXT
+        {
+            return Ok(StepOutcome::Skipped);
         }
         kubectl_use_context(KUBE_CONTEXT).map(|()| StepOutcome::Success)
     })?;

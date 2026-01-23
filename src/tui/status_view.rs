@@ -445,15 +445,15 @@ impl DevStatusView {
 
     /// Handle tab switch: update `current_tab` and sync data.
     fn handle_tab_switch(&mut self) {
-        if let Some(new_tab) = StatusTab::from_id(self.tab_bar.selected_id()) {
-            if new_tab != self.current_tab {
-                self.current_tab = new_tab;
-                self.scroll.reset();
-                // Reset sort to first column ascending when switching tabs
-                self.sort_column = 0;
-                self.sort_ascending = true;
-                self.sync_current_tab_data();
-            }
+        if let Some(new_tab) = StatusTab::from_id(self.tab_bar.selected_id())
+            && new_tab != self.current_tab
+        {
+            self.current_tab = new_tab;
+            self.scroll.reset();
+            // Reset sort to first column ascending when switching tabs
+            self.sort_column = 0;
+            self.sort_ascending = true;
+            self.sync_current_tab_data();
         }
     }
 
