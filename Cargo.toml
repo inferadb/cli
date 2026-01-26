@@ -37,7 +37,6 @@ serde_yaml = "0.9"
 
 # Error Handling
 thiserror = "2"
-anyhow = "1"
 
 # Configuration
 dirs = "6"
