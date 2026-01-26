@@ -3,6 +3,7 @@
 //! A full-screen TUI for displaying development cluster diagnostics
 //! including dependency checks, service status, and configuration validation.
 
+use bon::bon;
 use teapot::{
     Cmd, Model,
     components::{Column, FooterHints, Table, TitleBar},
@@ -112,17 +113,24 @@ pub struct DevDoctorView {
     footer_hints: Vec<(&'static str, &'static str)>,
 }
 
+#[bon]
 impl DevDoctorView {
     /// Create a new doctor view.
     #[must_use]
-    pub fn new(width: usize, height: usize) -> Self {
-        Self {
+    #[builder]
+    pub fn new(
+        width: usize,
+        height: usize,
+        #[builder(default = EnvironmentStatus::Checking)] status: EnvironmentStatus,
+        #[builder(default)] results: Vec<CheckResult>,
+    ) -> Self {
+        let mut view = Self {
             width,
             height,
             title: "InferaDB Development Cluster".to_string(),
             subtitle: "Doctor".to_string(),
-            status: EnvironmentStatus::Checking,
-            results: Vec::new(),
+            status,
+            results,
             columns: vec![
                 Column::new("Category"),
                 Column::new("Component"),
@@ -131,22 +139,9 @@ impl DevDoctorView {
             rows: Vec::new(),
             scroll: ScrollState::new(),
             footer_hints: vec![("↑/↓", "select"), ("q", "quit")],
-        }
-    }
-
-    /// Set the overall environment status.
-    #[must_use]
-    pub const fn with_status(mut self, status: EnvironmentStatus) -> Self {
-        self.status = status;
-        self
-    }
-
-    /// Set the check results.
-    #[must_use]
-    pub fn with_results(mut self, results: Vec<CheckResult>) -> Self {
-        self.results = results;
-        self.sync_rows();
-        self
+        };
+        view.sync_rows();
+        view
     }
 
     /// Add a single check result.
@@ -365,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_doctor_view_creation() {
-        let view = DevDoctorView::new(80, 24);
+        let view = DevDoctorView::builder().width(80).height(24).build();
         assert_eq!(view.status, EnvironmentStatus::Checking);
         assert!(view.results.is_empty());
     }
@@ -384,7 +379,8 @@ mod tests {
 
     #[test]
     fn test_with_status() {
-        let view = DevDoctorView::new(80, 24).with_status(EnvironmentStatus::Ready);
+        let view =
+            DevDoctorView::builder().width(80).height(24).status(EnvironmentStatus::Ready).build();
         assert!(view.is_ready());
     }
 
@@ -394,7 +390,7 @@ mod tests {
             CheckResult::success("Deps", "Docker", "v24.0.0"),
             CheckResult::success("Deps", "kubectl", "v1.30.0"),
         ];
-        let view = DevDoctorView::new(80, 24).with_results(results);
+        let view = DevDoctorView::builder().width(80).height(24).results(results).build();
         assert_eq!(view.results.len(), 2);
     }
 }

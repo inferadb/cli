@@ -2,6 +2,8 @@
 //!
 //! Displays cluster status, node status, pod status, and URLs.
 
+use std::sync::Arc;
+
 use teapot::style::{Color, RESET};
 
 use super::{
@@ -16,7 +18,7 @@ use super::{
 use crate::{
     client::Context,
     error::{Error, Result},
-    tui::{ClusterStatus, RefreshResult, TabData},
+    tui::{ClusterStatus, RefreshFn, RefreshResult, TabData},
 };
 
 // ============================================================================
@@ -280,13 +282,16 @@ fn status_interactive() -> Result<()> {
 
     let initial_data = fetch_status_data();
 
-    let view = DevStatusView::new(width, height)
-        .with_refresh(fetch_status_data)
-        .with_status(initial_data.cluster_status)
-        .with_urls(initial_data.urls)
-        .with_services(initial_data.services)
-        .with_nodes(initial_data.nodes)
-        .with_pods(initial_data.pods);
+    let view = DevStatusView::builder()
+        .width(width)
+        .height(height)
+        .refresh_fn(Arc::new(fetch_status_data) as RefreshFn)
+        .cluster_status(initial_data.cluster_status)
+        .urls_data(initial_data.urls)
+        .services_data(initial_data.services)
+        .nodes_data(initial_data.nodes)
+        .pods_data(initial_data.pods)
+        .build();
 
     Program::new(view)
         .with_options(ProgramOptions::fullscreen())

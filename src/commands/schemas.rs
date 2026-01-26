@@ -1,5 +1,6 @@
 //! Schema management commands.
 
+use bon::builder;
 use serde::Serialize;
 
 use crate::{client::Context, error::Result, output::Displayable, tui};
@@ -789,7 +790,7 @@ pub async fn visualize(
 }
 
 /// Copy schema between vaults.
-#[allow(clippy::too_many_arguments)]
+#[builder]
 pub async fn copy(
     ctx: &Context,
     version: Option<&str>,
@@ -797,8 +798,8 @@ pub async fn copy(
     to_vault: &str,
     from_org: Option<&str>,
     to_org: Option<&str>,
-    activate: bool,
-    dry_run: bool,
+    #[builder(default)] activate: bool,
+    #[builder(default)] dry_run: bool,
 ) -> Result<()> {
     let client = ctx.client().await?;
 

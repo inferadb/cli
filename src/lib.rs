@@ -90,16 +90,16 @@ pub async fn run(args: Vec<String>) -> Result<()> {
     }
 
     // Create context
-    let ctx = client::Context::new(
-        cli_args.profile,
-        cli_args.org,
-        cli_args.vault,
-        cli_args.output,
-        cli_args.color,
-        cli_args.quiet,
-        cli_args.yes,
-        cli_args.debug,
-    )?;
+    let ctx = client::Context::builder()
+        .maybe_profile_name(cli_args.profile)
+        .maybe_org_override(cli_args.org)
+        .maybe_vault_override(cli_args.vault)
+        .output_format(cli_args.output)
+        .color(cli_args.color)
+        .quiet(cli_args.quiet)
+        .yes(cli_args.yes)
+        .debug(cli_args.debug)
+        .build()?;
 
     // Execute command
     commands::execute(&ctx, &cli_args.command).await

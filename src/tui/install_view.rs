@@ -29,9 +29,10 @@ pub type DevInstallViewMsg = TaskProgressMsg;
 
 /// Installation step definition.
 /// This is a compatibility wrapper around Teapot's `TaskStep`.
-#[derive(Clone)]
+#[derive(Clone, bon::Builder)]
 pub struct InstallStep {
     /// Step name displayed to user.
+    #[builder(into)]
     pub name: String,
     /// Optional executor function for this step.
     pub executor: Option<StepExecutor>,
@@ -43,21 +44,6 @@ impl std::fmt::Debug for InstallStep {
             .field("name", &self.name)
             .field("executor", &self.executor.is_some())
             .finish()
-    }
-}
-
-impl InstallStep {
-    /// Create a new installation step.
-    pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), executor: None }
-    }
-
-    /// Create a step with an executor function.
-    pub fn with_executor<F>(name: impl Into<String>, executor: F) -> Self
-    where
-        F: Fn() -> Result<Option<String>, String> + Send + Sync + 'static,
-    {
-        Self { name: name.into(), executor: Some(Arc::new(executor)) }
     }
 }
 
@@ -211,9 +197,9 @@ mod tests {
     #[test]
     fn test_install_view_creation() {
         let steps = vec![
-            InstallStep::new("Clone repository"),
-            InstallStep::new("Install dependencies"),
-            InstallStep::new("Build project"),
+            InstallStep::builder().name("Clone repository").build(),
+            InstallStep::builder().name("Install dependencies").build(),
+            InstallStep::builder().name("Build project").build(),
         ];
 
         let view = DevInstallView::new(steps);
@@ -223,7 +209,10 @@ mod tests {
 
     #[test]
     fn test_task_lifecycle() {
-        let steps = vec![InstallStep::new("Step 1"), InstallStep::new("Step 2")];
+        let steps = vec![
+            InstallStep::builder().name("Step 1").build(),
+            InstallStep::builder().name("Step 2").build(),
+        ];
 
         let mut view = DevInstallView::new(steps);
 
@@ -246,12 +235,35 @@ mod tests {
 
     #[test]
     fn test_failure_shows_modal() {
-        let steps = vec![InstallStep::new("Failing step")];
+        let steps = vec![InstallStep::builder().name("Failing step").build()];
         let mut view = DevInstallView::new(steps);
 
         view.start_task(0);
         view.complete_task(0, StepResult::Failure("Something went wrong".to_string()));
 
         assert!(view.has_failure());
+    }
+
+    #[test]
+    fn test_builder_with_executor() {
+        let executor_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let executor_called_clone = executor_called.clone();
+
+        let step = InstallStep::builder()
+            .name("Step with executor")
+            .executor(std::sync::Arc::new(move || {
+                executor_called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(Some("done".to_string()))
+            }))
+            .build();
+
+        // Verify the step was created with an executor
+        assert!(step.executor.is_some());
+        assert_eq!(step.name, "Step with executor");
+
+        // Call the executor and verify it works
+        let result = (step.executor.as_ref().unwrap())();
+        assert!(result.is_ok());
+        assert!(executor_called.load(std::sync::atomic::Ordering::SeqCst));
     }
 }

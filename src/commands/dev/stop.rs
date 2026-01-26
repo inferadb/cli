@@ -2,7 +2,7 @@
 //!
 //! Handles pausing containers and destroying the cluster.
 
-use std::{fs, process::Command};
+use std::{fs, process::Command, sync::Arc};
 
 use teapot::{
     output::{info as print_info, success as print_success},
@@ -479,57 +479,87 @@ fn uninstall_interactive(with_credentials: bool) -> Result<()> {
     let mut steps = Vec::new();
 
     if info.has_registry {
-        steps.push(InstallStep::with_executor("Removing registry", || {
-            step_remove_registry().map(|r| match r {
-                StepOutcome::Success => Some("Removed".to_string()),
-                StepOutcome::Skipped => Some("Skipped".to_string()),
-                StepOutcome::Failed(_) => None,
-            })
-        }));
+        steps.push(
+            InstallStep::builder()
+                .name("Removing registry")
+                .executor(Arc::new(|| {
+                    step_remove_registry().map(|r| match r {
+                        StepOutcome::Success => Some("Removed".to_string()),
+                        StepOutcome::Skipped => Some("Skipped".to_string()),
+                        StepOutcome::Failed(_) => None,
+                    })
+                }))
+                .build(),
+        );
     }
 
     if info.has_cluster {
-        steps.push(InstallStep::with_executor("Destroying cluster", || {
-            step_destroy_cluster().map(|r| match r {
-                StepOutcome::Success => Some("Destroyed".to_string()),
-                StepOutcome::Skipped => Some("Skipped".to_string()),
-                StepOutcome::Failed(_) => None,
-            })
-        }));
+        steps.push(
+            InstallStep::builder()
+                .name("Destroying cluster")
+                .executor(Arc::new(|| {
+                    step_destroy_cluster().map(|r| match r {
+                        StepOutcome::Success => Some("Destroyed".to_string()),
+                        StepOutcome::Skipped => Some("Skipped".to_string()),
+                        StepOutcome::Failed(_) => None,
+                    })
+                }))
+                .build(),
+        );
     }
 
     if info.has_kube_context || info.has_talos_context {
-        steps.push(InstallStep::with_executor("Cleaning contexts", || {
-            step_cleanup_contexts().map(|r| match r {
-                StepOutcome::Success => Some("Cleaned".to_string()),
-                StepOutcome::Skipped => Some("Skipped".to_string()),
-                StepOutcome::Failed(_) => None,
-            })
-        }));
+        steps.push(
+            InstallStep::builder()
+                .name("Cleaning contexts")
+                .executor(Arc::new(|| {
+                    step_cleanup_contexts().map(|r| match r {
+                        StepOutcome::Success => Some("Cleaned".to_string()),
+                        StepOutcome::Skipped => Some("Skipped".to_string()),
+                        StepOutcome::Failed(_) => None,
+                    })
+                }))
+                .build(),
+        );
     }
 
     if info.dev_image_count > 0 {
-        steps.push(InstallStep::with_executor("Removing Docker images", step_remove_docker_images));
+        steps.push(
+            InstallStep::builder()
+                .name("Removing Docker images")
+                .executor(Arc::new(step_remove_docker_images))
+                .build(),
+        );
     }
 
     if info.has_state_dir {
-        steps.push(InstallStep::with_executor("Removing state directory", || {
-            step_remove_state_dir().map(|r| match r {
-                StepOutcome::Success => Some("Removed".to_string()),
-                StepOutcome::Skipped => Some("Skipped".to_string()),
-                StepOutcome::Failed(_) => None,
-            })
-        }));
+        steps.push(
+            InstallStep::builder()
+                .name("Removing state directory")
+                .executor(Arc::new(|| {
+                    step_remove_state_dir().map(|r| match r {
+                        StepOutcome::Success => Some("Removed".to_string()),
+                        StepOutcome::Skipped => Some("Skipped".to_string()),
+                        StepOutcome::Failed(_) => None,
+                    })
+                }))
+                .build(),
+        );
     }
 
     if with_credentials && info.has_creds_file {
-        steps.push(InstallStep::with_executor("Removing Tailscale credentials", || {
-            step_remove_tailscale_creds().map(|r| match r {
-                StepOutcome::Success => Some("Removed".to_string()),
-                StepOutcome::Skipped => Some("Skipped".to_string()),
-                StepOutcome::Failed(_) => None,
-            })
-        }));
+        steps.push(
+            InstallStep::builder()
+                .name("Removing Tailscale credentials")
+                .executor(Arc::new(|| {
+                    step_remove_tailscale_creds().map(|r| match r {
+                        StepOutcome::Success => Some("Removed".to_string()),
+                        StepOutcome::Skipped => Some("Skipped".to_string()),
+                        StepOutcome::Failed(_) => None,
+                    })
+                }))
+                .build(),
+        );
     }
 
     let view = DevUninstallView::new(steps, info, with_credentials);

@@ -2,7 +2,7 @@
 //!
 //! Handles creating, resuming, and setting up the local development cluster.
 
-use std::{fs, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use teapot::style::{Color, RESET};
 
@@ -485,10 +485,11 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
     let deploy_dir = get_deploy_dir();
     let commit_owned = commit.map(std::string::ToString::to_string);
 
-    let view = DevStartView::new(skip_build)
-        .with_prereq_checker({
+    let view = DevStartView::builder()
+        .skip_build(skip_build)
+        .prereq_checker({
             let deploy_dir = deploy_dir.clone();
-            move || {
+            Arc::new(move || {
                 // Check prerequisites
                 for cmd in &["docker", "talosctl", "kubectl", "helm"] {
                     if !command_exists(cmd) {
@@ -513,15 +514,15 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
                 }
 
                 Ok(())
-            }
+            })
         })
-        .with_credentials_loader(load_tailscale_credentials)
-        .with_credentials_saver(|id, secret| {
+        .credentials_loader(Arc::new(load_tailscale_credentials))
+        .credentials_saver(Arc::new(|id, secret| {
             save_tailscale_credentials(id, secret).map_err(|e| e.to_string())
-        })
-        .with_step_builder({
+        }))
+        .step_builder({
             let commit = commit_owned;
-            move |client_id, client_secret, skip_build| {
+            Arc::new(move |client_id, client_secret, skip_build| {
                 build_start_steps(
                     client_id,
                     client_secret,
@@ -530,8 +531,9 @@ fn start_interactive(skip_build: bool, force: bool, commit: Option<&str>) -> Res
                     commit.as_deref(),
                     &deploy_dir,
                 )
-            }
-        });
+            })
+        })
+        .build();
 
     let result = Program::new(view).with_options(ProgramOptions::fullscreen()).run();
 
@@ -569,91 +571,142 @@ fn build_start_steps(
         let containers = get_cluster_containers();
         for container in containers {
             let container_name = container.clone();
-            steps.push(InstallStep::with_executor(format!("Resuming {container}"), move || {
-                run_command("docker", &["unpause", &container_name]).map(|_| None).or_else(|e| {
-                    if e.to_string().contains("not paused") { Ok(None) } else { Err(e.to_string()) }
-                })
-            }));
+            steps.push(
+                InstallStep::builder()
+                    .name(format!("Resuming {container}"))
+                    .executor(Arc::new(move || {
+                        run_command("docker", &["unpause", &container_name]).map(|_| None).or_else(
+                            |e| {
+                                if e.to_string().contains("not paused") {
+                                    Ok(None)
+                                } else {
+                                    Err(e.to_string())
+                                }
+                            },
+                        )
+                    }))
+                    .build(),
+            );
         }
 
         // Resume registry
         if docker_container_exists(REGISTRY_NAME) {
-            steps.push(InstallStep::with_executor(format!("Resuming {REGISTRY_NAME}"), || {
-                let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
-                Ok(None)
-            }));
+            steps.push(
+                InstallStep::builder()
+                    .name(format!("Resuming {REGISTRY_NAME}"))
+                    .executor(Arc::new(|| {
+                        let _ = run_command_optional("docker", &["unpause", REGISTRY_NAME]);
+                        Ok(None)
+                    }))
+                    .build(),
+            );
         }
 
-        steps.push(InstallStep::with_executor("Waiting for containers to stabilize", || {
-            std::thread::sleep(Duration::from_secs(CONTAINER_STABILIZE_DELAY_SECS));
-            Ok(Some("ready".to_string()))
-        }));
+        steps.push(
+            InstallStep::builder()
+                .name("Waiting for containers to stabilize")
+                .executor(Arc::new(|| {
+                    std::thread::sleep(Duration::from_secs(CONTAINER_STABILIZE_DELAY_SECS));
+                    Ok(Some("ready".to_string()))
+                }))
+                .build(),
+        );
     }
 
     // Phase 1: Conditioning environment
-    steps.push(InstallStep::with_executor("Cloning deployment repository", {
-        let deploy_dir = deploy_dir_owned;
-        let commit = commit_owned;
-        move || step_clone_repo(&deploy_dir, force, commit.as_deref())
-    }));
-    steps.push(InstallStep::with_executor(
-        "Creating configuration directory",
-        step_create_config_dir,
-    ));
-    steps.push(InstallStep::with_executor("Setting up Helm repositories", step_setup_helm));
+    steps.push(
+        InstallStep::builder()
+            .name("Cloning deployment repository")
+            .executor(Arc::new({
+                let deploy_dir = deploy_dir_owned;
+                let commit = commit_owned;
+                move || step_clone_repo(&deploy_dir, force, commit.as_deref())
+            }))
+            .build(),
+    );
+    steps.push(
+        InstallStep::builder()
+            .name("Creating configuration directory")
+            .executor(Arc::new(step_create_config_dir))
+            .build(),
+    );
+    steps.push(
+        InstallStep::builder()
+            .name("Setting up Helm repositories")
+            .executor(Arc::new(step_setup_helm))
+            .build(),
+    );
 
     // Phase 2: Setting up cluster
-    steps.push(InstallStep::with_executor("Cleaning stale contexts", || {
-        let _ = run_command_optional("talosctl", &["config", "context", ""]);
-        if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
-            for line in contexts.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
-                    let _ = run_command_optional(
-                        "talosctl",
-                        &["config", "remove", parts[1], "--noconfirm"],
-                    );
+    steps.push(
+        InstallStep::builder()
+            .name("Cleaning stale contexts")
+            .executor(Arc::new(|| {
+                let _ = run_command_optional("talosctl", &["config", "context", ""]);
+                if let Some(contexts) = run_command_optional("talosctl", &["config", "contexts"]) {
+                    for line in contexts.lines() {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 2 && parts[1].starts_with(CLUSTER_NAME) {
+                            let _ = run_command_optional(
+                                "talosctl",
+                                &["config", "remove", parts[1], "--noconfirm"],
+                            );
+                        }
+                    }
                 }
-            }
-        }
-        Ok(Some("Cleaned".to_string()))
-    }));
-    steps.push(InstallStep::with_executor("Creating Talos cluster", || {
-        match run_command(
-            "talosctl",
-            &[
-                "cluster",
-                "create",
-                "--name",
-                CLUSTER_NAME,
-                "--workers",
-                TALOS_WORKERS,
-                "--controlplanes",
-                TALOS_CONTROLPLANES,
-                "--provisioner",
-                TALOS_PROVISIONER,
-                "--kubernetes-version",
-                KUBERNETES_VERSION,
-                "--wait-timeout",
-                TALOS_WAIT_TIMEOUT,
-            ],
-        ) {
-            Ok(_) => Ok(Some("Created".to_string())),
-            Err(e) => Err(e.to_string()),
-        }
-    }));
-    steps.push(InstallStep::with_executor("Setting kubectl context", || {
-        match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
-            Ok(_) => Ok(Some("Set".to_string())),
-            Err(e) => Err(e.to_string()),
-        }
-    }));
-    steps.push(InstallStep::with_executor("Verifying cluster is ready", || {
-        match run_command("kubectl", &["get", "nodes"]) {
-            Ok(_) => Ok(Some("Verified".to_string())),
-            Err(e) => Err(e.to_string()),
-        }
-    }));
+                Ok(Some("Cleaned".to_string()))
+            }))
+            .build(),
+    );
+    steps.push(
+        InstallStep::builder()
+            .name("Creating Talos cluster")
+            .executor(Arc::new(|| {
+                match run_command(
+                    "talosctl",
+                    &[
+                        "cluster",
+                        "create",
+                        "--name",
+                        CLUSTER_NAME,
+                        "--workers",
+                        TALOS_WORKERS,
+                        "--controlplanes",
+                        TALOS_CONTROLPLANES,
+                        "--provisioner",
+                        TALOS_PROVISIONER,
+                        "--kubernetes-version",
+                        KUBERNETES_VERSION,
+                        "--wait-timeout",
+                        TALOS_WAIT_TIMEOUT,
+                    ],
+                ) {
+                    Ok(_) => Ok(Some("Created".to_string())),
+                    Err(e) => Err(e.to_string()),
+                }
+            }))
+            .build(),
+    );
+    steps.push(
+        InstallStep::builder()
+            .name("Setting kubectl context")
+            .executor(Arc::new(|| {
+                match run_command("kubectl", &["config", "use-context", KUBE_CONTEXT]) {
+                    Ok(_) => Ok(Some("Set".to_string())),
+                    Err(e) => Err(e.to_string()),
+                }
+            }))
+            .build(),
+    );
+    steps.push(
+        InstallStep::builder()
+            .name("Verifying cluster is ready")
+            .executor(Arc::new(|| match run_command("kubectl", &["get", "nodes"]) {
+                Ok(_) => Ok(Some("Verified".to_string())),
+                Err(e) => Err(e.to_string()),
+            }))
+            .build(),
+    );
 
     steps
 }

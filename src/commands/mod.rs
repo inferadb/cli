@@ -299,17 +299,17 @@ async fn schemas_dispatch(ctx: &Context, sub: &crate::cli::SchemasCommands) -> R
             activate,
             dry_run,
         } => {
-            schemas::copy(
-                ctx,
-                version.as_deref(),
-                from_vault.as_deref(),
-                to_vault,
-                from_org.as_deref(),
-                to_org.as_deref(),
-                *activate,
-                *dry_run,
-            )
-            .await
+            schemas::copy()
+                .ctx(ctx)
+                .maybe_version(version.as_deref())
+                .maybe_from_vault(from_vault.as_deref())
+                .to_vault(to_vault)
+                .maybe_from_org(from_org.as_deref())
+                .maybe_to_org(to_org.as_deref())
+                .activate(*activate)
+                .dry_run(*dry_run)
+                .call()
+                .await
         },
         SchemasCommands::Migrate { from, to, format } => {
             schemas::migrate(ctx, from.as_deref(), to, format).await

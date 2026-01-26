@@ -2,6 +2,7 @@
 //!
 //! Provides consistent formatting for step output, dot leaders, and status messages.
 
+use bon::Builder;
 use teapot::style::RESET;
 
 use super::constants::STEP_LINE_WIDTH;
@@ -106,7 +107,7 @@ impl From<std::result::Result<Option<String>, String>> for StepOutcome {
 // ============================================================================
 
 /// Configuration for formatting a dot leader line.
-#[derive(Default)]
+#[derive(Default, Builder)]
 pub struct DotLeaderConfig<'a> {
     /// Optional prefix symbol (e.g., "✓", "○", "✗")
     pub prefix: Option<&'a str>,
@@ -117,35 +118,8 @@ pub struct DotLeaderConfig<'a> {
     /// Status text (e.g., "OK", "SKIPPED")
     pub status: &'a str,
     /// Whether to auto-color status based on value
+    #[builder(default = true)]
     pub auto_color_status: bool,
-}
-
-impl<'a> DotLeaderConfig<'a> {
-    /// Create a simple dot leader with just text and status.
-    pub fn simple(text: &'a str, status: &'a str) -> Self {
-        Self { text, status, auto_color_status: true, ..Default::default() }
-    }
-
-    /// Create a dot leader with a prefix.
-    pub fn with_prefix(prefix: &'a str, text: &'a str, status: &'a str) -> Self {
-        Self { prefix: Some(prefix), text, status, auto_color_status: true, ..Default::default() }
-    }
-
-    /// Create a dot leader with a colored prefix.
-    pub const fn with_colored_prefix(
-        prefix: &'a str,
-        prefix_color: &'a str,
-        text: &'a str,
-        status: &'a str,
-    ) -> Self {
-        Self {
-            prefix: Some(prefix),
-            prefix_color: Some(prefix_color),
-            text,
-            status,
-            auto_color_status: true,
-        }
-    }
 }
 
 // ============================================================================
@@ -220,23 +194,30 @@ pub fn format_dot_leader_config(config: &DotLeaderConfig<'_>) -> String {
 /// Format: `{text} {dots} {status}` where total width is `STEP_LINE_WIDTH`.
 /// The dots are dimmed for visual distinction. Status may contain ANSI codes.
 pub fn format_dot_leader(text: &str, status: &str) -> String {
-    format_dot_leader_config(&DotLeaderConfig::simple(text, status))
+    format_dot_leader_config(&DotLeaderConfig::builder().text(text).status(status).build())
 }
 
 /// Format a dot leader line with colored prefix and status for reset output.
 pub fn format_reset_dot_leader(prefix: &str, text: &str, status: &str) -> String {
     let prefix_color = if prefix == "✓" { green() } else { dim() };
-    format_dot_leader_config(&DotLeaderConfig::with_colored_prefix(
-        prefix,
-        prefix_color,
-        text,
-        &status.to_uppercase(),
-    ))
+    format_dot_leader_config(
+        &DotLeaderConfig::builder()
+            .prefix(prefix)
+            .prefix_color(prefix_color)
+            .text(text)
+            .status(&status.to_uppercase())
+            .build(),
+    )
 }
 
 /// Print a line with a dimmed prefix symbol, dot leaders, and status.
 pub fn print_prefixed_dot_leader(prefix: &str, text: &str, status: &str) {
-    println!("{}", format_dot_leader_config(&DotLeaderConfig::with_prefix(prefix, text, status)));
+    println!(
+        "{}",
+        format_dot_leader_config(
+            &DotLeaderConfig::builder().prefix(prefix).text(text).status(status).build()
+        )
+    );
 }
 
 /// Print a line with a colored prefix symbol, dot leaders, and status.
@@ -289,12 +270,14 @@ pub fn print_hint(text: &str) {
 pub fn print_destroy_skipped(text: &str) {
     println!(
         "{}",
-        format_dot_leader_config(&DotLeaderConfig::with_colored_prefix(
-            "○",
-            dim(),
-            text,
-            "SKIPPED"
-        ))
+        format_dot_leader_config(
+            &DotLeaderConfig::builder()
+                .prefix("○")
+                .prefix_color(dim())
+                .text(text)
+                .status("SKIPPED")
+                .build(),
+        )
     );
 }
 
@@ -316,12 +299,14 @@ where
             spin.stop();
             println!(
                 "{}",
-                format_dot_leader_config(&DotLeaderConfig::with_colored_prefix(
-                    "✓",
-                    green(),
-                    completed,
-                    "OK"
-                ))
+                format_dot_leader_config(
+                    &DotLeaderConfig::builder()
+                        .prefix("✓")
+                        .prefix_color(green())
+                        .text(completed)
+                        .status("OK")
+                        .build(),
+                )
             );
             true
         },
@@ -451,4 +436,90 @@ pub fn confirm_warning(message: &str) -> std::io::Result<bool> {
 
     let input = input.trim().to_lowercase();
     Ok(input == "y" || input == "yes")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dot_leader_config_builder_defaults() {
+        let config = DotLeaderConfig::builder().text("Test text").status("OK").build();
+
+        assert_eq!(config.text, "Test text");
+        assert_eq!(config.status, "OK");
+        assert!(config.auto_color_status);
+        assert!(config.prefix.is_none());
+        assert!(config.prefix_color.is_none());
+    }
+
+    #[test]
+    fn test_dot_leader_config_with_prefix() {
+        let config =
+            DotLeaderConfig::builder().prefix("✓").text("Installing deps").status("OK").build();
+
+        assert_eq!(config.prefix, Some("✓"));
+        assert!(config.prefix_color.is_none());
+    }
+
+    #[test]
+    fn test_dot_leader_config_with_colored_prefix() {
+        let config = DotLeaderConfig::builder()
+            .prefix("✓")
+            .prefix_color(green())
+            .text("Build complete")
+            .status("READY")
+            .build();
+
+        assert_eq!(config.prefix, Some("✓"));
+        assert_eq!(config.prefix_color, Some(green()));
+    }
+
+    #[test]
+    fn test_dot_leader_config_auto_color_disabled() {
+        let config = DotLeaderConfig::builder()
+            .text("Manual status")
+            .status("CUSTOM")
+            .auto_color_status(false)
+            .build();
+
+        assert!(!config.auto_color_status);
+    }
+
+    #[test]
+    fn test_visible_len_plain_text() {
+        assert_eq!(visible_len("Hello"), 5);
+        assert_eq!(visible_len("Test text"), 9);
+    }
+
+    #[test]
+    fn test_visible_len_with_ansi() {
+        assert_eq!(visible_len("\x1b[32mOK\x1b[0m"), 2);
+        assert_eq!(visible_len("\x1b[90m○\x1b[0m test"), 6);
+    }
+
+    #[test]
+    fn test_format_dot_leader_config_basic() {
+        let config =
+            DotLeaderConfig::builder().text("Test").status("OK").auto_color_status(false).build();
+
+        let output = format_dot_leader_config(&config);
+        assert!(output.contains("Test"));
+        assert!(output.contains("OK"));
+        assert!(output.contains("..."));
+    }
+
+    #[test]
+    fn test_format_dot_leader_config_with_prefix() {
+        let config = DotLeaderConfig::builder()
+            .prefix("✓")
+            .text("Step complete")
+            .status("OK")
+            .auto_color_status(false)
+            .build();
+
+        let output = format_dot_leader_config(&config);
+        assert!(output.contains("✓"));
+        assert!(output.contains("Step complete"));
+    }
 }

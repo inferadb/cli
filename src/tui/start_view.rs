@@ -7,6 +7,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use bon::bon;
 use teapot::{
     Cmd, Model,
     components::{FooterHints, Modal, ModalBorder, TaskList, TextInput, TextInputMsg, TitleBar},
@@ -82,8 +83,19 @@ pub enum DevStartViewMsg {
 /// Result message from a worker thread.
 type WorkerResult = (usize, StepResult);
 
+/// Function type for building installation steps from credentials.
+pub type StepBuilderFn = Arc<dyn Fn(String, String, bool) -> Vec<InstallStep> + Send + Sync>;
+
+/// Function type for checking prerequisites.
+pub type PrereqCheckerFn = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
+
+/// Function type for loading stored credentials.
+pub type CredentialsLoaderFn = Arc<dyn Fn() -> Option<(String, String)> + Send + Sync>;
+
+/// Function type for saving credentials.
+pub type CredentialsSaverFn = Arc<dyn Fn(&str, &str) -> Result<(), String> + Send + Sync>;
+
 /// The start view state.
-#[allow(clippy::type_complexity)]
 pub struct DevStartView {
     /// Title for the view.
     title: String,
@@ -118,19 +130,33 @@ pub struct DevStartView {
     /// Saved Tailscale credentials.
     tailscale_credentials: Option<(String, String)>,
     /// Step builder function (to be called when credentials are ready).
-    step_builder: Option<Arc<dyn Fn(String, String, bool) -> Vec<InstallStep> + Send + Sync>>,
+    step_builder: Option<StepBuilderFn>,
     /// Prereq checker function.
-    prereq_checker: Option<Arc<dyn Fn() -> Result<(), String> + Send + Sync>>,
+    prereq_checker: Option<PrereqCheckerFn>,
     /// Credentials loader function.
-    credentials_loader: Option<Arc<dyn Fn() -> Option<(String, String)> + Send + Sync>>,
+    credentials_loader: Option<CredentialsLoaderFn>,
     /// Credentials saver function.
-    credentials_saver: Option<Arc<dyn Fn(&str, &str) -> Result<(), String> + Send + Sync>>,
+    credentials_saver: Option<CredentialsSaverFn>,
 }
 
+#[bon]
 impl DevStartView {
     /// Create a new start view.
-    #[must_use]
-    pub fn new(skip_build: bool) -> Self {
+    ///
+    /// # Arguments
+    /// * `skip_build` - Whether to skip image builds
+    /// * `step_builder` - Function to build installation steps from credentials
+    /// * `prereq_checker` - Function to check prerequisites
+    /// * `credentials_loader` - Function to load stored credentials
+    /// * `credentials_saver` - Function to save credentials
+    #[builder]
+    pub fn new(
+        skip_build: bool,
+        step_builder: Option<StepBuilderFn>,
+        prereq_checker: Option<PrereqCheckerFn>,
+        credentials_loader: Option<CredentialsLoaderFn>,
+        credentials_saver: Option<CredentialsSaverFn>,
+    ) -> Self {
         let (width, height) = teapot::terminal::size().unwrap_or((80, 24));
 
         Self {
@@ -155,47 +181,11 @@ impl DevStartView {
                 .hidden(true),
             focused_field: 0,
             tailscale_credentials: None,
-            step_builder: None,
-            prereq_checker: None,
-            credentials_loader: None,
-            credentials_saver: None,
+            step_builder,
+            prereq_checker,
+            credentials_loader,
+            credentials_saver,
         }
-    }
-
-    /// Set the step builder function.
-    pub fn with_step_builder<F>(mut self, builder: F) -> Self
-    where
-        F: Fn(String, String, bool) -> Vec<InstallStep> + Send + Sync + 'static,
-    {
-        self.step_builder = Some(Arc::new(builder));
-        self
-    }
-
-    /// Set the prerequisites checker function.
-    pub fn with_prereq_checker<F>(mut self, checker: F) -> Self
-    where
-        F: Fn() -> Result<(), String> + Send + Sync + 'static,
-    {
-        self.prereq_checker = Some(Arc::new(checker));
-        self
-    }
-
-    /// Set the credentials loader function.
-    pub fn with_credentials_loader<F>(mut self, loader: F) -> Self
-    where
-        F: Fn() -> Option<(String, String)> + Send + Sync + 'static,
-    {
-        self.credentials_loader = Some(Arc::new(loader));
-        self
-    }
-
-    /// Set the credentials saver function.
-    pub fn with_credentials_saver<F>(mut self, saver: F) -> Self
-    where
-        F: Fn(&str, &str) -> Result<(), String> + Send + Sync + 'static,
-    {
-        self.credentials_saver = Some(Arc::new(saver));
-        self
     }
 
     /// Check if the view should quit.
@@ -785,14 +775,30 @@ mod tests {
 
     #[test]
     fn test_start_view_creation() {
-        let view = DevStartView::new(false);
+        let view = DevStartView::builder().skip_build(false).build();
         assert!(!view.should_quit());
         assert_eq!(view.phase, StartPhase::CheckingPrereqs);
     }
 
     #[test]
     fn test_start_view_with_skip_build() {
-        let view = DevStartView::new(true);
+        let view = DevStartView::builder().skip_build(true).build();
         assert!(view.skip_build);
+    }
+
+    #[test]
+    fn test_start_view_with_prereq_checker() {
+        let view =
+            DevStartView::builder().skip_build(false).prereq_checker(Arc::new(|| Ok(()))).build();
+        assert!(view.prereq_checker.is_some());
+    }
+
+    #[test]
+    fn test_start_view_builder_defaults() {
+        let view = DevStartView::builder().skip_build(false).build();
+        assert!(view.step_builder.is_none());
+        assert!(view.prereq_checker.is_none());
+        assert!(view.credentials_loader.is_none());
+        assert!(view.credentials_saver.is_none());
     }
 }

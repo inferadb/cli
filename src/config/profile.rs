@@ -3,6 +3,7 @@
 //! A profile represents a complete target environment with URL, organization,
 //! vault, and authentication credentials.
 
+use bon::Builder;
 use serde::{Deserialize, Serialize};
 
 /// A named profile representing a complete connection target.
@@ -73,12 +74,14 @@ impl Profile {
 ///
 /// Credentials are stored separately from the config file,
 /// typically in the OS keychain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 pub struct Credentials {
     /// Access token for API authentication.
+    #[builder(into)]
     pub access_token: String,
 
     /// Optional refresh token for token renewal.
+    #[builder(into)]
     pub refresh_token: Option<String>,
 
     /// Token expiration timestamp.
@@ -86,24 +89,6 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    /// Create new credentials with just an access token.
-    pub fn new(access_token: impl Into<String>) -> Self {
-        Self { access_token: access_token.into(), refresh_token: None, expires_at: None }
-    }
-
-    /// Create credentials with all fields.
-    pub fn with_refresh(
-        access_token: impl Into<String>,
-        refresh_token: impl Into<String>,
-        expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> Self {
-        Self {
-            access_token: access_token.into(),
-            refresh_token: Some(refresh_token.into()),
-            expires_at: Some(expires_at),
-        }
-    }
-
     /// Check if the credentials are expired.
     #[must_use]
     pub fn is_expired(&self) -> bool {
@@ -229,19 +214,28 @@ mod tests {
 
     #[test]
     fn test_credentials_expiry() {
-        let creds = Credentials::with_refresh(
-            "token",
-            "refresh",
-            chrono::Utc::now() + chrono::Duration::hours(1),
-        );
+        let creds = Credentials::builder()
+            .access_token("token")
+            .refresh_token("refresh")
+            .expires_at(chrono::Utc::now() + chrono::Duration::hours(1))
+            .build();
         assert!(!creds.is_expired());
         assert!(!creds.expires_soon());
 
-        let expired = Credentials::with_refresh(
-            "token",
-            "refresh",
-            chrono::Utc::now() - chrono::Duration::hours(1),
-        );
+        let expired = Credentials::builder()
+            .access_token("token")
+            .refresh_token("refresh")
+            .expires_at(chrono::Utc::now() - chrono::Duration::hours(1))
+            .build();
         assert!(expired.is_expired());
+    }
+
+    #[test]
+    fn test_credentials_builder_defaults() {
+        let creds = Credentials::builder().access_token("token").build();
+        assert_eq!(creds.access_token, "token");
+        assert!(creds.refresh_token.is_none());
+        assert!(creds.expires_at.is_none());
+        assert!(!creds.can_refresh());
     }
 }

@@ -80,6 +80,35 @@ src/
 └── tui/             # Terminal UI components
 ```
 
+## Builder Pattern Conventions
+
+This codebase uses **two builder pattern libraries** for different purposes:
+
+### bon (v3.8+) - Internal Types
+Use `bon` for InferaDB CLI's own types:
+- **Structs**: `#[derive(bon::Builder)]` for simple data types
+- **Impl blocks**: `#[bon]` on impl + `#[builder]` on constructor for types with complex initialization logic
+- **Async functions**: `#[builder]` directly on functions with many parameters
+
+**bon patterns:**
+- `#[builder(default)]` for optional fields with `Default::default()` value
+- `#[builder(default = value)]` for specific non-Default defaults
+- `#[builder(into)]` for `impl Into<String>` ergonomics
+- `Option<T>` fields are automatically optional (no annotation needed)
+- Builder finisher: `.build()` for structs/impl blocks, `.call()` for functions
+
+**Examples:**
+- `Context::builder().profile_name(...).build()`
+- `InstallStep::builder().name("step").executor(Arc::new(||...)).build()`
+- `schemas::copy().ctx(ctx).to_vault(v).call().await`
+
+### teapot - Framework Types
+**Never replace teapot builders with bon.** Teapot is an upstream TUI framework, and its patterns should be used as-is:
+- `TaskProgressView::builder(steps).title(...).auto_start().build()`
+- `InputField::new("name").title("Title").required().build()`
+
+Types that wrap teapot components (e.g., `DevStopView`, `DevInstallView`, `DevUninstallView`) should remain thin delegates—just an `inner: TaskProgressView` field with methods that forward to the inner type.
+
 ## Dependencies Philosophy
 
 - Use `clap` with derive macros for CLI
@@ -89,3 +118,4 @@ src/
 - Use `tracing` for logging
 - Use `keyring` for secure credential storage
 - Use `teapot` TUI framework for interactive features
+- Use `bon` for builder pattern generation (internal types only—see Builder Pattern Conventions above)

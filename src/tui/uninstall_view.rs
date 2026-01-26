@@ -269,7 +269,10 @@ mod tests {
             has_talos_context: true,
         };
 
-        let steps = vec![InstallStep::new("Step 1"), InstallStep::new("Step 2")];
+        let steps = vec![
+            InstallStep::builder().name("Step 1").build(),
+            InstallStep::builder().name("Step 2").build(),
+        ];
 
         let view = DevUninstallView::new(steps, info, false);
         assert!(!view.is_success());

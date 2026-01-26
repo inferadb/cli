@@ -340,7 +340,12 @@ fn doctor_interactive() -> Result<()> {
 
     let (results, status) = run_all_checks();
 
-    let view = DevDoctorView::new(width, height).with_status(status).with_results(results);
+    let view = DevDoctorView::builder()
+        .width(width)
+        .height(height)
+        .status(status)
+        .results(results)
+        .build();
 
     let is_ready = view.is_ready();
 

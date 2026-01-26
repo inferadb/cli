@@ -5,6 +5,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use bon::bon;
 use teapot::{
     Cmd, Model,
     components::{
@@ -295,10 +296,32 @@ pub struct DevStatusView {
     show_offline_modal: bool,
 }
 
+#[bon]
 impl DevStatusView {
-    /// Create a new status view.
-    #[must_use]
-    pub fn new(width: usize, height: usize) -> Self {
+    /// Create a new status view with optional configuration.
+    ///
+    /// # Arguments
+    /// * `width` - Terminal width
+    /// * `height` - Terminal height
+    /// * `refresh_fn` - Optional callback for auto-refresh
+    /// * `refresh_interval_secs` - Refresh interval in seconds (default: 5)
+    /// * `cluster_status` - Cluster status (default: Unknown)
+    /// * `urls_data` - URLs tab data
+    /// * `services_data` - Services tab data
+    /// * `nodes_data` - Nodes tab data
+    /// * `pods_data` - Pods tab data
+    #[builder]
+    pub fn new(
+        width: usize,
+        height: usize,
+        refresh_fn: Option<RefreshFn>,
+        #[builder(default = 5)] refresh_interval_secs: u64,
+        #[builder(default)] cluster_status: ClusterStatus,
+        #[builder(default)] urls_data: TabData,
+        #[builder(default)] services_data: TabData,
+        #[builder(default)] nodes_data: TabData,
+        #[builder(default)] pods_data: TabData,
+    ) -> Self {
         let tabs: Vec<Tab> =
             StatusTab::all().iter().map(|t| Tab::new(t.id(), t.label()).key(t.key())).collect();
 
@@ -309,18 +332,21 @@ impl DevStatusView {
             .inactive_color(Color::BrightBlack)
             .key_color(Color::Cyan);
 
-        Self {
+        // Show offline modal automatically when cluster is offline
+        let show_offline_modal = matches!(cluster_status, ClusterStatus::Offline);
+
+        let mut view = Self {
             width,
             height,
             title: "InferaDB Development Cluster".to_string(),
             subtitle: "Status".to_string(),
             tab_bar,
             current_tab: StatusTab::Urls,
-            cluster_status: ClusterStatus::Unknown,
-            urls_data: TabData::default(),
-            services_data: TabData::default(),
-            nodes_data: TabData::default(),
-            pods_data: TabData::default(),
+            cluster_status,
+            urls_data,
+            services_data,
+            nodes_data,
+            pods_data,
             columns: Vec::new(),
             rows: Vec::new(),
             scroll: ScrollState::new(),
@@ -332,69 +358,14 @@ impl DevStatusView {
                 ("↑/↓", "select"),
                 ("q", "quit"),
             ],
-            refresh_fn: None,
-            refresh_interval_secs: 5,
-            show_offline_modal: false,
-        }
-    }
+            refresh_fn,
+            refresh_interval_secs,
+            show_offline_modal,
+        };
 
-    /// Set the refresh callback for auto-refresh.
-    pub fn with_refresh<F>(mut self, f: F) -> Self
-    where
-        F: Fn() -> RefreshResult + Send + Sync + 'static,
-    {
-        self.refresh_fn = Some(Arc::new(f));
-        self
-    }
-
-    /// Set the refresh interval in seconds (default: 5).
-    #[must_use]
-    pub const fn with_refresh_interval(mut self, secs: u64) -> Self {
-        self.refresh_interval_secs = secs;
-        self
-    }
-
-    /// Set the cluster status.
-    #[must_use]
-    pub const fn with_status(mut self, status: ClusterStatus) -> Self {
-        self.cluster_status = status;
-        // Show offline modal automatically when cluster is offline
-        if matches!(status, ClusterStatus::Offline) {
-            self.show_offline_modal = true;
-        }
-        self
-    }
-
-    /// Set URLs data.
-    #[must_use]
-    pub fn with_urls(mut self, data: TabData) -> Self {
-        self.urls_data = data;
-        self.sync_current_tab_data();
-        self
-    }
-
-    /// Set services data.
-    #[must_use]
-    pub fn with_services(mut self, data: TabData) -> Self {
-        self.services_data = data;
-        self.sync_current_tab_data();
-        self
-    }
-
-    /// Set nodes data.
-    #[must_use]
-    pub fn with_nodes(mut self, data: TabData) -> Self {
-        self.nodes_data = data;
-        self.sync_current_tab_data();
-        self
-    }
-
-    /// Set pods data.
-    #[must_use]
-    pub fn with_pods(mut self, data: TabData) -> Self {
-        self.pods_data = data;
-        self.sync_current_tab_data();
-        self
+        // Sync current tab data to populate columns/rows
+        view.sync_current_tab_data();
+        view
     }
 
     /// Sync internal columns/rows with current tab's data.
@@ -754,16 +725,46 @@ mod tests {
 
     #[test]
     fn test_status_view_creation() {
-        let view = DevStatusView::new(80, 24);
+        let view = DevStatusView::builder().width(80).height(24).build();
         assert_eq!(view.current_tab, StatusTab::Urls);
         assert_eq!(view.cluster_status, ClusterStatus::Unknown);
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut view = DevStatusView::new(80, 24);
+        let mut view = DevStatusView::builder().width(80).height(24).build();
         view.update(DevStatusViewMsg::SwitchTab("services".to_string()));
         assert_eq!(view.current_tab, StatusTab::Services);
+    }
+
+    #[test]
+    fn test_builder_defaults() {
+        let view = DevStatusView::builder().width(100).height(50).build();
+        assert_eq!(view.refresh_interval_secs, 5);
+        assert_eq!(view.cluster_status, ClusterStatus::Unknown);
+        assert!(view.refresh_fn.is_none());
+    }
+
+    #[test]
+    fn test_builder_with_status() {
+        let view = DevStatusView::builder()
+            .width(80)
+            .height(24)
+            .cluster_status(ClusterStatus::Online)
+            .build();
+        assert_eq!(view.cluster_status, ClusterStatus::Online);
+        assert!(!view.show_offline_modal);
+    }
+
+    #[test]
+    fn test_builder_offline_shows_modal() {
+        let view = DevStatusView::builder()
+            .width(80)
+            .height(24)
+            .cluster_status(ClusterStatus::Offline)
+            .build();
+        assert_eq!(view.cluster_status, ClusterStatus::Offline);
+        assert!(view.show_offline_modal);
     }
 
     #[test]

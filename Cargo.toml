@@ -62,6 +62,9 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "j
 # Unix utilities
 libc = "0.2"
 
+# Builder pattern
+bon = "3.8"
+
 # Other
 url = "2"
 chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }

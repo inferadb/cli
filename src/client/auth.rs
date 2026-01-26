@@ -128,13 +128,11 @@ impl OAuthFlow {
             .expires_in()
             .map(|d| chrono::Utc::now() + chrono::Duration::seconds(d.as_secs() as i64));
 
-        if let Some(refresh) = refresh_token
-            && let Some(expires) = expires_at
-        {
-            return Ok(Credentials::with_refresh(access_token, refresh, expires));
-        }
-
-        Ok(Credentials::new(access_token))
+        Ok(Credentials::builder()
+            .access_token(access_token)
+            .maybe_refresh_token(refresh_token)
+            .maybe_expires_at(expires_at)
+            .build())
     }
 }
 

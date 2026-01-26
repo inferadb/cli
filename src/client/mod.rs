@@ -6,6 +6,7 @@
 pub mod auth;
 
 pub use auth::OAuthFlow;
+use bon::bon;
 use inferadb::{
     BearerCredentialsConfig, Client, VaultClient,
     client::OrganizationClient,
@@ -158,18 +159,19 @@ pub struct Context {
     pub debug: bool,
 }
 
+#[bon]
 impl Context {
     /// Create a new context from CLI options.
-    #[allow(clippy::too_many_arguments)]
+    #[builder]
     pub fn new(
         profile_name: Option<String>,
         org_override: Option<String>,
         vault_override: Option<String>,
         output_format: String,
         color: String,
-        quiet: bool,
-        yes: bool,
-        debug: bool,
+        #[builder(default)] quiet: bool,
+        #[builder(default)] yes: bool,
+        #[builder(default)] debug: bool,
     ) -> Result<Self> {
         let config = Config::load()?;
 
@@ -265,16 +267,13 @@ mod tests {
     #[test]
     fn test_context_creation() {
         // This test requires no config file to exist
-        let ctx = Context::new(
-            None,
-            Some("org123".to_string()),
-            Some("vault456".to_string()),
-            "table".to_string(),
-            "never".to_string(),
-            false,
-            true,
-            false,
-        );
+        let ctx = Context::builder()
+            .org_override("org123".to_string())
+            .vault_override("vault456".to_string())
+            .output_format("table".to_string())
+            .color("never".to_string())
+            .yes(true)
+            .build();
 
         assert!(ctx.is_ok());
     }

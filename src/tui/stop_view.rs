@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_stop_view_with_steps() {
-        let steps = vec![InstallStep::new("Test step")];
+        let steps = vec![InstallStep::builder().name("Test step").build()];
         let view = DevStopView::new(steps);
         assert!(!view.is_success());
     }
