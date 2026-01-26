@@ -2,6 +2,7 @@
 
 use std::time::{Duration, Instant};
 
+use bon::builder;
 use serde::Serialize;
 
 use crate::{client::Context, config::CredentialStore, error::Result};
@@ -479,6 +480,7 @@ pub async fn stats(ctx: &Context, trends: bool, compact: bool) -> Result<()> {
 }
 
 /// Show recent changes in the vault.
+#[builder]
 pub async fn what_changed(
     ctx: &Context,
     since: Option<&str>,
@@ -486,7 +488,7 @@ pub async fn what_changed(
     focus: Option<&str>,
     actor: Option<&str>,
     resource: Option<&str>,
-    compact: bool,
+    #[builder(default)] compact: bool,
 ) -> Result<()> {
     // Parse the "since" time
     let since_time = parse_time_spec(since.unwrap_or("1d"));

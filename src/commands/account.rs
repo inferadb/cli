@@ -2,6 +2,7 @@
 //!
 //! Manage the authenticated user's account, emails, and sessions.
 
+use bon::builder;
 use serde::Serialize;
 
 use crate::{client::Context, error::Result, output::Displayable};
@@ -327,14 +328,17 @@ pub async fn sessions_revoke_others(ctx: &Context) -> Result<()> {
 // ============================================================================
 
 /// Request or confirm password reset.
+#[builder]
 pub async fn password_reset(
     ctx: &Context,
-    request: bool,
-    confirm: bool,
+    #[builder(default)] request: bool,
+    #[builder(default)] confirm: bool,
     email: Option<&str>,
     token: Option<&str>,
-    _new_password: Option<&str>,
+    new_password: Option<&str>,
 ) -> Result<()> {
+    // Silence unused warning - new_password will be used when password reset is fully implemented
+    let _ = new_password;
     if request {
         // Request a password reset email
         let Some(email) = email else {

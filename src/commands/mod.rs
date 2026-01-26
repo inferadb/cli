@@ -48,7 +48,16 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
 
         // Authorization commands
         Commands::Check { subject, permission, resource, trace, explain, context } => {
-            check(ctx, subject, permission, resource, *trace, *explain, context.as_deref()).await
+            check()
+                .ctx(ctx)
+                .subject(subject)
+                .permission(permission)
+                .resource(resource)
+                .trace(*trace)
+                .explain(*explain)
+                .maybe_context_json(context.as_deref())
+                .call()
+                .await
         },
 
         Commands::Simulate {
@@ -58,15 +67,15 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
             add_relationships,
             remove_relationships,
         } => {
-            check::simulate(
-                ctx,
-                subject,
-                permission,
-                resource,
-                add_relationships,
-                remove_relationships,
-            )
-            .await
+            check::simulate()
+                .ctx(ctx)
+                .subject(subject)
+                .permission(permission)
+                .resource(resource)
+                .add_relationships(add_relationships)
+                .remove_relationships(remove_relationships)
+                .call()
+                .await
         },
 
         Commands::Expand { resource, relation, max_depth } => {
@@ -128,16 +137,16 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
 
         // What Changed
         Commands::WhatChanged { since, until, focus, actor, resource, compact } => {
-            identity::what_changed(
-                ctx,
-                since.as_deref(),
-                until.as_deref(),
-                focus.as_deref(),
-                actor.as_deref(),
-                resource.as_deref(),
-                *compact,
-            )
-            .await
+            identity::what_changed()
+                .ctx(ctx)
+                .maybe_since(since.as_deref())
+                .maybe_until(until.as_deref())
+                .maybe_focus(focus.as_deref())
+                .maybe_actor(actor.as_deref())
+                .maybe_resource(resource.as_deref())
+                .compact(*compact)
+                .call()
+                .await
         },
 
         // Interactive
@@ -210,15 +219,15 @@ async fn account_dispatch(ctx: &Context, sub: &crate::cli::AccountCommands) -> R
         },
         AccountCommands::Password(password_cmd) => match password_cmd.as_ref() {
             PasswordCommands::Reset { request, confirm, email, token, new_password } => {
-                account::password_reset(
-                    ctx,
-                    *request,
-                    *confirm,
-                    email.as_deref(),
-                    token.as_deref(),
-                    new_password.as_deref(),
-                )
-                .await
+                account::password_reset()
+                    .ctx(ctx)
+                    .request(*request)
+                    .confirm(*confirm)
+                    .maybe_email(email.as_deref())
+                    .maybe_token(token.as_deref())
+                    .maybe_new_password(new_password.as_deref())
+                    .call()
+                    .await
             },
         },
     }
@@ -231,15 +240,15 @@ async fn relationships_dispatch(
     use crate::cli::RelationshipsCommands;
     match sub {
         RelationshipsCommands::List { resource, subject, relation, limit, cursor } => {
-            relationships_list(
-                ctx,
-                resource.as_deref(),
-                subject.as_deref(),
-                relation.as_deref(),
-                *limit,
-                cursor.as_deref(),
-            )
-            .await
+            relationships_list()
+                .ctx(ctx)
+                .maybe_resource(resource.as_deref())
+                .maybe_subject(subject.as_deref())
+                .maybe_relation(relation.as_deref())
+                .limit(*limit)
+                .maybe_cursor(cursor.as_deref())
+                .call()
+                .await
         },
         RelationshipsCommands::Add { subject, relation, resource, if_not_exists } => {
             relationships_add(ctx, subject, relation, resource, *if_not_exists).await
@@ -485,14 +494,14 @@ async fn orgs_dispatch(ctx: &Context, sub: &crate::cli::OrgsCommands) -> Result<
 
         // Audit logs
         OrgsCommands::AuditLogs { actor, action, from, to } => {
-            orgs::audit_logs(
-                ctx,
-                actor.as_deref(),
-                action.as_deref(),
-                from.as_deref(),
-                to.as_deref(),
-            )
-            .await
+            orgs::audit_logs()
+                .ctx(ctx)
+                .maybe_actor(actor.as_deref())
+                .maybe_action(action.as_deref())
+                .maybe_from(from.as_deref())
+                .maybe_to(to.as_deref())
+                .call()
+                .await
         },
     }
 }
@@ -533,19 +542,26 @@ async fn dev_dispatch(ctx: &Context, sub: &crate::cli::DevCommands) -> Result<()
             force,
             commit,
         } => {
-            dev::start(
-                ctx,
-                *skip_build,
-                *interactive,
-                tailscale_client.clone(),
-                tailscale_secret.clone(),
-                *force,
-                commit.as_deref(),
-            )
-            .await
+            dev::start()
+                .ctx(ctx)
+                .skip_build(*skip_build)
+                .interactive(*interactive)
+                .maybe_tailscale_client(tailscale_client.clone())
+                .maybe_tailscale_secret(tailscale_secret.clone())
+                .force(*force)
+                .maybe_commit(commit.as_deref())
+                .call()
+                .await
         },
         DevCommands::Stop { destroy, yes, with_credentials, interactive } => {
-            dev::stop(ctx, *destroy, *yes, *with_credentials, *interactive).await
+            dev::stop()
+                .ctx(ctx)
+                .destroy(*destroy)
+                .yes(*yes)
+                .with_credentials(*with_credentials)
+                .interactive(*interactive)
+                .call()
+                .await
         },
         DevCommands::Status { interactive } => dev::dev_status(ctx, *interactive).await,
         DevCommands::Logs { follow, service, tail } => {

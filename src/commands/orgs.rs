@@ -1,5 +1,6 @@
 //! Organization management commands.
 
+use bon::builder;
 use serde::Serialize;
 
 use crate::{client::Context, error::Result, output::Displayable};
@@ -1295,6 +1296,7 @@ pub async fn certificates_revoke(ctx: &Context, id: &str) -> Result<()> {
 // ============================================================================
 
 /// View audit logs.
+#[builder]
 pub async fn audit_logs(
     ctx: &Context,
     actor: Option<&str>,

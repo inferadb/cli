@@ -35,6 +35,7 @@ pub mod tailscale;
 // Re-export public items from submodules for convenience
 use std::process::Command;
 
+use bon::builder;
 use commands::run_command_streaming;
 pub use constants::*;
 use docker::cluster_exists;
@@ -50,13 +51,14 @@ use crate::{
 // ============================================================================
 
 /// Run dev start - create or resume local development cluster.
+#[builder]
 pub async fn start(
     ctx: &Context,
-    skip_build: bool,
-    interactive: bool,
+    #[builder(default)] skip_build: bool,
+    #[builder(default)] interactive: bool,
     tailscale_client: Option<String>,
     tailscale_secret: Option<String>,
-    force: bool,
+    #[builder(default)] force: bool,
     commit: Option<&str>,
 ) -> Result<()> {
     start::start(ctx, skip_build, interactive, tailscale_client, tailscale_secret, force, commit)
@@ -64,12 +66,13 @@ pub async fn start(
 }
 
 /// Run dev stop - pause or destroy the cluster.
+#[builder]
 pub async fn stop(
     ctx: &Context,
-    destroy: bool,
-    yes: bool,
-    with_credentials: bool,
-    interactive: bool,
+    #[builder(default)] destroy: bool,
+    #[builder(default)] yes: bool,
+    #[builder(default)] with_credentials: bool,
+    #[builder(default)] interactive: bool,
 ) -> Result<()> {
     stop::stop(ctx, destroy, yes, with_credentials, interactive).await
 }

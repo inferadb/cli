@@ -1,5 +1,6 @@
 //! Authorization check commands.
 
+use bon::builder;
 use serde::Serialize;
 
 use crate::{
@@ -8,13 +9,14 @@ use crate::{
 };
 
 /// Check authorization.
+#[builder]
 pub async fn check(
     ctx: &Context,
     subject: &str,
     permission: &str,
     resource: &str,
-    trace: bool,
-    explain: bool,
+    #[builder(default)] trace: bool,
+    #[builder(default)] explain: bool,
     context_json: Option<&str>,
 ) -> Result<()> {
     #[derive(Serialize)]
@@ -102,13 +104,14 @@ pub async fn check(
 }
 
 /// Simulate authorization with hypothetical changes.
+#[builder]
 pub async fn simulate(
     ctx: &Context,
     subject: &str,
     permission: &str,
     resource: &str,
-    add_relationships: &[String],
-    remove_relationships: &[String],
+    #[builder(default)] add_relationships: &[String],
+    #[builder(default)] remove_relationships: &[String],
 ) -> Result<()> {
     let client = ctx.client().await?;
     let vault = client.vault();

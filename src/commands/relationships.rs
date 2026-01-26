@@ -1,5 +1,6 @@
 //! Relationship management commands.
 
+use bon::builder;
 use inferadb::Relationship;
 use serde::Serialize;
 
@@ -23,12 +24,13 @@ impl Displayable for RelationshipRow {
 }
 
 /// List relationships.
+#[builder]
 pub async fn relationships_list(
     ctx: &Context,
     resource: Option<&str>,
     subject: Option<&str>,
     relation: Option<&str>,
-    limit: u32,
+    #[builder(default = 100)] limit: u32,
     cursor: Option<&str>,
 ) -> Result<()> {
     let client = ctx.client().await?;
