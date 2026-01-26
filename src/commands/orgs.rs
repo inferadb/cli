@@ -240,14 +240,10 @@ pub async fn create(ctx: &Context, name: &str, tier: Option<&str>) -> Result<()>
 pub async fn get(ctx: &Context, id: Option<&str>) -> Result<()> {
     let client = ctx.client().await?;
 
-    let org_id = id.or_else(|| ctx.profile_org_id());
-
-    if org_id.is_none() {
+    let Some(org_id) = id.or_else(|| ctx.profile_org_id()) else {
         ctx.output.error("No organization specified. Use --org or configure a profile.");
         return Ok(());
-    }
-
-    let org_id = org_id.unwrap();
+    };
 
     let page = client.organizations().list().await?;
     let org = page.items.iter().find(|o| o.id == org_id || o.name == org_id);
@@ -613,12 +609,10 @@ pub async fn vaults_get(ctx: &Context, id: Option<&str>) -> Result<()> {
     let client = ctx.client().await?;
     let org_id = ctx.require_org_id()?;
 
-    let vault_id = id.or_else(|| ctx.profile_vault_id());
-    if vault_id.is_none() {
+    let Some(vault_id) = id.or_else(|| ctx.profile_vault_id()) else {
         ctx.output.error("No vault specified. Use --vault or configure a profile.");
         return Ok(());
-    }
-    let vault_id = vault_id.unwrap();
+    };
 
     let org = client.organization(&org_id);
     let vault = org.vaults().get(vault_id).await?;

@@ -156,16 +156,3 @@ pub async fn history(
     ctx.output.info("Relationship history not yet implemented.");
     Ok(())
 }
-
-/// Validate relationships against schema.
-pub async fn validate(ctx: &Context, file: Option<&str>) -> Result<()> {
-    if let Some(f) = file {
-        ctx.output.info(&format!("Validating relationships in '{f}'..."));
-        // TODO: Read file and validate
-    } else {
-        ctx.output.info("Validating relationships in current vault...");
-        // TODO: Validate against active schema
-    }
-    ctx.output.info("Validation not yet implemented.");
-    Ok(())
-}

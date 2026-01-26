@@ -97,7 +97,15 @@ fn clone_repo(
     let clone_ok = if commit.is_some() {
         run_command_optional(
             "git",
-            &["clone", "--recurse-submodules", "--quiet", repo_url, target_dir.to_str().unwrap()],
+            &[
+                "clone",
+                "--recurse-submodules",
+                "--quiet",
+                repo_url,
+                target_dir
+                    .to_str()
+                    .ok_or_else(|| format!("Invalid path: {}", target_dir.display()))?,
+            ],
         )
         .is_some()
     } else {
@@ -111,7 +119,9 @@ fn clone_repo(
                 "--shallow-submodules",
                 "--quiet",
                 repo_url,
-                target_dir.to_str().unwrap(),
+                target_dir
+                    .to_str()
+                    .ok_or_else(|| format!("Invalid path: {}", target_dir.display()))?,
             ],
         )
         .is_some()
@@ -122,8 +132,18 @@ fn clone_repo(
     }
 
     if let Some(ref_spec) = commit {
-        if run_command_optional("git", &["-C", target_dir.to_str().unwrap(), "checkout", ref_spec])
-            .is_none()
+        if run_command_optional(
+            "git",
+            &[
+                "-C",
+                target_dir
+                    .to_str()
+                    .ok_or_else(|| format!("Invalid path: {}", target_dir.display()))?,
+                "checkout",
+                ref_spec,
+            ],
+        )
+        .is_none()
         {
             return Err(format!("Failed to checkout '{ref_spec}'"));
         }
@@ -131,7 +151,9 @@ fn clone_repo(
             "git",
             &[
                 "-C",
-                target_dir.to_str().unwrap(),
+                target_dir
+                    .to_str()
+                    .ok_or_else(|| format!("Invalid path: {}", target_dir.display()))?,
                 "submodule",
                 "update",
                 "--init",
@@ -293,7 +315,12 @@ fn build_and_push_images(_registry_ip: &str) -> std::result::Result<StepOutcome,
         if dockerfile.exists() {
             run_command(
                 "docker",
-                &["build", "-t", &format!("{name}:latest"), dir.to_str().unwrap()],
+                &[
+                    "build",
+                    "-t",
+                    &format!("{name}:latest"),
+                    dir.to_str().ok_or_else(|| format!("Invalid path: {}", dir.display()))?,
+                ],
             )
             .map_err(|e| e.to_string())?;
             run_command(
@@ -436,8 +463,11 @@ spec:
     let patch_file = deploy_dir.join("flux/apps/dev/registry-patch.yaml");
     fs::write(&patch_file, &registry_patch).map_err(|e| e.to_string())?;
 
-    run_command("kubectl", &["apply", "-k", deploy_dir.join("flux/apps/dev").to_str().unwrap()])
-        .map_err(|e| e.to_string())?;
+    let kustomize_path = deploy_dir.join("flux/apps/dev");
+    let kustomize_path_str = kustomize_path
+        .to_str()
+        .ok_or_else(|| format!("Invalid path: {}", kustomize_path.display()))?;
+    run_command("kubectl", &["apply", "-k", kustomize_path_str]).map_err(|e| e.to_string())?;
 
     std::thread::sleep(Duration::from_secs(10));
 

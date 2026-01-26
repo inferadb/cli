@@ -7,9 +7,10 @@ use std::time::Duration;
 use teapot::style::{Color, RESET};
 
 use super::{
-    CLUSTER_NAME,
     commands::{parse_kubectl_apply_line, run_command, run_command_optional},
-    constants::{INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS},
+    constants::{
+        CLUSTER_NAME, INFERADB_DEPLOYMENTS, INFERADB_NAMESPACE, RESOURCE_TERMINATE_DELAY_SECS,
+    },
     docker::docker_container_exists,
     kubernetes::{get_inferadb_deployments, get_pvcs},
     output::{
@@ -182,10 +183,8 @@ fn redeploy_applications(deploy_dir: &std::path::Path) {
     print_section_header("Redeploying Applications");
 
     let spin = start_spinner("Applying Kubernetes manifests");
-    let apply_output = run_command(
-        "kubectl",
-        &["apply", "-k", deploy_dir.join("flux/apps/dev").to_str().unwrap()],
-    );
+    let kustomize_path = deploy_dir.join("flux/apps/dev");
+    let apply_output = run_command("kubectl", &["apply", "-k", &kustomize_path.to_string_lossy()]);
     spin.clear();
 
     apply_output.map_or_else(

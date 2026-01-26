@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-// Re-export StepResult from Teapot for convenience
-pub use teapot::components::StepResult;
+// Import StepResult from Teapot for internal use
+pub(crate) use teapot::components::StepResult;
 use teapot::{
     components::{Phase, TaskProgressMsg, TaskProgressView, TaskStep},
     runtime::{Cmd, Model, Sub},
@@ -71,11 +71,12 @@ impl DevInstallView {
     pub fn new(steps: Vec<InstallStep>) -> Self {
         let task_steps: Vec<TaskStep> = steps.into_iter().map(std::convert::Into::into).collect();
 
-        let inner = TaskProgressView::builder(task_steps)
+        let inner = TaskProgressView::builder()
+            .steps(task_steps)
             .title("InferaDB Development Cluster")
             .subtitle("Install")
-            .auto_start()
-            .external_control()
+            .auto_start(true)
+            .external_control(true)
             .build();
 
         Self { inner }
@@ -83,22 +84,24 @@ impl DevInstallView {
 
     /// Set custom title.
     pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.inner = TaskProgressView::builder(vec![])
+        self.inner = TaskProgressView::builder()
+            .steps(vec![])
             .title(title)
             .subtitle("Install")
-            .auto_start()
-            .external_control()
+            .auto_start(true)
+            .external_control(true)
             .build();
         self
     }
 
     /// Set custom subtitle.
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
-        self.inner = TaskProgressView::builder(vec![])
+        self.inner = TaskProgressView::builder()
+            .steps(vec![])
             .title("InferaDB Development Cluster")
             .subtitle(subtitle)
-            .auto_start()
-            .external_control()
+            .auto_start(true)
+            .external_control(true)
             .build();
         self
     }

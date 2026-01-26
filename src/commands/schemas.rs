@@ -187,19 +187,6 @@ pub async fn push(
     Ok(())
 }
 
-/// Activate a schema version.
-#[allow(dead_code)]
-pub async fn activate(ctx: &Context, version: &str) -> Result<()> {
-    let client = ctx.client().await?;
-    let schemas = client.vault().schemas();
-
-    ctx.output.info(&format!("Activating schema version {version}..."));
-    let schema = schemas.activate(version).await?;
-
-    ctx.output.success(&format!("Schema version {} is now active.", schema.version));
-    Ok(())
-}
-
 /// Rollback to a previous schema version.
 pub async fn rollback(ctx: &Context, version: Option<&str>) -> Result<()> {
     let client = ctx.client().await?;
@@ -397,31 +384,6 @@ entity Resource {
     ctx.output.info("  1. Edit the schema file to define your authorization model");
     ctx.output.info("  2. Validate: inferadb schemas validate schema.ipl");
     ctx.output.info("  3. Push: inferadb schemas push schema.ipl --activate");
-
-    Ok(())
-}
-
-/// Delete a schema version.
-#[allow(dead_code)]
-pub async fn delete(ctx: &Context, version: &str) -> Result<()> {
-    let client = ctx.client().await?;
-    let schemas = client.vault().schemas();
-
-    // Check if it's the active version
-    let schema = schemas.get(version).await?;
-    if schema.status.is_active() {
-        ctx.output.error("Cannot delete the active schema version.");
-        ctx.output.info("Activate a different version first, then delete this one.");
-        return Ok(());
-    }
-
-    if !ctx.confirm_danger(&format!("Delete schema version {version}?"))? {
-        ctx.output.info("Cancelled.");
-        return Ok(());
-    }
-
-    schemas.delete(version).await?;
-    ctx.output.success(&format!("Schema version {version} deleted."));
 
     Ok(())
 }
@@ -808,11 +770,10 @@ pub async fn copy(
         .map(std::string::ToString::to_string)
         .or_else(|| ctx.profile_vault_id().map(std::string::ToString::to_string));
 
-    if source_vault.is_none() {
+    let Some(source_vault) = source_vault else {
         ctx.output.error("No source vault specified. Use --from-vault or configure a profile.");
         return Ok(());
-    }
-    let source_vault = source_vault.unwrap();
+    };
 
     ctx.output.info(&format!("Copying schema from vault '{source_vault}' to vault '{to_vault}'"));
 
@@ -844,12 +805,12 @@ pub async fn copy(
 
     // Get source schema content
     let source_org = from_org.or_else(|| ctx.profile_org_id());
-    if source_org.is_none() {
+    let Some(source_org) = source_org else {
         ctx.output.error("No source organization. Use --from-org or configure a profile.");
         return Ok(());
-    }
+    };
 
-    let org = client.organization(source_org.unwrap());
+    let org = client.organization(source_org);
     let vault = org.vault(&source_vault);
     let schemas = vault.schemas();
 
@@ -867,13 +828,12 @@ pub async fn copy(
     };
 
     // Push to target vault
-    let target_org = to_org.or_else(|| ctx.profile_org_id());
-    if target_org.is_none() {
+    let Some(target_org) = to_org.or_else(|| ctx.profile_org_id()) else {
         ctx.output.error("No target organization. Use --to-org or configure a profile.");
         return Ok(());
-    }
+    };
 
-    let target_vault_client = client.organization(target_org.unwrap()).vault(to_vault);
+    let target_vault_client = client.organization(target_org).vault(to_vault);
     let target_schemas = target_vault_client.schemas();
 
     let pushed = target_schemas.push(&schema_content).await?;

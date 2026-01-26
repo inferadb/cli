@@ -1,6 +1,6 @@
 //! Authentication commands: login, logout, register.
 
-use teapot::forms::{Form, Group, InputField};
+use teapot::forms::{Field, Form, Group};
 
 use crate::{
     client::{Context, OAuthFlow, auth},
@@ -58,20 +58,22 @@ pub async fn register(ctx: &Context, email: Option<&str>, name: Option<&str>) ->
 
         if email.is_none() {
             group = group.field(
-                InputField::new("email")
+                Field::input()
+                    .key("email")
                     .title(t!("prompt-email"))
                     .placeholder("user@example.com")
-                    .required()
+                    .required(true)
                     .build(),
             );
         }
 
         if name.is_none() {
             group = group.field(
-                InputField::new("name")
+                Field::input()
+                    .key("name")
                     .title(t!("prompt-name"))
                     .placeholder("Your Name")
-                    .required()
+                    .required(true)
                     .build(),
             );
         }

@@ -68,7 +68,6 @@ impl CliClient {
 
         // Check if credentials are expired
         if credentials.is_expired() {
-            // TODO: Implement token refresh
             return Err(Error::AuthRequired);
         }
 

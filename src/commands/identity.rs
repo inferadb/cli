@@ -159,8 +159,8 @@ pub async fn ping(ctx: &Context, count: u32, control: bool, engine: bool) -> Res
     }
 
     if !latencies.is_empty() {
-        let min = latencies.iter().min().unwrap();
-        let max = latencies.iter().max().unwrap();
+        let min = latencies.iter().min().expect("checked non-empty");
+        let max = latencies.iter().max().expect("checked non-empty");
         let avg = latencies.iter().sum::<u64>() / latencies.len() as u64;
         println!();
         println!("Statistics:");
@@ -314,17 +314,12 @@ async fn show_health(ctx: &Context, verbose: bool) -> Result<()> {
 }
 
 /// Show CLI version.
-pub async fn version(ctx: &Context, check_updates: bool) -> Result<()> {
+pub async fn version(ctx: &Context) -> Result<()> {
+    let _ = ctx; // Suppress unused warning
     let version = env!("CARGO_PKG_VERSION");
     let name = env!("CARGO_PKG_NAME");
 
     println!("{name} {version}");
-
-    if check_updates {
-        ctx.output.info("Checking for updates...");
-        // TODO: Implement update check
-        ctx.output.info("Update check not yet implemented.");
-    }
 
     Ok(())
 }

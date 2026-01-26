@@ -115,7 +115,10 @@ impl OAuthFlow {
                     let body = response.bytes().await.map_err(std::io::Error::other)?;
 
                     Ok::<_, std::io::Error>(
-                        http::Response::builder().status(status).body(body.to_vec()).unwrap(),
+                        http::Response::builder()
+                            .status(status)
+                            .body(body.to_vec())
+                            .expect("valid response"),
                     )
                 }
             })

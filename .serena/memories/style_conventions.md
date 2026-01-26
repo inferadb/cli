@@ -109,6 +109,12 @@ Use `bon` for InferaDB CLI's own types:
 
 Types that wrap teapot components (e.g., `DevStopView`, `DevInstallView`, `DevUninstallView`) should remain thin delegates—just an `inner: TaskProgressView` field with methods that forward to the inner type.
 
+## Re-export Policy
+
+- **No wildcard re-exports**: Never use `pub use module::*`. Always list items explicitly.
+- **Internal types only**: Only re-export types defined in this crate. Don't re-export external crate types.
+- **Crate-local re-exports**: Use `pub(crate) use` for types needed internally but not in the public API.
+
 ## Dependencies Philosophy
 
 - Use `clap` with derive macros for CLI

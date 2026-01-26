@@ -146,12 +146,6 @@ pub async fn refresh(ctx: &Context) -> Result<()> {
     ctx.output.warn("Token refresh not yet implemented.");
     ctx.output.info("Run 'inferadb login' to obtain a fresh token.");
 
-    // TODO: Implement OAuth2 token refresh flow
-    // This would require:
-    // 1. Get the refresh token from credentials
-    // 2. Call the OAuth2 token endpoint with grant_type=refresh_token
-    // 3. Store the new access_token and possibly new refresh_token
-
     Ok(())
 }
 

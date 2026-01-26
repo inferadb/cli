@@ -151,7 +151,6 @@ pub enum ClusterStatus {
 
 impl ClusterStatus {
     /// Get a `StatusBadge` for this status.
-    #[must_use]
     pub fn badge(&self) -> StatusBadge {
         match self {
             Self::Online => StatusBadge::new("Online").variant(BadgeVariant::Success),
@@ -206,7 +205,6 @@ impl EnvironmentStatus {
     }
 
     /// Get a `StatusBadge` for this status.
-    #[must_use]
     pub fn badge(&self) -> StatusBadge {
         StatusBadge::new(self.text()).icon(self.indicator()).color(self.color())
     }

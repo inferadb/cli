@@ -70,7 +70,7 @@ pub async fn check(
         permission: permission.to_string(),
         resource: resource.to_string(),
         allowed,
-        reason: None, // TODO: Add when explain is implemented
+        reason: None,
     };
 
     if ctx.output.format() == crate::output::OutputFormat::Table {
@@ -150,8 +150,6 @@ pub async fn expand(ctx: &Context, resource: &str, relation: &str, _max_depth: u
     ctx.output.info(&format!("Expanding {resource}#{relation}"));
     ctx.output.info("");
 
-    // TODO: Implement expand using SDK
-    // For now, list subjects as a fallback
     let subjects: Vec<String> =
         vault.subjects().with_permission(relation).on_resource(resource).collect().await?;
 

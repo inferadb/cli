@@ -111,11 +111,7 @@ pub enum Commands {
     },
 
     /// Show CLI version
-    Version {
-        /// Check for updates
-        #[arg(long)]
-        check: bool,
-    },
+    Version,
 
     /// Check authorization
     Check {
@@ -551,12 +547,6 @@ pub enum RelationshipsCommands {
         /// Time range end
         #[arg(long)]
         to: Option<String>,
-    },
-
-    /// Validate relationships against schema
-    Validate {
-        /// File to validate
-        file: Option<String>,
     },
 }
 
@@ -1722,16 +1712,14 @@ fn localize_root_args(mut cmd: clap::Command) -> clap::Command {
 /// Returns the profile name (if any) and the remaining arguments.
 #[must_use]
 pub fn parse_profile_prefix(args: Vec<String>) -> (Option<String>, Vec<String>) {
-    if args.len() < 2 {
-        return (None, args);
-    }
-
-    // First arg is the binary name
+    // First arg is binary name, second might be @profile
     let mut iter = args.into_iter();
-    let binary = iter.next().unwrap();
-
-    // Check if second arg starts with @
-    let second = iter.next().unwrap();
+    let Some(binary) = iter.next() else {
+        return (None, vec![]);
+    };
+    let Some(second) = iter.next() else {
+        return (None, vec![binary]);
+    };
     if second.starts_with('@') && second.len() > 1 {
         let profile = second[1..].to_string();
         let remaining: Vec<String> = std::iter::once(binary).chain(iter).collect();

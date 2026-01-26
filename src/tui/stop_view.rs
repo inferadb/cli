@@ -40,10 +40,11 @@ impl DevStopView {
             })
             .collect();
 
-        let inner = TaskProgressView::builder(task_steps)
+        let inner = TaskProgressView::builder()
+            .steps(task_steps)
             .title("InferaDB Development Cluster")
             .subtitle("Stop")
-            .auto_start()
+            .auto_start(true)
             .build();
 
         Self { inner }
@@ -52,8 +53,12 @@ impl DevStopView {
     /// Set custom title.
     pub fn title(mut self, title: impl Into<String>) -> Self {
         // Rebuild with new title
-        let inner =
-            TaskProgressView::builder(vec![]).title(title).subtitle("Stop").auto_start().build();
+        let inner = TaskProgressView::builder()
+            .steps(vec![])
+            .title(title)
+            .subtitle("Stop")
+            .auto_start(true)
+            .build();
         self.inner = inner;
         self
     }
@@ -61,10 +66,11 @@ impl DevStopView {
     /// Set custom subtitle.
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         // Rebuild with new subtitle
-        let inner = TaskProgressView::builder(vec![])
+        let inner = TaskProgressView::builder()
+            .steps(vec![])
             .title("InferaDB Development Cluster")
             .subtitle(subtitle)
-            .auto_start()
+            .auto_start(true)
             .build();
         self.inner = inner;
         self

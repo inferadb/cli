@@ -44,7 +44,7 @@ pub async fn execute(ctx: &Context, command: &Commands) -> Result<()> {
         Commands::Ping { count, control, engine } => ping(ctx, *count, *control, *engine).await,
         Commands::Doctor => doctor(ctx).await,
         Commands::Health { watch, verbose } => health(ctx, *watch, *verbose).await,
-        Commands::Version { check } => identity::version(ctx, *check).await,
+        Commands::Version => identity::version(ctx).await,
 
         // Authorization commands
         Commands::Check { subject, permission, resource, trace, explain, context } => {
@@ -258,9 +258,6 @@ async fn relationships_dispatch(
         },
         RelationshipsCommands::History { resource, from, to } => {
             relationships::history(ctx, resource.as_deref(), from.as_deref(), to.as_deref()).await
-        },
-        RelationshipsCommands::Validate { file } => {
-            relationships::validate(ctx, file.as_deref()).await
         },
     }
 }

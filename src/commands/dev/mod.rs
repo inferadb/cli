@@ -37,7 +37,6 @@ use std::process::Command;
 
 use bon::builder;
 use commands::run_command_streaming;
-pub use constants::*;
 use docker::cluster_exists;
 pub use doctor::doctor;
 

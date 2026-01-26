@@ -18,7 +18,6 @@ mod confirm;
 pub mod doctor_view;
 mod form;
 pub mod install_view;
-mod progress;
 mod spinner;
 pub mod start_view;
 pub mod status_view;
@@ -28,8 +27,7 @@ pub mod uninstall_view;
 pub use confirm::{ConfirmOptions, ConfirmResult, confirm, confirm_danger, confirm_with_options};
 pub use doctor_view::{CheckResult, DevDoctorView, DevDoctorViewMsg};
 pub use form::{is_accessible, run_form};
-pub use install_view::{DevInstallView, DevInstallViewMsg, InstallStep, StepExecutor, StepResult};
-pub use progress::{MultiProgressBar, ProgressBar, multi_progress, progress};
+pub use install_view::{DevInstallView, DevInstallViewMsg, InstallStep, StepExecutor};
 pub use spinner::{SpinnerHandle, spin, spin_result, start as start_spinner};
 pub use start_view::{DevStartView, DevStartViewMsg, StartPhase};
 pub use status_view::{

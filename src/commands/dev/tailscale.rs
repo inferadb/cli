@@ -69,7 +69,7 @@ pub fn save_tailscale_credentials(client_id: &str, client_secret: &str) -> Resul
 
 /// Get Tailscale credentials from environment, cache, or prompt.
 pub fn get_tailscale_credentials() -> Result<(String, String)> {
-    use teapot::forms::{Form, Group, InputField, NoteField};
+    use teapot::forms::{Field, Form, Group};
 
     // Try environment variables first
     if let (Ok(id), Ok(secret)) =
@@ -107,10 +107,15 @@ Step 3: Create OAuth client
 
     let form = Form::new().title("Tailscale Setup").group(
         Group::new()
-            .field(NoteField::new(instructions).build())
-            .field(InputField::new("client_id").title("Client ID").required().build())
+            .field(Field::note().content(instructions).build())
+            .field(Field::input().key("client_id").title("Client ID").required(true).build())
             .field(
-                InputField::new("client_secret").title("Client Secret").required().hidden().build(),
+                Field::input()
+                    .key("client_secret")
+                    .title("Client Secret")
+                    .required(true)
+                    .hidden(true)
+                    .build(),
             ),
     );
 

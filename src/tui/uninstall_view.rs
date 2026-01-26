@@ -159,10 +159,11 @@ impl DevUninstallView {
 
         let context = UninstallContext { info, with_credentials };
 
-        let inner = TaskProgressView::with_context(task_steps, context)
+        let inner = TaskProgressView::builder()
+            .steps(task_steps)
             .title("InferaDB Development Cluster")
             .subtitle("Uninstall")
-            .with_confirmation(ConfirmationConfig {
+            .confirmation(ConfirmationConfig {
                 title: "Confirm Uninstall".to_string(),
                 title_color: Color::Yellow,
                 border_color: Color::Yellow,
@@ -178,9 +179,13 @@ impl DevUninstallView {
                     }
                 }),
             })
-            .hints_confirming(vec![("y", "confirm"), ("n", "cancel")])
-            .hints_running(vec![("q", "cancel")])
-            .hints_completed(vec![("q", "quit")])
+            .context(Box::new(context) as Box<dyn Any + Send + Sync>)
+            .hints_confirming(vec![
+                ("y".to_string(), "confirm".to_string()),
+                ("n".to_string(), "cancel".to_string()),
+            ])
+            .hints_running(vec![("q".to_string(), "cancel".to_string())])
+            .hints_completed(vec![("q".to_string(), "quit".to_string())])
             .build();
 
         Self { inner }
@@ -188,13 +193,15 @@ impl DevUninstallView {
 
     /// Set custom title.
     pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.inner = TaskProgressView::builder(vec![]).title(title).subtitle("Uninstall").build();
+        self.inner =
+            TaskProgressView::builder().steps(vec![]).title(title).subtitle("Uninstall").build();
         self
     }
 
     /// Set custom subtitle.
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
-        self.inner = TaskProgressView::builder(vec![])
+        self.inner = TaskProgressView::builder()
+            .steps(vec![])
             .title("InferaDB Development Cluster")
             .subtitle(subtitle)
             .build();

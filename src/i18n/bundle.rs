@@ -21,7 +21,7 @@ impl I18n {
     #[must_use]
     pub fn new(locale: &str) -> Self {
         let locale: LanguageIdentifier =
-            locale.parse().unwrap_or_else(|_| "en-US".parse().unwrap());
+            locale.parse().unwrap_or_else(|_| "en-US".parse().expect("en-US is a valid locale"));
 
         // Currently only en-US is supported, add more languages here as they become available
         let ftl_string = EN_US_FTL;
