@@ -194,6 +194,7 @@ impl Model for DevInstallView {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -342,10 +342,44 @@ jobs:
       - name: Check for duplicate dependencies
         run: cargo tree --duplicates
 
+  # Check for unused dependencies
+  # Only runs on main branch pushes (informational, not blocking)
+  unused-deps:
+    name: Unused Dependencies
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          submodules: recursive
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@881ba7bf39a41cda34ac9e123fb41b44ed08232f # nightly
+
+      - name: Install development tools via Mise
+        uses: step-security/mise-action@2fa1b2b4fa1577588d8ac75f4dfa0f67c266d2a0 # v3.4.1
+        with:
+          install_args: protobuf cargo:cargo-udeps
+          cache: true
+
+      - name: Cache Rust dependencies
+        uses: step-security/rust-cache@f8fba7098297c8c53a7c9a30575ec2ad4ad85056 # v2.8.2
+        with:
+          shared-key: unused-deps
+
+      - name: Check for unused dependencies
+        run: cargo +nightly udeps --all-targets || echo "::warning::Some dependencies may be unused"
+
   # Overall status check
   ci-success:
     name: CI Success
-    needs: [changes, fmt, clippy, msrv, test, docs, coverage, dependencies]
+    needs: [changes, fmt, clippy, msrv, test, docs, coverage, dependencies, unused-deps]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -363,6 +397,7 @@ jobs:
           DOCS_RESULT: ${{ needs.docs.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           DEPENDENCIES_RESULT: ${{ needs.dependencies.result }}
+          UNUSED_DEPS_RESULT: ${{ needs.unused-deps.result }}
         run: |
           echo "Job Results:"
           echo "  Format: $FMT_RESULT"
@@ -372,6 +407,7 @@ jobs:
           echo "  Docs: $DOCS_RESULT"
           echo "  Coverage: $COVERAGE_RESULT"
           echo "  Dependencies: $DEPENDENCIES_RESULT"
+          echo "  Unused Deps: $UNUSED_DEPS_RESULT"
 
           # Required checks (must pass)
           for result in $FMT_RESULT $CLIPPY_RESULT $TEST_RESULT $DOCS_RESULT; do
@@ -387,12 +423,15 @@ jobs:
             exit 1
           fi
 
-          # Coverage and dependencies are non-blocking but we log warnings
+          # Coverage, dependencies, and unused-deps are non-blocking but we log warnings
           if [[ "$COVERAGE_RESULT" == "failure" ]]; then
             echo "::warning::Coverage check failed (non-blocking)"
           fi
           if [[ "$DEPENDENCIES_RESULT" == "failure" ]]; then
             echo "::warning::Dependencies check failed (non-blocking)"
+          fi
+          if [[ "$UNUSED_DEPS_RESULT" == "failure" ]]; then
+            echo "::warning::Unused dependencies check failed (non-blocking)"
           fi
 
           echo "All required checks passed!"

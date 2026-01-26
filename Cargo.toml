@@ -53,7 +53,6 @@ keyring = "3"
 
 # OAuth PKCE
 oauth2 = "5"
-tiny_http = "0.12"
 
 # HTTP client (for health checks)
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
@@ -73,7 +72,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 webbrowser = "1"
 
 # Async utils
-async-trait = "0.1"
 futures = "0.3"
 base64 = "0.22.1"
 teapot = "0.1.0-alpha.1"
@@ -83,7 +81,6 @@ tokio = { version = "1", features = ["test-util"] }
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
-wiremock = "0.6"
 
 [[test]]
 name = "integration"
@@ -94,7 +91,7 @@ default = []
 
 # Lints for improved code quality
 [lints.rust]
-unsafe_code = "warn"
+unsafe_code = "deny"
 missing_docs = "warn"
 
 [lints.clippy]
@@ -103,6 +100,9 @@ all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
+
+# Strict error handling - no unwrap() in production code
+unwrap_used = "deny"
 
 # Allow pedantic lints that are too noisy or not applicable
 module_name_repetitions = "allow"

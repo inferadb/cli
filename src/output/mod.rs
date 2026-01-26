@@ -259,6 +259,7 @@ impl Default for Output {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -1,24 +1,28 @@
 //! Integration tests for the `InferaDB` CLI.
 
-#![allow(deprecated)] // Command::cargo_bin is deprecated but still works
+#![allow(clippy::unwrap_used)] // Tests can use unwrap for cleaner assertions
 
 mod common;
 
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+/// Helper to create a command for the inferadb binary.
+fn inferadb_cmd() -> Command {
+    Command::new(assert_cmd::cargo::cargo_bin!("inferadb"))
+}
+
 /// Test that the CLI shows help.
 #[test]
 fn test_help() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("--help").assert().success().stdout(predicate::str::contains("InferaDB"));
+    inferadb_cmd().arg("--help").assert().success().stdout(predicate::str::contains("InferaDB"));
 }
 
 /// Test that the CLI shows version.
 #[test]
 fn test_version() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("--version")
+    inferadb_cmd()
+        .arg("--version")
         .assert()
         .success()
         .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
@@ -27,23 +31,25 @@ fn test_version() {
 /// Test that unrecognized commands fail.
 #[test]
 fn test_unknown_command() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("unknown-command").assert().failure();
+    inferadb_cmd().arg("unknown-command").assert().failure();
 }
 
 /// Test whoami command without auth.
 #[test]
 fn test_whoami_without_auth() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("whoami").assert().success().stdout(predicate::str::contains("Authenticated: no"));
+    inferadb_cmd()
+        .arg("whoami")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Authenticated: no"));
 }
 
 /// Test profiles list creates default profile when no config exists.
 #[test]
 fn test_profiles_list_creates_default() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
     // Use a temp config directory with no existing config
-    cmd.env("XDG_CONFIG_HOME", "/tmp/inferadb-test-empty")
+    inferadb_cmd()
+        .env("XDG_CONFIG_HOME", "/tmp/inferadb-test-empty")
         .arg("profiles")
         .arg("list")
         .assert()
@@ -55,8 +61,8 @@ fn test_profiles_list_creates_default() {
 /// Test check command format.
 #[test]
 fn test_check_help() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.args(["check", "--help"])
+    inferadb_cmd()
+        .args(["check", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("SUBJECT"))
@@ -67,8 +73,11 @@ fn test_check_help() {
 /// Test cheatsheet command.
 #[test]
 fn test_cheatsheet() {
-    let mut cmd = Command::cargo_bin("inferadb").unwrap();
-    cmd.arg("cheatsheet").assert().success().stdout(predicate::str::contains("Cheatsheet"));
+    inferadb_cmd()
+        .arg("cheatsheet")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Cheatsheet"));
 }
 
 /// Test @profile prefix parsing.

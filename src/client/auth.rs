@@ -139,12 +139,6 @@ impl OAuthFlow {
     }
 }
 
-impl Default for OAuthFlow {
-    fn default() -> Self {
-        Self::new().expect("Failed to create OAuth flow")
-    }
-}
-
 /// Wait for the OAuth callback.
 fn wait_for_callback(expected_state: String) -> Result<(String, String)> {
     let listener = TcpListener::bind(format!("127.0.0.1:{CALLBACK_PORT}"))
