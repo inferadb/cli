@@ -7,6 +7,7 @@
 
 use std::{any::Any, path::PathBuf};
 
+use bon::Builder;
 use teapot::{
     components::{ConfirmationConfig, Phase, TaskProgressMsg, TaskProgressView, TaskStep},
     runtime::{Cmd, Model, Sub},
@@ -28,35 +29,48 @@ const REGISTRY_NAME: &str = "inferadb-registry";
 // ============================================================================
 
 /// Information about what will be uninstalled.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 pub struct UninstallInfo {
     /// Whether cluster exists.
+    #[builder(default)]
     pub has_cluster: bool,
     /// Cluster status (running/paused).
     pub cluster_status: Option<String>,
     /// Whether registry exists.
+    #[builder(default)]
     pub has_registry: bool,
     /// Deploy directory path.
+    #[builder(into)]
     pub deploy_dir: PathBuf,
     /// Whether deploy directory exists.
+    #[builder(default)]
     pub has_deploy_dir: bool,
     /// Data directory path.
+    #[builder(into)]
     pub data_dir: PathBuf,
     /// State directory path.
+    #[builder(into)]
     pub state_dir: PathBuf,
     /// Whether state directory exists.
+    #[builder(default)]
     pub has_state_dir: bool,
     /// Config directory path.
+    #[builder(into)]
     pub config_dir: PathBuf,
     /// Credentials file path.
+    #[builder(into)]
     pub creds_file: PathBuf,
     /// Whether credentials file exists.
+    #[builder(default)]
     pub has_creds_file: bool,
     /// Number of dev Docker images.
+    #[builder(default)]
     pub dev_image_count: usize,
     /// Whether kubectl context exists.
+    #[builder(default)]
     pub has_kube_context: bool,
     /// Whether talos context exists.
+    #[builder(default)]
     pub has_talos_context: bool,
 }
 
@@ -252,22 +266,22 @@ mod tests {
 
     #[test]
     fn test_uninstall_view_creation() {
-        let info = UninstallInfo {
-            has_cluster: true,
-            cluster_status: Some("running".to_string()),
-            has_registry: true,
-            deploy_dir: PathBuf::from("/test/deploy"),
-            has_deploy_dir: true,
-            data_dir: PathBuf::from("/test/data"),
-            state_dir: PathBuf::from("/test/state"),
-            has_state_dir: true,
-            config_dir: PathBuf::from("/test/config"),
-            creds_file: PathBuf::from("/test/creds"),
-            has_creds_file: true,
-            dev_image_count: 5,
-            has_kube_context: true,
-            has_talos_context: true,
-        };
+        let info = UninstallInfo::builder()
+            .has_cluster(true)
+            .cluster_status("running".to_string())
+            .has_registry(true)
+            .deploy_dir("/test/deploy")
+            .has_deploy_dir(true)
+            .data_dir("/test/data")
+            .state_dir("/test/state")
+            .has_state_dir(true)
+            .config_dir("/test/config")
+            .creds_file("/test/creds")
+            .has_creds_file(true)
+            .dev_image_count(5)
+            .has_kube_context(true)
+            .has_talos_context(true)
+            .build();
 
         let steps = vec![
             InstallStep::builder().name("Step 1").build(),
@@ -281,22 +295,16 @@ mod tests {
 
     #[test]
     fn test_uninstall_info_removal_lines() {
-        let info = UninstallInfo {
-            has_cluster: true,
-            cluster_status: Some("running".to_string()),
-            has_registry: false,
-            deploy_dir: PathBuf::from("/test/deploy"),
-            has_deploy_dir: true,
-            data_dir: PathBuf::from("/test/data"),
-            state_dir: PathBuf::from("/test/state"),
-            has_state_dir: false,
-            config_dir: PathBuf::from("/test/config"),
-            creds_file: PathBuf::from("/test/creds"),
-            has_creds_file: false,
-            dev_image_count: 0,
-            has_kube_context: false,
-            has_talos_context: false,
-        };
+        let info = UninstallInfo::builder()
+            .has_cluster(true)
+            .cluster_status("running".to_string())
+            .deploy_dir("/test/deploy")
+            .has_deploy_dir(true)
+            .data_dir("/test/data")
+            .state_dir("/test/state")
+            .config_dir("/test/config")
+            .creds_file("/test/creds")
+            .build();
 
         let lines = info.removal_lines();
         assert!(lines.iter().any(|l| l.contains("Talos cluster")));

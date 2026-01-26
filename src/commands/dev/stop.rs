@@ -157,36 +157,28 @@ pub fn gather_uninstall_info() -> UninstallInfo {
         None
     };
 
-    let has_registry = registry_exists();
-    let has_deploy_dir = deploy_dir.exists();
-    let has_state_dir = state_dir.exists();
-    let has_creds_file = creds_file.exists();
-
-    let dev_images = get_dev_docker_images();
-    let dev_image_count = dev_images.len();
-
     let has_kube_context =
         run_command_optional("kubectl", &["config", "get-contexts", "-o", "name"])
             .is_some_and(|o| o.lines().any(|l| l == KUBE_CONTEXT));
     let has_talos_context = run_command_optional("talosctl", &["config", "contexts"])
         .is_some_and(|o| o.contains(CLUSTER_NAME));
 
-    UninstallInfo {
-        has_cluster,
-        cluster_status,
-        has_registry,
-        deploy_dir,
-        has_deploy_dir,
-        data_dir,
-        state_dir,
-        has_state_dir,
-        config_dir,
-        creds_file,
-        has_creds_file,
-        dev_image_count,
-        has_kube_context,
-        has_talos_context,
-    }
+    UninstallInfo::builder()
+        .has_cluster(has_cluster)
+        .maybe_cluster_status(cluster_status)
+        .has_registry(registry_exists())
+        .deploy_dir(deploy_dir.clone())
+        .has_deploy_dir(deploy_dir.exists())
+        .data_dir(data_dir)
+        .state_dir(state_dir.clone())
+        .has_state_dir(state_dir.exists())
+        .config_dir(config_dir)
+        .creds_file(creds_file.clone())
+        .has_creds_file(creds_file.exists())
+        .dev_image_count(get_dev_docker_images().len())
+        .has_kube_context(has_kube_context)
+        .has_talos_context(has_talos_context)
+        .build()
 }
 
 // ============================================================================

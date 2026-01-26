@@ -14,6 +14,7 @@
 
 use std::io::{self, BufRead, Write};
 
+use bon::Builder;
 use teapot::{
     Model,
     components::Confirm as TeapotConfirm,
@@ -41,19 +42,23 @@ impl ConfirmResult {
 }
 
 /// Configuration for the confirm prompt.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
+#[builder(start_fn = with, derive(Clone))]
 pub struct ConfirmOptions {
     /// Default value if user just presses enter.
+    #[builder(default)]
     pub default: bool,
     /// Label for "yes" option.
+    #[builder(into, default = "Yes".to_string())]
     pub yes_label: String,
     /// Label for "no" option.
+    #[builder(into, default = "No".to_string())]
     pub no_label: String,
 }
 
 impl Default for ConfirmOptions {
     fn default() -> Self {
-        Self { default: false, yes_label: "Yes".to_string(), no_label: "No".to_string() }
+        Self::with().build()
     }
 }
 
@@ -61,7 +66,7 @@ impl ConfirmOptions {
     /// Create a new confirm options with default value true.
     #[must_use]
     pub fn default_yes() -> Self {
-        Self { default: true, ..Default::default() }
+        Self::with().default(true).build()
     }
 }
 
