@@ -25,7 +25,12 @@ This project and everyone participating in it is governed by the [Contributor Co
 
 ### Development Setup
 
-Each repository has its own development setup and workflow. See the repository's [README.md](README.md) for prerequisites, build commands, and development workflow.
+```bash
+just        # List available commands
+just ci     # Run all checks before submitting
+```
+
+See [README.md](README.md) for installation and [CLAUDE.md](CLAUDE.md) for architecture.
 
 ## Review Process
 
